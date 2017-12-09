@@ -1,4 +1,4 @@
-import {DOMSource, VNode} from "@cycle/dom";
+import {a, div, DOMSource, header, VNode} from "@cycle/dom";
 import {HTTPSource, RequestInput} from "@cycle/http";
 import isolate from "@cycle/isolate";
 import {Reducer, StateSource} from "cycle-onionify";
@@ -6,12 +6,14 @@ import {HistoryAction, RouterSource} from "cyclic-router";
 import Stream from "xstream";
 import {Trade} from "./trade/index";
 import {Setting} from "./setting/index";
+import {StorageRequest, StorageSource} from "@cycle/storage";
 
 export interface Sources {
     DOM: DOMSource;
     HTTP: HTTPSource;
     onion: StateSource<object>;
     router: RouterSource;
+    storage: StorageSource;
 }
 
 export interface Sinks {
@@ -19,6 +21,7 @@ export interface Sinks {
     HTTP: Stream<RequestInput|null>;
     onion: Stream<Reducer<object>>;
     router: Stream<HistoryAction>;
+    storage: Stream<StorageRequest>;
 }
 
 export const Root = (sources: Sources): Sinks => {
@@ -29,10 +32,22 @@ export const Root = (sources: Sources): Sinks => {
         })
         .map(route => route.value({...sources, router: sources.router.path(route.path)}));
 
+    const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
+        .map(contentDOM =>
+                div("#wrapper", [
+                    header("#header", [
+                        a(".trade", { props: { href: "/" } }, "Trade"),
+                        a(".setting", { props: { href: "/setting" } }, "Setting"),
+                    ]),
+                    div("#content", [contentDOM])
+                ])
+            );
+
     return {
-        DOM: routes$.map((sinks: Sinks) => sinks.DOM).flatten(),
+        DOM: view$,
         HTTP: routes$.map((sinks: Sinks) => sinks.HTTP).flatten(),
         onion: routes$.map((sinks: Sinks) => sinks.onion).flatten(),
-        router: routes$.map((sinks: Sinks) => sinks.router).flatten()
+        router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
+        storage: routes$.map((sinks: Sinks) => sinks.storage).flatten()
     };
 };
