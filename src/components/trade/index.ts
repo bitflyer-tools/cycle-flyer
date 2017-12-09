@@ -1,15 +1,19 @@
-import {DOMSource, span, VNode} from "@cycle/dom";
+import {DOMSource, VNode} from "@cycle/dom";
 import {HTTPSource, RequestInput} from "@cycle/http";
 import {Reducer, StateSource} from "cycle-onionify";
 import Stream from "xstream";
 import {model} from "./model";
-import {RouterSource, HistoryAction} from 'cyclic-router';
-import {StorageSource, StorageRequest} from "@cycle/storage";
+import {HistoryAction, RouterSource} from 'cyclic-router';
+import {StorageRequest, StorageSource} from "@cycle/storage";
+import {PubnubSource} from "../../drivers/pubnubDriver";
+import {intent} from "./intent";
+import {view} from "./view";
 
 export interface Sources {
     DOM: DOMSource;
     HTTP: HTTPSource;
     onion: StateSource<object>;
+    pubnub: PubnubSource;
     router: RouterSource;
     storage: StorageSource;
 }
@@ -23,10 +27,12 @@ export interface Sinks {
 }
 
 export const Trade = (sources: Sources): Sinks => {
-    const reducer$ = model();
+    const actions = intent(sources);
+    const reducer$ = model(actions);
+    const view$ = view(sources.onion.state$);
 
     return {
-        DOM: Stream.of(span("Trade")),
+        DOM: view$,
         HTTP: Stream.empty(),
         onion: reducer$,
         router: Stream.empty(),

@@ -7,11 +7,13 @@ import Stream from "xstream";
 import {Trade} from "./trade/index";
 import {Setting} from "./setting/index";
 import {StorageRequest, StorageSource} from "@cycle/storage";
+import {PubnubSource} from "../drivers/pubnubDriver";
 
 export interface Sources {
     DOM: DOMSource;
     HTTP: HTTPSource;
     onion: StateSource<object>;
+    pubnub: PubnubSource;
     router: RouterSource;
     storage: StorageSource;
 }
