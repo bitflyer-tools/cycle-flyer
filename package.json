@@ -1,0 +1,21 @@
+{
+  "name": "cycle-flyer",
+  "version": "0.0.1",
+  "description": "client webapp for bitFlyer by cycle.js",
+  "main": "src/index.js",
+  "dependencies": {
+    "@cycle/dom": "^18.3.0",
+    "@cycle/http": "14.2.0",
+    "@cycle/isolate": "^3.1.0",
+    "@cycle/run": "^3.2.0",
+    "fuse-box": "^3.0.0-nex.26",
+    "typescript": "^2.5.3",
+    "xstream": "11.x.x"
+  },
+  "scripts": {
+    "build": "node fuse",
+    "start": "node fuse.dev"
+  },
+  "author": "unhappychoice",
+  "license": "MIT"
+}
