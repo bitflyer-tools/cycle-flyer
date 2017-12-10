@@ -4,34 +4,45 @@ import {Actions} from "./intent";
 import throttle from "xstream/extra/throttle";
 
 export interface State {
-    executions: object[];
+    collateral: number;
     currentPrice: number;
+    position: object;
 }
 
 const defaultState: State = {
-    executions: [],
-    currentPrice: 0
+    collateral: 0.0,
+    currentPrice: 0,
+    position: { size: 0.0, price: 0.0 }
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => typeof state === "undefined" ? defaultState : state);
+
+    const collateralReducer$ = actions.onCollateralLoaded$
+        .map(collateral => (state: State) => ({ ...state, collateral }));
 
     const currentPriceReducer$ = actions.onExecutionCreated$
         .compose(throttle(100))
         .map(execution => execution.price)
         .map(currentPrice => (state: State) => ({ ...state, currentPrice }));
 
-    const executionsReducer$ = actions.onExecutionCreated$
-        .fold((acc, execution) => {
-            acc.unshift(execution);
-            return acc;
-        }, [])
-        .map(executions => executions.slice(0, 30))
-        .map(executions => (state: State) => ({ ...state, executions }));
+    const positionsReducer$ = actions.onPositionsLoaded$
+        .map(positions => {
+            if (positions.length === 0) {
+                return {};
+            }
+            const side = positions[0].side === "BUY" ? 1 : -1;
+            const size = positions.reduce((acc, position) => acc + position.size, 0.0);
+            const priceSum = positions.reduce((acc, position) => acc +  position.price * position.size, 0.0);
+            const price = Math.floor(priceSum / size);
+            return { size: size * side, price };
+        })
+        .map(position => (state: State) => ({ ...state, position }));
 
     return Stream.merge(
         defaultReducer$,
-        executionsReducer$,
-        currentPriceReducer$
+        collateralReducer$,
+        currentPriceReducer$,
+        positionsReducer$
     );
 };

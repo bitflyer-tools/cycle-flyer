@@ -7,6 +7,7 @@ import {HistoryAction, RouterSource} from 'cyclic-router';
 import {StorageRequest, StorageSource} from "@cycle/storage";
 import {PubnubSource} from "../../drivers/pubnubDriver";
 import {intent} from "./intent";
+import {request} from "./request";
 import {view} from "./view";
 
 export interface Sources {
@@ -30,10 +31,11 @@ export const Trade = (sources: Sources): Sinks => {
     const actions = intent(sources);
     const reducer$ = model(actions);
     const view$ = view(sources.onion.state$);
+    const request$ = request(actions);
 
     return {
         DOM: view$,
-        HTTP: Stream.empty(),
+        HTTP: request$,
         onion: reducer$,
         router: Stream.empty(),
         storage: Stream.empty()

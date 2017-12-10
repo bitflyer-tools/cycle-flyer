@@ -14,6 +14,7 @@
     "cycle-onionify": "^4.0.0",
     "cyclic-router": "^5.1.3",
     "fuse-box": "^3.0.0-nex.26",
+    "hash.js": "",
     "http-proxy-middleware": "^0.17.4",
     "pubnub": "^4.19.0",
     "stylus": "^0.54.5",

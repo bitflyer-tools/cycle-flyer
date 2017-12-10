@@ -37,11 +37,13 @@ export const Root = (sources: Sources): Sinks => {
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map(contentDOM =>
                 div("#wrapper", [
-                    header("#header", [
-                        a(".trade", { props: { href: "/" } }, "Trade"),
-                        a(".setting", { props: { href: "/setting" } }, "Setting"),
+                    header(".header", [
+                        div(".header-wrapper", [
+                            a(".trade", { props: { href: "/" } }, "Trade"),
+                            a(".setting", { props: { href: "/setting" } }, "Setting")
+                        ])
                     ]),
-                    div("#content", [contentDOM])
+                    div(".content", [contentDOM])
                 ])
             );
 
