@@ -1,4 +1,4 @@
-import {a, div, DOMSource, header, VNode} from "@cycle/dom";
+import {a, div, DOMSource, h1, header, VNode} from "@cycle/dom";
 import {HTTPSource, RequestInput} from "@cycle/http";
 import isolate from "@cycle/isolate";
 import {Reducer, StateSource} from "cycle-onionify";
@@ -39,6 +39,7 @@ export const Root = (sources: Sources): Sinks => {
                 div("#wrapper", [
                     header(".header", [
                         div(".header-wrapper", [
+                            h1(".header-title", "cycle-flyer"),
                             a(".trade", { props: { href: "/" } }, "Trade"),
                             a(".setting", { props: { href: "/setting" } }, "Setting")
                         ])

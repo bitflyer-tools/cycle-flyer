@@ -1,33 +1,46 @@
-import {div, p, span} from "@cycle/dom";
+import {button, div, h3, input, p, span} from "@cycle/dom";
 import Stream from "xstream";
 import {State} from "./model";
 
 export const view = (state$: Stream<State>) =>
     state$.map(state =>
         div(".trade", [
-            div(".collateral", [
-                span(".label", "Collateral"),
-                span(".number", collateralString(state)),
-                span(".unit", "JPY")
+            div(".summary", [
+                h3(".title", "Summary"),
+                div(".collateral", [
+                    span(".label", "Collateral"),
+                    span(".number", collateralString(state)),
+                    span(".unit", "JPY")
+                ]),
+                div(".current-price", [
+                    span(".label", "Current price"),
+                    span(".number", state.currentPrice.toLocaleString()),
+                    span(".unit", "JPY")
+                ]),
+                div(".position", [
+                    span(".label", "Position"),
+                    span(".number", state.position.toString())
+                ]),
+                div(".position-diff", [
+                    span(".label", "Position difference"),
+                    span(profitDifferenceClass(state), state.position.toDiffString(state.currentPrice)),
+                    span(".unit", "JPY")
+                ]),
+                div(".profit", [
+                    span(".label", "Profit / Loss"),
+                    span(profitClass(state), state.position.toProfitString(state.currentPrice)),
+                    span(".unit", "JPY")
+                ])
             ]),
-            div(".current-price", [
-                span(".label", "Current price"),
-                span(".number", state.currentPrice.toLocaleString()),
-                span(".unit", "JPY")
-            ]),
-            div(".position", [
-                span(".label", "Position"),
-                span(".number", state.position.toString())
-            ]),
-            div(".position-diff", [
-                span(".label", "Position difference"),
-                span(profitDifferenceClass(state), state.position.toDiffString(state.currentPrice)),
-                span(".unit", "JPY")
-            ]),
-            div(".profit", [
-                span(".label", "Profit / Loss"),
-                span(profitClass(state), state.position.toProfitString(state.currentPrice)),
-                span(".unit", "JPY")
+            div(".order", [
+                h3(".title", "Order"),
+                div(".size", [
+                    input("#size-input"),
+                ]),
+                div(".order-buttons", [
+                    button(".sell-button", "Sell"),
+                    button(".buy-button", "Buy")
+                ])
             ])
         ])
     );
