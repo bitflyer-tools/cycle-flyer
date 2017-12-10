@@ -1,4 +1,4 @@
-import {button, div, h3, input, p, span} from "@cycle/dom";
+import {button, div, h3, input, p, span, hr} from "@cycle/dom";
 import Stream from "xstream";
 import {State} from "./model";
 
@@ -30,7 +30,14 @@ export const view = (state$: Stream<State>) =>
                     span(".label", "Profit / Loss"),
                     span(profitClass(state), state.position.toProfitString(state.currentPrice)),
                     span(".unit", "JPY")
-                ])
+                ]),
+                hr(),
+                div(".market-state", [
+                    span(".label", "Market state"),
+                    span(healthClass(state.marketState.health), state.marketState.health),
+                    span(".health", "/"),
+                    span(healthClass(state.marketState.state), state.marketState.state)
+                ]),
             ]),
             div(".order", [
                 h3(".title", "Order"),
@@ -63,4 +70,12 @@ const profitClass = (state): string => {
 const profitDifferenceClass = (state): string => {
     if (!state.position.price) return ".number";
     return state.currentPrice - state.position.price >= 0.0 ? ".number.plus" : ".number.minus";
+};
+
+const healthClass = (health: string): string => {
+    if (health === "NORMAL" || health === "RUNNING") {
+        return ".health.good";
+    } else {
+        return ".health.bad";
+    }
 };

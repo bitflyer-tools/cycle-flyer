@@ -10,6 +10,7 @@ export interface State {
     isOrdering: boolean;
     position: Position;
     size: number;
+    marketState: object;
 }
 
 const defaultState: State = {
@@ -17,7 +18,8 @@ const defaultState: State = {
     currentPrice: 0,
     isOrdering: false,
     position: new Position([]),
-    size: 0
+    size: 0,
+    marketState: {}
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
@@ -44,12 +46,16 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const sizeReducer$ = actions.onSizeChanged$
         .map(size => (state: State) => ({ ...state, size}));
 
+    const marketStateReducer$ = actions.onStateLoaded$
+        .map(marketState => (state: State) => ({ ...state, marketState}));
+
     return Stream.merge(
         defaultReducer$,
         collateralReducer$,
         currentPriceReducer$,
         isOrderingReducer$,
         positionsReducer$,
-        sizeReducer$
+        sizeReducer$,
+        marketStateReducer$
     );
 };

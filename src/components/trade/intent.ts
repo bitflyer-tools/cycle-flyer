@@ -11,6 +11,7 @@ export interface Actions {
     onPositionsLoaded$: Stream<object[]>;
     onOrderCreated$: Stream<object>;
     onSizeChanged$: Stream<number>;
+    onStateLoaded$: Stream<object>;
 }
 
 export const intent = (sources: Sources): Actions => {
@@ -49,6 +50,10 @@ export const intent = (sources: Sources): Actions => {
         .map(event => event.target as HTMLInputElement)
         .map(element => +element.value);
 
+    const onStateLoaded$ = sources.HTTP.select("status")
+        .flatten()
+        .map(response => JSON.parse(response.text));
+
     return {
         onApiKeyLoaded$,
         onApiSecretLoaded$,
@@ -58,6 +63,7 @@ export const intent = (sources: Sources): Actions => {
         onExecutionCreated$,
         onOrderCreated$,
         onPositionsLoaded$,
-        onSizeChanged$
+        onSizeChanged$,
+        onStateLoaded$
     };
 };
