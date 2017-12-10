@@ -5,6 +5,7 @@ export interface Actions {
     onApiKeyLoaded$: Stream<string>;
     onApiSecretLoaded$: Stream<string>;
     onClickBuyButton$: Stream<null>;
+    onClickClearButton$: Stream<null>;
     onClickSellButton$: Stream<null>;
     onCollateralLoaded$: Stream<number>;
     onExecutionCreated$: Stream<object>;
@@ -24,6 +25,10 @@ export const intent = (sources: Sources): Actions => {
         .take(1);
 
     const onClickBuyButton$ = sources.DOM.select(".buy-button")
+        .events("click", { preventDefault: true })
+        .mapTo(null);
+
+    const onClickClearButton$ = sources.DOM.select(".clear-button")
         .events("click", { preventDefault: true })
         .mapTo(null);
 
@@ -58,6 +63,7 @@ export const intent = (sources: Sources): Actions => {
         onApiKeyLoaded$,
         onApiSecretLoaded$,
         onClickBuyButton$,
+        onClickClearButton$,
         onClickSellButton$,
         onCollateralLoaded$,
         onExecutionCreated$,

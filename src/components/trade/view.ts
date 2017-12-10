@@ -1,4 +1,4 @@
-import {button, div, h3, input, p, span, hr} from "@cycle/dom";
+import {button, div, h3, input, p, span, hr, h4} from "@cycle/dom";
 import Stream from "xstream";
 import {State} from "./model";
 
@@ -7,11 +7,6 @@ export const view = (state$: Stream<State>) =>
         div(".trade", [
             div(".summary", [
                 h3(".title", "Summary"),
-                div(".collateral", [
-                    span(".label", "Collateral"),
-                    span(".number", collateralString(state)),
-                    span(".unit", "JPY")
-                ]),
                 div(".current-price", [
                     span(".label", "Current price"),
                     span(".number", state.currentPrice.toLocaleString()),
@@ -31,6 +26,11 @@ export const view = (state$: Stream<State>) =>
                     span(profitClass(state), state.position.toProfitString(state.currentPrice)),
                     span(".unit", "JPY")
                 ]),
+                div(".collateral", [
+                    span(".label", "Collateral"),
+                    span(".number", collateralString(state)),
+                    span(".unit", "JPY")
+                ]),
                 hr(),
                 div(".market-state", [
                     span(".label", "Market state"),
@@ -41,13 +41,22 @@ export const view = (state$: Stream<State>) =>
             ]),
             div(".order", [
                 h3(".title", "Order"),
+                hr(),
+                h4(".sub-title", "Size"),
                 div(".size", [
                     input("#size-input", { attrs: { value: state.size }}),
                 ]),
+                hr(),
+                h4(".sub-title", "Market"),
                 div(".order-buttons", [
                     button(".sell-button", { attrs: { disabled: state.isOrdering } }, "Sell"),
                     button(".buy-button", { attrs: { disabled: state.isOrdering } },"Buy")
-                ])
+                ]),
+                hr(),
+                h4(".sub-title", "Clear position"),
+                div(".order-buttons", [
+                    button(".clear-button", { attrs: { disabled: state.isOrdering } }, "Clear"),
+                ]),
             ])
         ])
     );

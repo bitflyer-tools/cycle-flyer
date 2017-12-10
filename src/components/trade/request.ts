@@ -18,5 +18,9 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
         .compose(sampleCombine(state$))
         .map(([_, state]) => marketOrder(state.size, "SELL"));
 
-    return Stream.merge(collateral, positions, buy, sell, state);
+    const clear = actions.onClickClearButton$
+        .compose(sampleCombine(state$))
+        .map(([_, state]) => marketOrder(state.position.size, state.position.side === "BUY" ? "SELL" : "BUY"));
+
+    return Stream.merge(collateral, positions, buy, sell, clear, state);
 };

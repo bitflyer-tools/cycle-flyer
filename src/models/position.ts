@@ -30,12 +30,12 @@ export class Position {
 
     public toDiffString(currentPrice: number): string {
         if (this.price === 0) return "None";
-        return (currentPrice - this.price).toLocaleString();
+        return (currentPrice - this.price).toLocaleString().replace("-", "- ");
     };
 
     public toProfitString(currentPrice: number): string {
         if (this.price === 0) return "None";
-        return this.profit(currentPrice).toLocaleString();
+        return this.profit(currentPrice).toLocaleString().replace("-", "- ");
     };
 
     private static round(number: number): number {
