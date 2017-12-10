@@ -16,6 +16,7 @@
     "fuse-box": "^3.0.0-nex.26",
     "hash.js": "",
     "http-proxy-middleware": "^0.17.4",
+    "now": "latest",
     "pubnub": "^4.19.0",
     "serve": "latest",
     "stylus": "^0.54.5",
@@ -26,7 +27,8 @@
   "scripts": {
     "build": "node fuse",
     "start": "serve .",
-    "watch": "node fuse.dev"
+    "watch": "node fuse.dev",
+    "deploy": "now rm cycle-flyer -y && now --public && now alias"
   },
   "author": "unhappychoice",
   "license": "MIT"

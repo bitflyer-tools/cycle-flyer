@@ -37,17 +37,23 @@ export const intent = (sources: Sources): Actions => {
         .mapTo(null);
 
     const onCollateralLoaded$ = sources.HTTP.select("collateral")
+        .map(response$ => response$.replaceError(() => Stream.of(null)))
         .flatten()
+        .filter(response => !!response)
         .map(response => JSON.parse(response.text).collateral);
 
     const onExecutionCreated$ = sources.pubnub.execution$;
 
     const onOrderCreated$ = sources.HTTP.select("order")
+        .map(response$ => response$.replaceError(() => Stream.of(null)))
         .flatten()
+        .filter(response => !!response)
         .map(response => JSON.parse(response.text));
 
     const onPositionsLoaded$ = sources.HTTP.select("positions")
+        .map(response$ => response$.replaceError(() => Stream.of(null)))
         .flatten()
+        .filter(response => !!response)
         .map(response => JSON.parse(response.text));
 
     const onSizeChanged$ = sources.DOM.select("#size-input")
@@ -56,7 +62,9 @@ export const intent = (sources: Sources): Actions => {
         .map(element => +element.value);
 
     const onStateLoaded$ = sources.HTTP.select("status")
+        .map(response$ => response$.replaceError(() => Stream.of(null)))
         .flatten()
+        .filter(response => !!response)
         .map(response => JSON.parse(response.text));
 
     return {

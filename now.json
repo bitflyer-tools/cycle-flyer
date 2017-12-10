@@ -1,0 +1,7 @@
+{
+  "name": "cycle-flyer",
+  "alias": "cycle-flyer",
+  "engines": {
+    "node": "8.x.x"
+  }
+}
