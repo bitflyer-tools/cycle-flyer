@@ -31,7 +31,7 @@ export const Trade = (sources: Sources): Sinks => {
     const actions = intent(sources);
     const reducer$ = model(actions);
     const view$ = view(sources.onion.state$);
-    const request$ = request(actions);
+    const request$ = request(actions, sources.onion.state$);
 
     return {
         DOM: view$,

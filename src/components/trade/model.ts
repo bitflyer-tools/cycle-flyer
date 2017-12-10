@@ -7,13 +7,17 @@ import {Position} from "../../models/position";
 export interface State {
     collateral: number;
     currentPrice: number;
+    isOrdering: boolean;
     position: Position;
+    size: number;
 }
 
 const defaultState: State = {
     collateral: 0.0,
     currentPrice: 0,
-    position: new Position([])
+    isOrdering: false,
+    position: new Position([]),
+    size: 0
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
@@ -27,14 +31,25 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map(execution => execution.price)
         .map(currentPrice => (state: State) => ({ ...state, currentPrice }));
 
+    const isOrderingReducer$ = Stream.merge(
+        actions.onClickSellButton$.mapTo(true),
+        actions.onClickSellButton$.mapTo(true),
+        actions.onOrderCreated$.mapTo(false)
+    ).map(isOrdering => (state: State) => ({ ...state, isOrdering }));
+
     const positionsReducer$ = actions.onPositionsLoaded$
         .map(positions => new Position(positions))
         .map(position => (state: State) => ({ ...state, position }));
+
+    const sizeReducer$ = actions.onSizeChanged$
+        .map(size => (state: State) => ({ ...state, size}));
 
     return Stream.merge(
         defaultReducer$,
         collateralReducer$,
         currentPriceReducer$,
-        positionsReducer$
+        isOrderingReducer$,
+        positionsReducer$,
+        sizeReducer$
     );
 };

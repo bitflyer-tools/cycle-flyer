@@ -40,8 +40,8 @@ export const Root = (sources: Sources): Sinks => {
                     header(".header", [
                         div(".header-wrapper", [
                             h1(".header-title", "cycle-flyer"),
-                            a(".trade", { props: { href: "/" } }, "Trade"),
-                            a(".setting", { props: { href: "/setting" } }, "Setting")
+                            a(".menu-trade", { props: { href: "/" } }, "Trade"),
+                            a(".menu-setting", { props: { href: "/setting" } }, "Setting")
                         ])
                     ]),
                     div(".content", [contentDOM])

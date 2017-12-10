@@ -35,11 +35,11 @@ export const view = (state$: Stream<State>) =>
             div(".order", [
                 h3(".title", "Order"),
                 div(".size", [
-                    input("#size-input"),
+                    input("#size-input", { attrs: { value: state.size }}),
                 ]),
                 div(".order-buttons", [
-                    button(".sell-button", "Sell"),
-                    button(".buy-button", "Buy")
+                    button(".sell-button", { attrs: { disabled: state.isOrdering } }, "Sell"),
+                    button(".buy-button", { attrs: { disabled: state.isOrdering } },"Buy")
                 ])
             ])
         ])
