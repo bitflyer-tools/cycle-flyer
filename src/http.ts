@@ -15,7 +15,7 @@ export const marketOrder = (size: number, side: string): RequestInput => {
         "product_code": "FX_BTC_JPY",
         "child_order_type": "MARKET",
         "side": side,
-        "size": size
+        "size": Math.abs(size)
     };
     return requestInput("order", "/v1/me/sendchildorder", "POST", json);
 };

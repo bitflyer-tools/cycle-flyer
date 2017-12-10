@@ -34,9 +34,11 @@ export const view = (state$: Stream<State>) =>
                 hr(),
                 div(".market-state", [
                     span(".label", "Market state"),
-                    span(healthClass(state.marketState.health), state.marketState.health),
-                    span(".health", "/"),
-                    span(healthClass(state.marketState.state), state.marketState.state)
+                    span(healthClass(state.marketState.health), state.marketState.health)
+                ]),
+                div(".board-state", [
+                    span(".label", "Board state"),
+                    span(healthClass(state.marketState.state), state.marketState.state),
                 ]),
             ]),
             div(".order", [
