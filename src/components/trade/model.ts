@@ -1,18 +1,19 @@
 import {Reducer} from "cycle-onionify";
 import Stream from "xstream";
-import {Actions} from "./intent";
 import throttle from "xstream/extra/throttle";
+import {Actions} from "./intent";
+import {Position} from "../../models/position";
 
 export interface State {
     collateral: number;
     currentPrice: number;
-    position: object;
+    position: Position;
 }
 
 const defaultState: State = {
     collateral: 0.0,
     currentPrice: 0,
-    position: { size: 0.0, price: 0.0 }
+    position: new Position([])
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
@@ -27,16 +28,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map(currentPrice => (state: State) => ({ ...state, currentPrice }));
 
     const positionsReducer$ = actions.onPositionsLoaded$
-        .map(positions => {
-            if (positions.length === 0) {
-                return {};
-            }
-            const side = positions[0].side === "BUY" ? 1 : -1;
-            const size = positions.reduce((acc, position) => acc + position.size, 0.0);
-            const priceSum = positions.reduce((acc, position) => acc +  position.price * position.size, 0.0);
-            const price = Math.floor(priceSum / size);
-            return { size: size * side, price };
-        })
+        .map(positions => new Position(positions))
         .map(position => (state: State) => ({ ...state, position }));
 
     return Stream.merge(

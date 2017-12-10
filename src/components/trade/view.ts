@@ -7,49 +7,47 @@ export const view = (state$: Stream<State>) =>
         div(".trade", [
             div(".collateral", [
                 span(".label", "Collateral"),
-                span(collateralString(state))
+                span(".number", collateralString(state)),
+                span(".unit", "JPY")
             ]),
             div(".current-price", [
                 span(".label", "Current price"),
-                span(state.currentPrice.toLocaleString())
+                span(".number", state.currentPrice.toLocaleString()),
+                span(".unit", "JPY")
             ]),
             div(".position", [
                 span(".label", "Position"),
-                span(positionString(state))
+                span(".number", state.position.toString())
             ]),
-            div(".profit-diff", [
-                span(".label", "Profit difference"),
-                span(profitClass(state), profitDiffString(state))
+            div(".position-diff", [
+                span(".label", "Position difference"),
+                span(profitDifferenceClass(state), state.position.toDiffString(state.currentPrice)),
+                span(".unit", "JPY")
             ]),
             div(".profit", [
-                span(".label", "Profit"),
-                span(profitClass(state), profitString(state))
+                span(".label", "Profit / Loss"),
+                span(profitClass(state), state.position.toProfitString(state.currentPrice)),
+                span(".unit", "JPY")
             ])
         ])
     );
 
 const collateralString = (state): string => {
     if (!state.position.price) return state.collateral.toLocaleString();
-    const profit = (state.currentPrice - state.position.price) * state.position.size;
+    const profit = state.position.profit(state.currentPrice);
     return (state.collateral + profit).toLocaleString();
 };
 
-const positionString = (state): string => {
-    if (!state.position.price) return "None";
-    return `${state.position.price.toLocaleString()} * ${state.position.size}`
-};
-
-const profitDiffString = (state): string => {
-    if (!state.position.price) return "None";
-    return (state.currentPrice - state.position.price).toLocaleString();
-};
-
-const profitString = (state): string => {
-    if (!state.position.price) return "None";
-    return ((state.currentPrice - state.position.price) * state.position.size).toLocaleString();
-};
-
 const profitClass = (state): string => {
-    if (!state.position.price) return "";
-    return state.currentPrice - state.position.price > 0.0 ? ".plus" : ".minus";
+    if (!state.position.price) return ".number";
+    if (state.position.side === "BUY") {
+        return state.currentPrice - state.position.price >= 0.0 ? ".number.plus" : ".number.minus";
+    } else {
+        return state.currentPrice - state.position.price >= 0.0 ? ".number.minus" : ".number.plus";
+    }
+};
+
+const profitDifferenceClass = (state): string => {
+    if (!state.position.price) return ".number";
+    return state.currentPrice - state.position.price >= 0.0 ? ".number.plus" : ".number.minus";
 };

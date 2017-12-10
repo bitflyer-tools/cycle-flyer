@@ -11,7 +11,7 @@
       primaryColor = rgb(44, 57, 64)
       darkerPrimaryColor = rgb(27, 31, 39)
       accentColor = rgb(255, 255, 255)
-      darkerAccentColor = Color.rgb(232, 232, 232)
+      darkerAccentColor = rgb(232, 232, 232)
     -->
     <style type="text/css">
         html, body {
@@ -46,7 +46,9 @@
             width: 1080px;
             margin: 32px auto;
         }
-        .collateral, .current-price, .position, .profit-diff, .profit {
+
+        /* .trade */
+        .collateral, .current-price, .position, .position-diff, .profit {
             height: 32px;
             line-height: 32px;
         }
@@ -54,11 +56,38 @@
             display: inline-block;
             width: 200px;
         }
+        .number {
+            display: inline-block;
+            width: 120px;
+        }
+        .unit {
+
+        }
         .plus {
             color: green;
         }
         .minus {
             color: red;
+        }
+
+        /* .setting */
+        .api-key, .api-secret {
+            height: 48px;
+            line-height: 48px;
+        }
+        .api-key label {
+            display: inline-block;
+            width: 120px;
+        }
+        .api-secret label {
+            display: inline-block;
+            width: 120px;
+        }
+        #api-key-input, #api-secret-input {
+            -webkit-appearance: none;
+            width: 360px;
+            padding: 4px 12px;
+            border-radius: 4px;
         }
     </style>
 </head>
