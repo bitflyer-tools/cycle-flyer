@@ -5,6 +5,10 @@ import {State} from "./model";
 export const view = (state$: Stream<State>) =>
     state$.map(state =>
         div(".trade", [
+            div(".collateral", [
+                span(".label", "Collateral"),
+                span(collateralString(state))
+            ]),
             div(".current-price", [
                 span(".label", "Current price"),
                 span(state.currentPrice.toLocaleString())
@@ -23,6 +27,12 @@ export const view = (state$: Stream<State>) =>
             ])
         ])
     );
+
+const collateralString = (state): string => {
+    if (!state.position.price) return state.collateral.toLocaleString();
+    const profit = (state.currentPrice - state.position.price) * state.position.size;
+    return (state.collateral + profit).toLocaleString();
+};
 
 const positionString = (state): string => {
     if (!state.position.price) return "None";
