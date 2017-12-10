@@ -17,6 +17,7 @@
     "hash.js": "",
     "http-proxy-middleware": "^0.17.4",
     "pubnub": "^4.19.0",
+    "serve": "latest",
     "stylus": "^0.54.5",
     "switch-path": "^1.2.0",
     "typescript": "^2.5.3",
@@ -24,7 +25,8 @@
   },
   "scripts": {
     "build": "node fuse",
-    "start": "node fuse.dev"
+    "start": "serve .",
+    "watch": "node fuse.dev"
   },
   "author": "unhappychoice",
   "license": "MIT"
