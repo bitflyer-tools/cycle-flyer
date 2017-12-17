@@ -5,7 +5,7 @@ import throttle from "xstream/extra/throttle";
 import {BoardOrder} from "../../models/board";
 
 export const view = (state$: Stream<State>) =>
-    state$.compose(throttle(100)).map(state =>
+    state$.compose(throttle(250)).map(state =>
         div(".trade", [
             div(".summary", [
                 div(".current-price", [
