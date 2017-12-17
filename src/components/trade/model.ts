@@ -19,6 +19,7 @@ export interface State {
     histories: History[];
     isOrdering: boolean;
     position: Position;
+    price: number;
     size: number;
     marketState: object;
 }
@@ -31,6 +32,7 @@ const defaultState: State = {
     histories: [],
     isOrdering: false,
     position: new Position([]),
+    price: 0,
     size: 0,
     marketState: {}
 };
@@ -71,8 +73,8 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map(history => (state: State) => ({ ...state, histories: [history].concat(state.histories)}));
 
     const isOrderingReducer$ = Stream.merge(
-        actions.onClickSellButton$.mapTo(true),
-        actions.onClickSellButton$.mapTo(true),
+        actions.onClickMarketBuyButton$.mapTo(true),
+        actions.onClickMarketSellButton$.mapTo(true),
         actions.onClickClearButton$.mapTo(true),
         actions.onHistoryCreated$.mapTo(false)
     ).map(isOrdering => (state: State) => ({ ...state, isOrdering }));
@@ -81,8 +83,14 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map(positions => new Position(positions))
         .map(position => (state: State) => ({ ...state, position }));
 
+    const priceReducer$ = Stream.merge(
+        actions.onPriceChanged$,
+        actions.onClickAsk$.map(price => price - 1),
+        actions.onClickBid$.map(price => price + 1)
+    ).map(price => (state: State) => ({ ...state, price }));
+
     const sizeReducer$ = actions.onSizeChanged$
-        .map(size => (state: State) => ({ ...state, size}));
+        .map(size => (state: State) => ({ ...state, size }));
 
     const marketStateReducer$ = actions.onStateLoaded$
         .map(marketState => (state: State) => ({ ...state, marketState}));
@@ -98,6 +106,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         historyReducer$,
         isOrderingReducer$,
         positionsReducer$,
+        priceReducer$,
         sizeReducer$,
         marketStateReducer$
     );

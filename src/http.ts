@@ -23,6 +23,17 @@ export const marketOrder = (size: number, side: string): RequestInput => {
     return requestInput("order", "/v1/me/sendchildorder", "POST", json);
 };
 
+export const limitOrder = (price: number, size: number, side: string): RequestInput => {
+    const json = {
+        "product_code": "FX_BTC_JPY",
+        "child_order_type": "LIMIT",
+        "side": side,
+        "price": price,
+        "size": Math.abs(size)
+    };
+    return requestInput("order", "/v1/me/sendchildorder", "POST", json);
+};
+
 export const cancelOrders = (): RequestInput =>
     requestInput("cancelOrders", "/v1/me/cancelallchildorders", "POST", { "product_code": "FX_BTC_JPY" });
 

@@ -9,17 +9,22 @@ export interface Actions {
     onApiSecretLoaded$: Stream<string>;
     onBoardLoaded$: Stream<Board>;
     onBoardSnapshotLoaded$: Stream<Board>;
-    onClickBuyButton$: Stream<null>;
+    onClickAsk$: Stream<number>;
+    onClickBid$: Stream<number>;
     onClickClearButton$: Stream<null>;
     onClickClearOrderButton$: Stream<null>;
     onClickGroupSizePlusButton$: Stream<null>;
     onClickGroupSizeMinusButton$: Stream<null>;
-    onClickSellButton$: Stream<null>;
+    onClickLimitBuyButton$: Stream<null>;
+    onClickLimitSellButton$: Stream<null>;
+    onClickMarketBuyButton$: Stream<null>;
+    onClickMarketSellButton$: Stream<null>;
     onCollateralLoaded$: Stream<number>;
     onExecutionCreated$: Stream<object>;
     onHistoryCreated$: Stream<History>;
     onOrderCreated$: Stream<object>;
     onPositionsLoaded$: Stream<object[]>;
+    onPriceChanged$: Stream<number>;
     onSizeChanged$: Stream<number>;
     onStateLoaded$: Stream<object>;
 }
@@ -45,9 +50,15 @@ export const intent = (sources: Sources): Actions => {
             .map(board => new Board(board)),
     );
 
-    const onClickBuyButton$ = sources.DOM.select(".buy-button")
-        .events("click", { preventDefault: true })
-        .mapTo(null);
+    const onClickAsk$ = sources.DOM.select(".ask")
+        .events("click")
+        .map(event => event.currentTarget as HTMLElement)
+        .map(target => target.dataset.price);
+
+    const onClickBid$ = sources.DOM.select(".bid")
+        .events("click")
+        .map(event => event.currentTarget as HTMLElement)
+        .map(target => target.dataset.price);
 
     const onClickClearButton$ = sources.DOM.select(".clear-button")
         .events("click", { preventDefault: true })
@@ -65,7 +76,19 @@ export const intent = (sources: Sources): Actions => {
         .events("click")
         .mapTo(null);
 
-    const onClickSellButton$ = sources.DOM.select(".sell-button")
+    const onClickMarketBuyButton$ = sources.DOM.select(".market-order-buttons").select(".buy-button")
+        .events("click", { preventDefault: true })
+        .mapTo(null);
+
+    const onClickMarketSellButton$ = sources.DOM.select(".market-order-buttons").select(".sell-button")
+        .events("click", { preventDefault: true })
+        .mapTo(null);
+
+    const onClickLimitBuyButton$ = sources.DOM.select(".limit-order-buttons").select(".buy-button")
+        .events("click", { preventDefault: true })
+        .mapTo(null);
+
+    const onClickLimitSellButton$ = sources.DOM.select(".limit-order-buttons").select(".sell-button")
         .events("click", { preventDefault: true })
         .mapTo(null);
 
@@ -93,6 +116,11 @@ export const intent = (sources: Sources): Actions => {
         .filter(response => !!response)
         .map(response => JSON.parse(response.text));
 
+    const onPriceChanged$ = sources.DOM.select("#price-input")
+        .events("keyup")
+        .map(event => event.target as HTMLInputElement)
+        .map(element => +element.value);
+
     const onSizeChanged$ = sources.DOM.select("#size-input")
         .events("keyup")
         .map(event => event.target as HTMLInputElement)
@@ -109,17 +137,22 @@ export const intent = (sources: Sources): Actions => {
         onApiSecretLoaded$,
         onBoardLoaded$,
         onBoardSnapshotLoaded$,
-        onClickBuyButton$,
+        onClickAsk$,
+        onClickBid$,
         onClickClearButton$,
         onClickClearOrderButton$,
         onClickGroupSizePlusButton$,
         onClickGroupSizeMinusButton$,
-        onClickSellButton$,
+        onClickLimitBuyButton$,
+        onClickLimitSellButton$,
+        onClickMarketBuyButton$,
+        onClickMarketSellButton$,
         onCollateralLoaded$,
         onExecutionCreated$,
         onHistoryCreated$,
         onOrderCreated$,
         onPositionsLoaded$,
+        onPriceChanged$,
         onSizeChanged$,
         onStateLoaded$
     };

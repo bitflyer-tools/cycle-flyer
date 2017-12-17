@@ -3,7 +3,7 @@ import Stream from "xstream";
 import sampleCombine from "xstream/extra/sampleCombine";
 import {Actions} from "./intent";
 import {
-    cancelOrders, getBoard, getCollateral, getPositions, getState,
+    cancelOrders, getBoard, getCollateral, getPositions, getState, limitOrder,
     marketOrder
 } from '../../http';
 import {State} from "./model";
@@ -15,13 +15,21 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
     const positions = Stream.periodic(3000).mapTo(getPositions()).startWith(getPositions());
     const state = Stream.periodic(3000).mapTo(getState()).startWith(getState());
 
-    const buy = actions.onClickBuyButton$
+    const marketBuy = actions.onClickMarketBuyButton$
         .compose(sampleCombine(state$))
         .map(([_, state]) => marketOrder(state.size, "BUY"));
 
-    const sell = actions.onClickSellButton$
+    const marketSell = actions.onClickMarketSellButton$
         .compose(sampleCombine(state$))
         .map(([_, state]) => marketOrder(state.size, "SELL"));
+
+    const limitBuy = actions.onClickLimitBuyButton$
+        .compose(sampleCombine(state$))
+        .map(([_, state]) => limitOrder(state.price, state.size, "BUY"));
+
+    const limitSell = actions.onClickLimitSellButton$
+        .compose(sampleCombine(state$))
+        .map(([_, state]) => limitOrder(state.price, state.size, "SELL"));
 
     const clear = actions.onClickClearButton$
         .compose(sampleCombine(state$))
@@ -30,5 +38,16 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
     const clearOrders = actions.onClickClearOrderButton$
         .map(_ => cancelOrders());
 
-    return Stream.merge(board, collateral, positions, buy, sell, clear, clearOrders, state);
+    return Stream.merge(
+        board,
+        collateral,
+        positions,
+        marketBuy,
+        marketSell,
+        limitBuy,
+        limitSell,
+        clear,
+        clearOrders,
+        state
+    );
 };

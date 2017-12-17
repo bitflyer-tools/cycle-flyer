@@ -22,6 +22,15 @@
             background: rgba(44, 57, 64, 1);
             font-family:-apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif;
         }
+        body ::-webkit-scrollbar {
+            display: none;
+        }
+        body ::-webkit-scrollbar-track {
+            display: none;
+        }
+        body ::-webkit-scrollbar-thumb {
+            display: none;
+        }
         a {
             color: rgba(232, 232, 232, .5);
             text-decoration: none;
@@ -152,15 +161,6 @@
             width: 20px;
             color: red;
         }
-        .histories ::-webkit-scrollbar {
-            display: none;
-        }
-        .histories ::-webkit-scrollbar-track {
-            display: none;
-        }
-        .histories ::-webkit-scrollbar-thumb {
-            display: none;
-        }
 
         /* .trade .board */
 
@@ -246,15 +246,6 @@
             background: rgba(237, 169, 9, .25);
             left: 0;
         }
-        .board ::-webkit-scrollbar {
-            display: none;
-        }
-        .board ::-webkit-scrollbar-track {
-            display: none;
-        }
-        .board ::-webkit-scrollbar-thumb {
-            display: none;
-        }
 
         /* .trade .order */
 
@@ -263,7 +254,7 @@
             grid-row: 1;
             padding: 32px;
         }
-        #size-input {
+        #size-input, #price-input {
             display: block;
             width: 200px;
             height: 32px;

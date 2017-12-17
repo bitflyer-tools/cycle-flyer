@@ -61,14 +61,14 @@ export const view = (state$: Stream<State>) =>
                     span(".spread", state.board.spread().toLocaleString())
                 ]),
                 div(".asks", state.board.groupedAsks(state.groupedSize).map(ask =>
-                    div(".ask", [
+                    div(".ask", { dataset: { price: ask.price } }, [
                         span(".bar", { style: barStyle(ask.size) }),
                         span(padWithZero(ask.size)),
                         span(ask.price.toLocaleString())
                     ])
                 )),
                 div(".bids", state.board.groupedBids(state.groupedSize).map(bid =>
-                    div(".bid", [
+                    div(".bid", { dataset: { price: bid.price } }, [
                         span(".bar", { style: barStyle(bid.size) } ),
                         span(bid.price.toLocaleString()),
                         span(padWithZero(bid.size))
@@ -82,7 +82,14 @@ export const view = (state$: Stream<State>) =>
                 ]),
                 hr(),
                 h4(".sub-title", "Market"),
-                div(".order-buttons", [
+                div(".market-order-buttons.order-buttons", [
+                    button(".sell-button", { attrs: { disabled: state.isOrdering } }, "Sell"),
+                    button(".buy-button", { attrs: { disabled: state.isOrdering } },"Buy")
+                ]),
+                hr(),
+                h4(".sub-title", "Limit"),
+                div(".limit-order-buttons.order-buttons", [
+                    input("#price-input", { attrs: { value: state.price }}),
                     button(".sell-button", { attrs: { disabled: state.isOrdering } }, "Sell"),
                     button(".buy-button", { attrs: { disabled: state.isOrdering } },"Buy")
                 ]),
