@@ -1,5 +1,7 @@
 import {Sources} from "./index";
-import {Stream} from 'xstream';
+import {MemoryStream, Stream} from 'xstream';
+import {ResponseStream, Response} from "@cycle/http";
+import {History} from "./model";
 
 export interface Actions {
     onApiKeyLoaded$: Stream<string>;
@@ -10,8 +12,9 @@ export interface Actions {
     onClickSellButton$: Stream<null>;
     onCollateralLoaded$: Stream<number>;
     onExecutionCreated$: Stream<object>;
-    onPositionsLoaded$: Stream<object[]>;
+    onHistoryCreated$: Stream<History>;
     onOrderCreated$: Stream<object>;
+    onPositionsLoaded$: Stream<object[]>;
     onSizeChanged$: Stream<number>;
     onStateLoaded$: Stream<object>;
 }
@@ -49,6 +52,10 @@ export const intent = (sources: Sources): Actions => {
 
     const onExecutionCreated$ = sources.pubnub.execution$;
 
+    const onHistoryCreated$ = Stream.merge(
+        sources.HTTP.select("order").map(createHistoryStream).flatten()
+    );
+
     const onOrderCreated$ = sources.HTTP.select("order")
         .map(response$ => response$.replaceError(() => Stream.of(null)))
         .flatten()
@@ -81,9 +88,32 @@ export const intent = (sources: Sources): Actions => {
         onClickSellButton$,
         onCollateralLoaded$,
         onExecutionCreated$,
+        onHistoryCreated$,
         onOrderCreated$,
         onPositionsLoaded$,
         onSizeChanged$,
         onStateLoaded$
     };
+};
+
+const createHistoryStream = (stream$: MemoryStream<Response> & ResponseStream): Stream<History> => {
+    return stream$
+        .map(response => {
+            const send = JSON.parse(response.request.send);
+            return {
+                createdAt: new Date(),
+                description: `${send.side}: ${send.size}`,
+                name: "MarketOrder",
+                status: "success"
+            }
+        })
+        .replaceError(error => {
+            const send = JSON.parse(error.response.request.send);
+            return Stream.of({
+                createdAt: new Date(),
+                description: `${send.side}: ${send.size}`,
+                name: "MarketOrder",
+                status: "failed"
+            });
+        })
 };

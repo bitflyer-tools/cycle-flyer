@@ -1,4 +1,4 @@
-import {button, div, h3, input, p, span, hr, h4} from "@cycle/dom";
+import {button, div, h3, input, p, span, hr, h4, li, ul} from "@cycle/dom";
 import Stream from "xstream";
 import {State} from "./model";
 
@@ -40,6 +40,16 @@ export const view = (state$: Stream<State>) =>
                     span(".label", "Board state"),
                     span(healthClass(state.marketState.state), state.marketState.state),
                 ]),
+                hr(),
+                ul(".histories", state.histories.map(history =>
+                        li(".history", [
+                            span(history.status === "success" ? ".success" : ".failed", history.status === "success" ? "○" : "✗"),
+                            span(".name", history.name),
+                            span(".description", history.description),
+                            span(".created-at", history.createdAt.toLocaleTimeString())
+                        ])
+                    )
+                )
             ]),
             div(".order", [
                 h3(".title", "Order"),
