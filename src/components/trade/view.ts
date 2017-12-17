@@ -57,8 +57,9 @@ export const view = (state$: Stream<State>) =>
                 hr(),
                 h4(".sub-title", "Clear position"),
                 div(".order-buttons", [
-                    button(".clear-button", { attrs: { disabled: state.isOrdering } }, "Clear"),
-                ]),
+                    button(".clear-button", { attrs: { disabled: state.isOrdering } }, "Clear Position"),
+                    button(".clear-order-button", { attrs: { disabled: state.isOrdering } }, "Clear Orders"),
+                ])
             ])
         ])
     );

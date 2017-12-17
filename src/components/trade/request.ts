@@ -2,7 +2,7 @@ import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
 import sampleCombine from "xstream/extra/sampleCombine";
 import {Actions} from "./intent";
-import {getCollateral, getPositions, getState, marketOrder} from '../../http';
+import {cancelOrders, getCollateral, getPositions, getState, marketOrder} from '../../http';
 import {State} from "./model";
 
 export const request = (actions: Actions, state$: Stream<State>): Stream<RequestInput> => {
@@ -22,5 +22,8 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
         .compose(sampleCombine(state$))
         .map(([_, state]) => marketOrder(state.position.size, state.position.side === "BUY" ? "SELL" : "BUY"));
 
-    return Stream.merge(collateral, positions, buy, sell, clear, state);
+    const clearOrders = actions.onClickClearOrderButton$
+        .map(_ => cancelOrders());
+
+    return Stream.merge(collateral, positions, buy, sell, clear, clearOrders, state);
 };

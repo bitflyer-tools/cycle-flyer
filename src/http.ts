@@ -20,6 +20,9 @@ export const marketOrder = (size: number, side: string): RequestInput => {
     return requestInput("order", "/v1/me/sendchildorder", "POST", json);
 };
 
+export const cancelOrders = (): RequestInput =>
+    requestInput("cancelOrders", "/v1/me/cancelallchildorders", "POST", { "product_code": "FX_BTC_JPY" });
+
 const requestInput = (category: string, path: string, method: string, json?: object) => {
     const [key, secret] = getApiKeys();
 
