@@ -17,7 +17,7 @@ export const view = (state$: Stream<State>) =>
                     span(".number", state.position.toString())
                 ]),
                 div(".position-diff", [
-                    span(".label", "Position difference"),
+                    span(".label", "Position diff"),
                     span(profitDifferenceClass(state), state.position.toDiffString(state.currentPrice)),
                     span(".unit", "JPY")
                 ]),
