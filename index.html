@@ -124,6 +124,7 @@
         .histories {
             padding: 0;
             max-height: 300px;
+            height: 300px;
             overflow: scroll;
         }
         .history {
@@ -150,6 +151,15 @@
         .history .failed {
             width: 20px;
             color: red;
+        }
+        .histories ::-webkit-scrollbar {
+            display: none;
+        }
+        .histories ::-webkit-scrollbar-track {
+            display: none;
+        }
+        .histories ::-webkit-scrollbar-thumb {
+            display: none;
         }
 
         /* .trade .board */
