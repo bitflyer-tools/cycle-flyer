@@ -101,10 +101,11 @@ export const intent = (sources: Sources): Actions => {
     const onExecutionCreated$ = sources.pubnub.execution$;
 
     const onHistoryCreated$ = Stream.merge(
-        sources.HTTP.select("order").map(createHistoryStream).flatten()
+        sources.HTTP.select("market-order").map(stream => createHistoryStream("MarketOrder", stream)).flatten(),
+        sources.HTTP.select("limit-order").map(stream => createHistoryStream("LimitOrder", stream)).flatten()
     );
 
-    const onOrderCreated$ = sources.HTTP.select("order")
+    const onOrderCreated$ = sources.HTTP.select("market-order")
         .map(response$ => response$.replaceError(() => Stream.of(null)))
         .flatten()
         .filter(response => !!response)
@@ -158,24 +159,22 @@ export const intent = (sources: Sources): Actions => {
     };
 };
 
-const createHistoryStream = (stream$: MemoryStream<Response> & ResponseStream): Stream<History> => {
+const createHistoryStream = (name: string, stream$: MemoryStream<Response> & ResponseStream): Stream<History> => {
     return stream$
         .map(response => {
             const send = JSON.parse(response.request.send);
-            return {
-                createdAt: new Date(),
-                description: `${send.side}: ${send.size}`,
-                name: "MarketOrder",
-                status: "success"
-            }
+            return createHistory(name, `${send.side} / ${send.size} / ${send.price || "MARKET"}`, "success");
         })
         .replaceError(error => {
             const send = JSON.parse(error.response.request.send);
-            return Stream.of({
-                createdAt: new Date(),
-                description: `${send.side}: ${send.size}`,
-                name: "MarketOrder",
-                status: "failed"
-            });
+            return Stream.of(createHistory(name, `${send.side} / ${send.size} / ${send.price || "MARKET"}`, "failed"));
         })
 };
+
+const createHistory = (name: string, description: string, status: string): History =>
+    ({
+        createdAt: new Date(),
+        description: description,
+        name: name,
+        status: status
+    });

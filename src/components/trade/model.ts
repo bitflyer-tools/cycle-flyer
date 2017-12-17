@@ -75,6 +75,8 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const isOrderingReducer$ = Stream.merge(
         actions.onClickMarketBuyButton$.mapTo(true),
         actions.onClickMarketSellButton$.mapTo(true),
+        actions.onClickLimitBuyButton$.mapTo(true),
+        actions.onClickLimitSellButton$.mapTo(true),
         actions.onClickClearButton$.mapTo(true),
         actions.onHistoryCreated$.mapTo(false)
     ).map(isOrdering => (state: State) => ({ ...state, isOrdering }));

@@ -20,7 +20,7 @@ export const marketOrder = (size: number, side: string): RequestInput => {
         "side": side,
         "size": Math.abs(size)
     };
-    return requestInput("order", "/v1/me/sendchildorder", "POST", json);
+    return requestInput("market-order", "/v1/me/sendchildorder", "POST", json);
 };
 
 export const limitOrder = (price: number, size: number, side: string): RequestInput => {
@@ -31,7 +31,7 @@ export const limitOrder = (price: number, size: number, side: string): RequestIn
         "price": price,
         "size": Math.abs(size)
     };
-    return requestInput("order", "/v1/me/sendchildorder", "POST", json);
+    return requestInput("limit-order", "/v1/me/sendchildorder", "POST", json);
 };
 
 export const cancelOrders = (): RequestInput =>
