@@ -15,6 +15,7 @@ export interface State {
     board: Board;
     collateral: number;
     currentPrice: number;
+    groupedSize: number;
     histories: History[];
     isOrdering: boolean;
     position: Position;
@@ -26,6 +27,7 @@ const defaultState: State = {
     board: new Board({ bids: [], asks: [] }),
     collateral: 0.0,
     currentPrice: 0,
+    groupedSize: 1,
     histories: [],
     isOrdering: false,
     position: new Position([]),
@@ -34,30 +36,10 @@ const defaultState: State = {
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
-    const defaultReducer$ = Stream.of((state: State) => typeof state === "undefined" ? defaultState : state);
+    const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
     const boardReducer$ = actions.onBoardLoaded$
-        .map(board => (state: State) => {
-            if (!state || !state.board) { return; }
-
-            const oldBoard = state.board;
-            const asksToRemove = board.asks.map(ask => ask.price);
-            const asksToAppend = board.asks.filter(ask => ask.size != 0.0);
-            const bidsToRemove = board.bids.map(bid => bid.price);
-            const bidsToAppend = board.bids.filter(bid => bid.size != 0.0);
-
-            oldBoard!.asks = oldBoard!.asks
-                .filter(ask => !asksToRemove.reduce((previous: boolean, price: number) => previous || price === ask.price, false))
-                .concat(asksToAppend)
-                .sort((a, b) => a.price < b.price ? -1 : 1);
-
-            oldBoard!.bids = oldBoard!.bids
-                .filter(bid => !bidsToRemove.reduce((previous: boolean, price: number) => previous || price === bid.price, false))
-                .concat(bidsToAppend)
-                .sort((a, b) => a.price > b.price ? -1 : 1);
-
-            return { ...state, board: oldBoard }
-        });
+        .map(board => (state: State) => ({ ...state, board: state.board.merge(board.asks, board.bids) }));
 
     const boardSnapshotReducer$ = actions.onBoardSnapshotLoaded$
         .map(board => (state: State) => ({ ...state, board }));
@@ -69,6 +51,20 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map(execution => (state: State) => {
             state.board.remove(execution.side, execution.price);
             return { ...state, currentPrice: execution.price };
+        });
+
+    const groupSize = [1, 100, 500, 1000, 2500, 5000, 10000, 25000, 50000];
+
+    const groupedSizePlusReducer$ = actions.onClickGroupSizePlusButton$
+        .map(_ => (state: State) => {
+            const groupedSize = groupSize.filter(size => size > state.groupedSize)[0] || state.groupedSize;
+            return { ...state, groupedSize };
+        });
+
+    const groupedSizeMinusReducer$ = actions.onClickGroupSizeMinusButton$
+        .map(_ => (state: State) => {
+            const groupedSize = groupSize.filter(size => size < state.groupedSize).slice(-1)[0] || state.groupedSize;
+            return { ...state, groupedSize };
         });
 
     const historyReducer$ = actions.onHistoryCreated$
@@ -97,6 +93,8 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         boardSnapshotReducer$,
         collateralReducer$,
         currentPriceReducer$,
+        groupedSizeMinusReducer$,
+        groupedSizePlusReducer$,
         historyReducer$,
         isOrderingReducer$,
         positionsReducer$,

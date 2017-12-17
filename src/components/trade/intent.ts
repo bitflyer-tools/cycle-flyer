@@ -12,6 +12,8 @@ export interface Actions {
     onClickBuyButton$: Stream<null>;
     onClickClearButton$: Stream<null>;
     onClickClearOrderButton$: Stream<null>;
+    onClickGroupSizePlusButton$: Stream<null>;
+    onClickGroupSizeMinusButton$: Stream<null>;
     onClickSellButton$: Stream<null>;
     onCollateralLoaded$: Stream<number>;
     onExecutionCreated$: Stream<object>;
@@ -53,6 +55,14 @@ export const intent = (sources: Sources): Actions => {
 
     const onClickClearOrderButton$ = sources.DOM.select(".clear-order-button")
         .events("click", { preventDefault: true })
+        .mapTo(null);
+
+    const onClickGroupSizePlusButton$ = sources.DOM.select(".board-header").select(".plus")
+        .events("click")
+        .mapTo(null);
+
+    const onClickGroupSizeMinusButton$ = sources.DOM.select(".board-header").select(".minus")
+        .events("click")
         .mapTo(null);
 
     const onClickSellButton$ = sources.DOM.select(".sell-button")
@@ -102,6 +112,8 @@ export const intent = (sources: Sources): Actions => {
         onClickBuyButton$,
         onClickClearButton$,
         onClickClearOrderButton$,
+        onClickGroupSizePlusButton$,
+        onClickGroupSizeMinusButton$,
         onClickSellButton$,
         onCollateralLoaded$,
         onExecutionCreated$,

@@ -53,17 +53,21 @@ export const view = (state$: Stream<State>) =>
             ]),
             div(".board", [
                 div(".board-header",[
+                    span("Group"),
+                    button(".minus", "-"),
+                    span(".grouped-size", state.groupedSize),
+                    button(".plus", "+"),
                     span("Spread"),
                     span(".spread", state.board.spread().toLocaleString())
                 ]),
-                div(".asks", state.board.asks.map(ask =>
+                div(".asks", state.board.groupedAsks(state.groupedSize).map(ask =>
                     div(".ask", [
                         span(".bar", { style: barStyle(ask.size) }),
                         span(padWithZero(ask.size)),
                         span(ask.price.toLocaleString())
                     ])
                 )),
-                div(".bids", state.board.bids.map(bid =>
+                div(".bids", state.board.groupedBids(state.groupedSize).map(bid =>
                     div(".bid", [
                         span(".bar", { style: barStyle(bid.size) } ),
                         span(bid.price.toLocaleString()),
@@ -92,13 +96,13 @@ export const view = (state$: Stream<State>) =>
         ])
     );
 
-const collateralString = (state): string => {
+const collateralString = (state: State): string => {
     if (!state.position.price) return state.collateral.toLocaleString();
     const profit = state.position.profit(state.currentPrice);
     return (state.collateral + profit).toLocaleString();
 };
 
-const profitClass = (state): string => {
+const profitClass = (state: State): string => {
     if (!state.position.price) return ".number";
     if (state.position.side === "BUY") {
         return state.currentPrice - state.position.price >= 0.0 ? ".number.plus" : ".number.minus";
@@ -107,7 +111,7 @@ const profitClass = (state): string => {
     }
 };
 
-const profitDifferenceClass = (state): string => {
+const profitDifferenceClass = (state: State): string => {
     if (!state.position.price) return ".number";
     return state.currentPrice - state.position.price >= 0.0 ? ".number.plus" : ".number.minus";
 };
