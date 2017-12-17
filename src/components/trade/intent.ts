@@ -1,8 +1,8 @@
 import {Sources} from "./index";
 import {MemoryStream, Stream} from 'xstream';
 import {ResponseStream, Response} from "@cycle/http";
-import {History, Board} from "./model";
-import {source} from "@cycle/dom";
+import {History} from "./model";
+import {Board} from "../../models/board";
 
 export interface Actions {
     onApiKeyLoaded$: Stream<string>;
@@ -38,8 +38,9 @@ export const intent = (sources: Sources): Actions => {
             .map(response$ => response$.replaceError(() => Stream.of(null)))
             .flatten()
             .filter(response => !!response)
-            .map(response => JSON.parse(response.text)),
+            .map(response => new Board(JSON.parse(response.text))),
         sources.pubnub.boardSnapshot$
+            .map(board => new Board(board)),
     );
 
     const onClickBuyButton$ = sources.DOM.select(".buy-button")

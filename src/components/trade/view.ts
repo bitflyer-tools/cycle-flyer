@@ -1,12 +1,12 @@
-import {button, div, h3, input, p, span, hr, h4, li, ul} from "@cycle/dom";
+import {button, div, h4, hr, input, li, span, ul} from "@cycle/dom";
 import Stream from "xstream";
 import {State} from "./model";
+import throttle from "xstream/extra/throttle";
 
 export const view = (state$: Stream<State>) =>
-    state$.map(state =>
+    state$.compose(throttle(100)).map(state =>
         div(".trade", [
             div(".summary", [
-                h3(".title", "Summary"),
                 div(".current-price", [
                     span(".label", "Current price"),
                     span(".number", state.currentPrice.toLocaleString()),
@@ -51,9 +51,25 @@ export const view = (state$: Stream<State>) =>
                     )
                 )
             ]),
+            div(".board", [
+                div(".board-header",[
+                    span("Spread"),
+                    span(".spread", state.board.spread().toLocaleString())
+                ]),
+                div(".asks", state.board.asks.map(ask =>
+                    div(".ask", [
+                        span(padWithZero(ask.size)),
+                        span(ask.price.toLocaleString())
+                    ])
+                )),
+                div(".bids", state.board.bids.map(bid =>
+                    div(".bid", [
+                        span(bid.price.toLocaleString()),
+                        span(padWithZero(bid.size))
+                    ])
+                ))
+            ]),
             div(".order", [
-                h3(".title", "Order"),
-                hr(),
                 h4(".sub-title", "Size"),
                 div(".size", [
                     input("#size-input", { attrs: { value: state.size }}),
@@ -101,3 +117,5 @@ const healthClass = (health: string): string => {
         return ".health.bad";
     }
 };
+
+const padWithZero = (number: number): string => number.toFixed(8).toString();

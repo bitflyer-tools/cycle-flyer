@@ -1,8 +1,8 @@
 import {Reducer} from "cycle-onionify";
 import Stream from "xstream";
-import throttle from "xstream/extra/throttle";
 import {Actions} from "./intent";
 import {Position} from "../../models/position";
+import {Board} from "../../models/board";
 
 export interface History {
     createdAt: Date;
@@ -11,19 +11,8 @@ export interface History {
     status: string;
 }
 
-export interface Board {
-    asks: BoardOrder[];
-    bids: BoardOrder[];
-    midPrice: number;
-}
-
-export interface BoardOrder {
-    price: number;
-    size: number;
-}
-
 export interface State {
-    board?: Board;
+    board: Board;
     collateral: number;
     currentPrice: number;
     histories: History[];
@@ -34,6 +23,7 @@ export interface State {
 }
 
 const defaultState: State = {
+    board: new Board({ bids: [], asks: [] }),
     collateral: 0.0,
     currentPrice: 0,
     histories: [],
@@ -48,21 +38,23 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
     const boardReducer$ = actions.onBoardLoaded$
         .map(board => (state: State) => {
-            const oldBoard = state.board;
-            if (!oldBoard) { return; }
+            if (!state || !state.board) { return; }
 
-            const asksToRemove = board.asks.filter(ask => ask.size === 0.0).map(ask => ask.price);
+            const oldBoard = state.board;
+            const asksToRemove = board.asks.map(ask => ask.price);
             const asksToAppend = board.asks.filter(ask => ask.size != 0.0);
-            const bidsToRemove = board.bids.filter(bid => bid.size === 0.0).map(ask => ask.price);
+            const bidsToRemove = board.bids.map(bid => bid.price);
             const bidsToAppend = board.bids.filter(bid => bid.size != 0.0);
 
             oldBoard!.asks = oldBoard!.asks
                 .filter(ask => !asksToRemove.reduce((previous: boolean, price: number) => previous || price === ask.price, false))
-                .concat(asksToAppend);
+                .concat(asksToAppend)
+                .sort((a, b) => a.price < b.price ? -1 : 1);
 
             oldBoard!.bids = oldBoard!.bids
                 .filter(bid => !bidsToRemove.reduce((previous: boolean, price: number) => previous || price === bid.price, false))
-                .concat(bidsToAppend);
+                .concat(bidsToAppend)
+                .sort((a, b) => a.price > b.price ? -1 : 1);
 
             return { ...state, board: oldBoard }
         });
@@ -74,9 +66,10 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map(collateral => (state: State) => ({ ...state, collateral }));
 
     const currentPriceReducer$ = actions.onExecutionCreated$
-        .compose(throttle(100))
-        .map(execution => execution.price)
-        .map(currentPrice => (state: State) => ({ ...state, currentPrice }));
+        .map(execution => (state: State) => {
+            state.board.remove(execution.side, execution.price);
+            return { ...state, currentPrice: execution.price };
+        });
 
     const historyReducer$ = actions.onHistoryCreated$
         .map(history => (state: State) => ({ ...state, histories: [history].concat(state.histories)}));
