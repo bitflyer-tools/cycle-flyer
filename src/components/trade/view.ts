@@ -58,12 +58,14 @@ export const view = (state$: Stream<State>) =>
                 ]),
                 div(".asks", state.board.asks.map(ask =>
                     div(".ask", [
+                        span(".bar", { style: barStyle(ask.size) }),
                         span(padWithZero(ask.size)),
                         span(ask.price.toLocaleString())
                     ])
                 )),
                 div(".bids", state.board.bids.map(bid =>
                     div(".bid", [
+                        span(".bar", { style: barStyle(bid.size) } ),
                         span(bid.price.toLocaleString()),
                         span(padWithZero(bid.size))
                     ])
@@ -119,3 +121,9 @@ const healthClass = (health: string): string => {
 };
 
 const padWithZero = (number: number): string => number.toFixed(8).toString();
+
+const barStyle = (size: number): object => {
+    const s = size / 20 * 100;
+    const width = s > 100 ? 100 : s;
+    return { width: `${width}%` };
+};

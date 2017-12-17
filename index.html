@@ -203,6 +203,23 @@
         .bids span {
             margin-right: 20px;
         }
+        .ask, .bid {
+            position: relative;
+            width: 100%;
+        }
+        .bar {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+        }
+        .asks .bar {
+            background: rgba(247, 105, 77, .25);
+            right: 0;
+        }
+        .bids .bar {
+            background: rgba(237, 169, 9, .25);
+            left: 0;
+        }
         .board ::-webkit-scrollbar {
             display: none;
         }
