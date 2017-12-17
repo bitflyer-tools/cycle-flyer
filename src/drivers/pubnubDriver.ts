@@ -35,9 +35,8 @@ export class PubnubSource {
 
         client.subscribe({
             channels: [
-                // "lightning_board_snapshot_FX_BTC_JPY",
-                // "lightning_board_FX_BTC_JPY",
-                // "lightning_ticker_FX_BTC_JPY",
+                "lightning_board_snapshot_FX_BTC_JPY",
+                "lightning_board_FX_BTC_JPY",
                 "lightning_executions_FX_BTC_JPY"
             ]
         })

@@ -11,7 +11,19 @@ export interface History {
     status: string;
 }
 
+export interface Board {
+    asks: BoardOrder[];
+    bids: BoardOrder[];
+    midPrice: number;
+}
+
+export interface BoardOrder {
+    price: number;
+    size: number;
+}
+
 export interface State {
+    board?: Board;
     collateral: number;
     currentPrice: number;
     histories: History[];
@@ -33,6 +45,30 @@ const defaultState: State = {
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => typeof state === "undefined" ? defaultState : state);
+
+    const boardReducer$ = actions.onBoardLoaded$
+        .map(board => (state: State) => {
+            const oldBoard = state.board;
+            if (!oldBoard) { return; }
+
+            const asksToRemove = board.asks.filter(ask => ask.size === 0.0).map(ask => ask.price);
+            const asksToAppend = board.asks.filter(ask => ask.size != 0.0);
+            const bidsToRemove = board.bids.filter(bid => bid.size === 0.0).map(ask => ask.price);
+            const bidsToAppend = board.bids.filter(bid => bid.size != 0.0);
+
+            oldBoard!.asks = oldBoard!.asks
+                .filter(ask => !asksToRemove.reduce((previous: boolean, price: number) => previous || price === ask.price, false))
+                .concat(asksToAppend);
+
+            oldBoard!.bids = oldBoard!.bids
+                .filter(bid => !bidsToRemove.reduce((previous: boolean, price: number) => previous || price === bid.price, false))
+                .concat(bidsToAppend);
+
+            return { ...state, board: oldBoard }
+        });
+
+    const boardSnapshotReducer$ = actions.onBoardSnapshotLoaded$
+        .map(board => (state: State) => ({ ...state, board }));
 
     const collateralReducer$ = actions.onCollateralLoaded$
         .map(collateral => (state: State) => ({ ...state, collateral }));
@@ -64,6 +100,8 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
     return Stream.merge(
         defaultReducer$,
+        boardReducer$,
+        boardSnapshotReducer$,
         collateralReducer$,
         currentPriceReducer$,
         historyReducer$,

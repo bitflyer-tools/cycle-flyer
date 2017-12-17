@@ -1,11 +1,14 @@
 import {Sources} from "./index";
 import {MemoryStream, Stream} from 'xstream';
 import {ResponseStream, Response} from "@cycle/http";
-import {History} from "./model";
+import {History, Board} from "./model";
+import {source} from "@cycle/dom";
 
 export interface Actions {
     onApiKeyLoaded$: Stream<string>;
     onApiSecretLoaded$: Stream<string>;
+    onBoardLoaded$: Stream<Board>;
+    onBoardSnapshotLoaded$: Stream<Board>;
     onClickBuyButton$: Stream<null>;
     onClickClearButton$: Stream<null>;
     onClickClearOrderButton$: Stream<null>;
@@ -27,6 +30,17 @@ export const intent = (sources: Sources): Actions => {
     const onApiSecretLoaded$ = sources.storage.local.getItem("api-secret")
         .filter(apiSecret => apiSecret && apiSecret !== "")
         .take(1);
+
+    const onBoardLoaded$ = sources.pubnub.board$;
+
+    const onBoardSnapshotLoaded$ = Stream.merge(
+        sources.HTTP.select("board")
+            .map(response$ => response$.replaceError(() => Stream.of(null)))
+            .flatten()
+            .filter(response => !!response)
+            .map(response => JSON.parse(response.text)),
+        sources.pubnub.boardSnapshot$
+    );
 
     const onClickBuyButton$ = sources.DOM.select(".buy-button")
         .events("click", { preventDefault: true })
@@ -82,6 +96,8 @@ export const intent = (sources: Sources): Actions => {
     return {
         onApiKeyLoaded$,
         onApiSecretLoaded$,
+        onBoardLoaded$,
+        onBoardSnapshotLoaded$,
         onClickBuyButton$,
         onClickClearButton$,
         onClickClearOrderButton$,

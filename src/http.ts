@@ -1,6 +1,9 @@
 import hash = require('hash.js');
 import {RequestInput} from '@cycle/http';
 
+export const getBoard = (): RequestInput =>
+    requestInput("board", "/v1/getboard", "GET");
+
 export const getState = (): RequestInput =>
     requestInput("status", "/v1/getboardstate", "GET");
 

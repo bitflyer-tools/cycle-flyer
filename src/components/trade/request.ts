@@ -2,10 +2,15 @@ import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
 import sampleCombine from "xstream/extra/sampleCombine";
 import {Actions} from "./intent";
-import {cancelOrders, getCollateral, getPositions, getState, marketOrder} from '../../http';
+import {
+    cancelOrders, getBoard, getCollateral, getPositions, getState,
+    marketOrder
+} from '../../http';
 import {State} from "./model";
 
 export const request = (actions: Actions, state$: Stream<State>): Stream<RequestInput> => {
+    const board = Stream.of(getBoard());
+
     const collateral = Stream.periodic(10000).mapTo(getCollateral()).startWith(getCollateral());
     const positions = Stream.periodic(3000).mapTo(getPositions()).startWith(getPositions());
     const state = Stream.periodic(3000).mapTo(getState()).startWith(getState());
@@ -25,5 +30,5 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
     const clearOrders = actions.onClickClearOrderButton$
         .map(_ => cancelOrders());
 
-    return Stream.merge(collateral, positions, buy, sell, clear, clearOrders, state);
+    return Stream.merge(board, collateral, positions, buy, sell, clear, clearOrders, state);
 };
