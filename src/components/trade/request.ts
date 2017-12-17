@@ -3,7 +3,7 @@ import Stream from "xstream";
 import sampleCombine from "xstream/extra/sampleCombine";
 import {Actions} from "./intent";
 import {
-    cancelOrders, getBoard, getCollateral, getPositions, getState, limitOrder,
+    cancelOrders, getBoard, getCollateral, getOrders, getPositions, getState, limitOrder,
     marketOrder
 } from '../../http';
 import {State} from "./model";
@@ -12,6 +12,7 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
     const board = Stream.of(getBoard());
 
     const collateral = Stream.periodic(10000).mapTo(getCollateral()).startWith(getCollateral());
+    const orders = Stream.periodic(3000).mapTo(getOrders()).startWith(getOrders());
     const positions = Stream.periodic(3000).mapTo(getPositions()).startWith(getPositions());
     const state = Stream.periodic(3000).mapTo(getState()).startWith(getState());
 
@@ -41,6 +42,7 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
     return Stream.merge(
         board,
         collateral,
+        orders,
         positions,
         marketBuy,
         marketSell,

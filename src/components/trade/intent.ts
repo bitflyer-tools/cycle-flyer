@@ -23,6 +23,7 @@ export interface Actions {
     onExecutionCreated$: Stream<object>;
     onHistoryCreated$: Stream<History>;
     onOrderCreated$: Stream<object>;
+    onOrdersLoaded$: Stream<object>;
     onPositionsLoaded$: Stream<object[]>;
     onPriceChanged$: Stream<number>;
     onSizeChanged$: Stream<number>;
@@ -111,6 +112,12 @@ export const intent = (sources: Sources): Actions => {
         .filter(response => !!response)
         .map(response => JSON.parse(response.text));
 
+    const onOrdersLoaded$ = sources.HTTP.select("orders")
+        .map(response$ => response$.replaceError(() => Stream.of(null)))
+        .flatten()
+        .filter(response => !!response)
+        .map(response => JSON.parse(response.text));
+
     const onPositionsLoaded$ = sources.HTTP.select("positions")
         .map(response$ => response$.replaceError(() => Stream.of(null)))
         .flatten()
@@ -152,6 +159,7 @@ export const intent = (sources: Sources): Actions => {
         onExecutionCreated$,
         onHistoryCreated$,
         onOrderCreated$,
+        onOrdersLoaded$,
         onPositionsLoaded$,
         onPriceChanged$,
         onSizeChanged$,

@@ -13,6 +13,9 @@ export const getCollateral = (): RequestInput =>
 export const getPositions = (): RequestInput =>
     requestInput("positions", "/v1/me/getpositions", "GET");
 
+export const getOrders = (): RequestInput =>
+    requestInput("orders", "/v1/me/getchildorders", "GET", undefined, { "child_order_state": "ACTIVE" });
+
 export const marketOrder = (size: number, side: string): RequestInput => {
     const json = {
         "product_code": "FX_BTC_JPY",
@@ -37,12 +40,12 @@ export const limitOrder = (price: number, size: number, side: string): RequestIn
 export const cancelOrders = (): RequestInput =>
     requestInput("cancelOrders", "/v1/me/cancelallchildorders", "POST", { "product_code": "FX_BTC_JPY" });
 
-const requestInput = (category: string, path: string, method: string, json?: object) => {
+const requestInput = (category: string, path: string, method: string, json?: object, q?: object) => {
     const [key, secret] = getApiKeys();
 
     const url = `https://api.bitflyer.jp${path}`;
-    const query = { product_code: "FX_BTC_JPY" };
-    const queryString = `?product_code=FX_BTC_JPY`;
+    const query = { product_code: "FX_BTC_JPY", ...q };
+    const queryString = "?" + Object.keys(query).reduce((acc, key) => acc + `&${key}=${query[key]}`, "").slice(1);
 
     const send = json ? JSON.stringify(json) : "";
     const timestamp = Date.now().toString();

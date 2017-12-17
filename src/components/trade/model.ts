@@ -3,6 +3,7 @@ import Stream from "xstream";
 import {Actions} from "./intent";
 import {Position} from "../../models/position";
 import {Board} from "../../models/board";
+import {Order} from "../../models/order";
 
 export interface History {
     createdAt: Date;
@@ -18,6 +19,7 @@ export interface State {
     groupedSize: number;
     histories: History[];
     isOrdering: boolean;
+    orders: Order[];
     position: Position;
     price: number;
     size: number;
@@ -31,6 +33,7 @@ const defaultState: State = {
     groupedSize: 1,
     histories: [],
     isOrdering: false,
+    orders: [],
     position: new Position([]),
     price: 0,
     size: 0,
@@ -81,14 +84,18 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         actions.onHistoryCreated$.mapTo(false)
     ).map(isOrdering => (state: State) => ({ ...state, isOrdering }));
 
+    const ordersReducer$ = actions.onOrdersLoaded$
+        .map(orders => orders.map(order => new Order(order)))
+        .map(orders => (state: State) => ({ ...state, orders }));
+
     const positionsReducer$ = actions.onPositionsLoaded$
         .map(positions => new Position(positions))
         .map(position => (state: State) => ({ ...state, position }));
 
     const priceReducer$ = Stream.merge(
         actions.onPriceChanged$,
-        actions.onClickAsk$.map(price => price - 1),
-        actions.onClickBid$.map(price => price + 1)
+        actions.onClickAsk$.map(price => +price - 1),
+        actions.onClickBid$.map(price => +price + 1)
     ).map(price => (state: State) => ({ ...state, price }));
 
     const sizeReducer$ = actions.onSizeChanged$
@@ -107,6 +114,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         groupedSizePlusReducer$,
         historyReducer$,
         isOrderingReducer$,
+        ordersReducer$,
         positionsReducer$,
         priceReducer$,
         sizeReducer$,

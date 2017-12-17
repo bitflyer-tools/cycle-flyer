@@ -2,6 +2,7 @@ import {button, div, h4, hr, input, li, span, ul} from "@cycle/dom";
 import Stream from "xstream";
 import {State} from "./model";
 import throttle from "xstream/extra/throttle";
+import {BoardOrder} from "../../models/board";
 
 export const view = (state$: Stream<State>) =>
     state$.compose(throttle(100)).map(state =>
@@ -63,6 +64,7 @@ export const view = (state$: Stream<State>) =>
                 div(".asks", state.board.groupedAsks(state.groupedSize).map(ask =>
                     div(".ask", { dataset: { price: ask.price } }, [
                         span(".bar", { style: barStyle(ask.size) }),
+                        myOrder("ask", state, ask),
                         span(padWithZero(ask.size)),
                         span(ask.price.toLocaleString())
                     ])
@@ -71,7 +73,8 @@ export const view = (state$: Stream<State>) =>
                     div(".bid", { dataset: { price: bid.price } }, [
                         span(".bar", { style: barStyle(bid.size) } ),
                         span(bid.price.toLocaleString()),
-                        span(padWithZero(bid.size))
+                        span(padWithZero(bid.size)),
+                        myOrder("bid", state, bid)
                     ])
                 ))
             ]),
@@ -137,4 +140,16 @@ const barStyle = (size: number): object => {
     const s = size / 20 * 100;
     const width = s > 100 ? 100 : s;
     return { width: `${width}%` };
+};
+
+const myOrder = (side: string, state: State, order: BoardOrder): VNode => {
+    if (side === "ask") {
+        const orders = state.orders.filter(o => o.ceiledPrice(state.groupedSize) === order.price);
+        if (orders.length <= 0) { return span({ style: { display: "none" } }); }
+        return span(".my-order", orders.reduce((acc, order) => acc + order.size, 0).toString())
+    } else {
+        const orders = state.orders.filter(o => o.flooredPrice(state.groupedSize) === order.price);
+        if (orders.length <= 0) { return span({ style: { display: "none" } }); }
+        return span(".my-order", orders.reduce((acc, order) => acc + order.size, 0).toString())
+    }
 };
