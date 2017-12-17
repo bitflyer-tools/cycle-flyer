@@ -17,6 +17,7 @@
     "hash.js": "",
     "http-proxy-middleware": "^0.17.4",
     "now": "latest",
+    "now-pipeline": "latest",
     "pubnub": "^4.19.0",
     "serve": "latest",
     "stylus": "^0.54.5",
@@ -28,7 +29,7 @@
     "build": "node fuse",
     "start": "serve .",
     "watch": "node fuse.dev",
-    "deploy": "now rm cycle-flyer -y && now --public && now alias"
+    "deploy": "now --public --token=$NOW_TOKEN && now alias --token=$NOW_TOKEN && now-pipeline-prune"
   },
   "author": "unhappychoice",
   "license": "MIT"

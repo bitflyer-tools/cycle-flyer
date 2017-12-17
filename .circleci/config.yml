@@ -1,0 +1,28 @@
+version: 2
+jobs:
+  build:
+    working_directory: ~/workspace
+    docker:
+      - image: circleci/node:8.4.0
+    steps:
+      - checkout
+      - restore_cache:
+          name: Restoring Cache - dependencies
+          keys:
+            - v1-dependencies-{{ .Branch }}-{{ checksum "yarn.lock" }}
+      - run:
+          name: Install dependencies
+          command: yarn
+      - run:
+          name: Test
+          command: npm test
+      - save_cache:
+          paths:
+            - ~/workspace/node_modules
+            - ~/.cache/yarn/
+          key: v1-dependencies-{{ .Branch }}-{{ checksum "yarn.lock" }}
+      - deploy:
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "master" ]; then
+              yarn deploy
+            fi
