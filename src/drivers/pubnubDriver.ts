@@ -3,7 +3,8 @@ import Stream from "xstream";
 
 export const makePubnubDriver = () => (): PubnubSource => {
     const subscribeKey = "sub-c-52a9ab50-291b-11e5-baaa-0619f8945a4f";
-    return new PubnubSource(new Pubnub({ subscribeKey }));
+    const keepAlive = true;
+    return new PubnubSource(new Pubnub({ subscribeKey, keepAlive }));
 };
 
 export class PubnubSource {
