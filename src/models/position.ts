@@ -23,10 +23,15 @@ export class Position {
         return Math.floor(Position.round((currentPrice - this.price) * this.size));
     }
 
-    public toString(): string {
+    public toPriceString(): string {
         if (this.price === 0) return "None";
-        return `${this.price.toLocaleString()} / ${this.size}`
+        return this.price.toLocaleString();
     };
+
+    public toSizeString(): string {
+        if (this.size === 0) return "None";
+        return this.size.toString();
+    }
 
     public toDiffString(currentPrice: number): string {
         if (this.price === 0) return "None";

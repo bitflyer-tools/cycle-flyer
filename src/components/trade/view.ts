@@ -15,12 +15,18 @@ export const view = (state$: Stream<State>) =>
                 ]),
                 div(".position", [
                     span(".label", "Position"),
-                    span(".number", state.position.toString())
+                    span(".number", state.position.toPriceString()),
+                    span(".unit", "JPY")
                 ]),
                 div(".position-diff", [
                     span(".label", "Position diff"),
                     span(profitDifferenceClass(state), state.position.toDiffString(state.currentPrice)),
                     span(".unit", "JPY")
+                ]),
+                div(".position-size", [
+                    span(".label", "Position size"),
+                    span(".number", state.position.toSizeString()),
+                    span(".unit", "bFX")
                 ]),
                 div(".profit", [
                     span(".label", "Profit / Loss"),
