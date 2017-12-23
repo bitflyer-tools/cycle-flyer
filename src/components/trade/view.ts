@@ -143,7 +143,7 @@ const healthClass = (health: string): string => {
 const padWithZero = (number: number): string => number.toFixed(8).toString();
 
 const barStyle = (size: number): object => {
-    const s = size / 20 * 100;
+    const s = size / 50 * 100;
     const width = s > 100 ? 100 : s;
     return { width: `${width}%` };
 };
