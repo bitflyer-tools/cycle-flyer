@@ -92,21 +92,21 @@ export const view = (state$: Stream<State>) =>
                 hr(),
                 h4(".sub-title", "Market"),
                 div(".market-order-buttons.order-buttons", [
-                    button(".sell-button", { attrs: { disabled: state.isOrdering } }, "Sell"),
-                    button(".buy-button", { attrs: { disabled: state.isOrdering } },"Buy")
+                    button(".sell-button", { attrs: { disabled: state.isOrdering || state.size === 0 } }, "Sell"),
+                    button(".buy-button", { attrs: { disabled: state.isOrdering || state.size === 0 } },"Buy")
                 ]),
                 hr(),
                 h4(".sub-title", "Limit"),
                 div(".limit-order-buttons.order-buttons", [
                     input("#price-input", { attrs: { value: state.price }}),
-                    button(".sell-button", { attrs: { disabled: state.isOrdering } }, "Sell"),
-                    button(".buy-button", { attrs: { disabled: state.isOrdering } },"Buy")
+                    button(".sell-button", { attrs: { disabled: state.isOrdering || state.size === 0 || state.currentPrice >= state.price } }, "Sell"),
+                    button(".buy-button", { attrs: { disabled: state.isOrdering || state.size === 0 || state.currentPrice <= state.price } },"Buy")
                 ]),
                 hr(),
                 h4(".sub-title", "Clear position"),
                 div(".order-buttons", [
-                    button(".clear-button", { attrs: { disabled: state.isOrdering } }, "Clear Position"),
-                    button(".clear-order-button", { attrs: { disabled: state.isOrdering } }, "Clear Orders"),
+                    button(".clear-button", { attrs: { disabled: state.isOrdering || state.position.size === 0 } }, "Clear Position"),
+                    button(".clear-order-button", { attrs: { disabled: state.isOrdering || state.orders.length === 0} }, "Clear Orders"),
                 ])
             ])
         ])

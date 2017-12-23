@@ -293,7 +293,7 @@
         }
         .order-buttons button:disabled {
             color: rgba(232, 232, 232, .4);
-            cursor: wait;
+            cursor: not-allowed;
         }
         .order-buttons .sell-button {
             margin-right: 20px;
@@ -313,15 +313,15 @@
             color: rgba(44, 57, 64, 1);
             background: rgba(232, 232, 232, 1);
         }
-        .order-buttons .clear-button:hover {
-            background: rgba(232, 232, 232, .8);
-        }
         .order-buttons .clear-order-button {
             color: rgba(44, 57, 64, 1);
             background: rgba(232, 232, 232, 1);
         }
-        .order-buttons .clear-order-button:hover {
+        .clear-button:hover, .clear-order-button:hover {
             background: rgba(232, 232, 232, .8);
+        }
+        .order-buttons .clear-button:disabled, .order-buttons .clear-order-button:disabled {
+            color: rgba(44, 57, 64, .4);
         }
         /* .setting */
         .setting {
