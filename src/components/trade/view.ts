@@ -70,7 +70,7 @@ export const view = (state$: Stream<State>) =>
                 div(".asks", state.board.groupedAsks(state.groupedSize).map(ask =>
                     div(".ask", { dataset: { price: ask.price } }, [
                         span(".bar", { style: barStyle(ask.size) }),
-                        myOrder("ask", state, ask),
+                        myOrder("SELL", state, ask),
                         span(padWithZero(ask.size)),
                         span(ask.price.toLocaleString())
                     ])
@@ -80,7 +80,7 @@ export const view = (state$: Stream<State>) =>
                         span(".bar", { style: barStyle(bid.size) } ),
                         span(bid.price.toLocaleString()),
                         span(padWithZero(bid.size)),
-                        myOrder("bid", state, bid)
+                        myOrder("BUY", state, bid)
                     ])
                 ))
             ]),
@@ -149,13 +149,19 @@ const barStyle = (size: number): object => {
 };
 
 const myOrder = (side: string, state: State, order: BoardOrder): VNode => {
-    if (side === "ask") {
-        const orders = state.orders.filter(o => o.ceiledPrice(state.groupedSize) === order.price);
-        if (orders.length <= 0) { return span({ style: { display: "none" } }); }
+    if (side === "SELL") {
+        const orders = state.orders
+            .filter(o => o.side === "SELL")
+            .filter(o => o.ceiledPrice(state.groupedSize) === order.price);
+
+        if (orders.length === 0) { return; }
         return span(".my-order", orders.reduce((acc, order) => acc + order.size, 0).toString())
     } else {
-        const orders = state.orders.filter(o => o.flooredPrice(state.groupedSize) === order.price);
-        if (orders.length <= 0) { return span({ style: { display: "none" } }); }
+        const orders = state.orders
+            .filter(o => o.side === "BUY")
+            .filter(o => o.flooredPrice(state.groupedSize) === order.price);
+
+        if (orders.length === 0) { return; }
         return span(".my-order", orders.reduce((acc, order) => acc + order.size, 0).toString())
     }
 };

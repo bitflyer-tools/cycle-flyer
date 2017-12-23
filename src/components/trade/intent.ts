@@ -54,12 +54,12 @@ export const intent = (sources: Sources): Actions => {
     const onClickAsk$ = sources.DOM.select(".ask")
         .events("click")
         .map(event => event.currentTarget as HTMLElement)
-        .map(target => target.dataset.price);
+        .map(target => +target.dataset.price);
 
     const onClickBid$ = sources.DOM.select(".bid")
         .events("click")
         .map(event => event.currentTarget as HTMLElement)
-        .map(target => target.dataset.price);
+        .map(target => +target.dataset.price);
 
     const onClickClearButton$ = sources.DOM.select(".clear-button")
         .events("click", { preventDefault: true })

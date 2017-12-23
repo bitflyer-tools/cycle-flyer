@@ -92,11 +92,14 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map(positions => new Position(positions))
         .map(position => (state: State) => ({ ...state, position }));
 
-    const priceReducer$ = Stream.merge(
-        actions.onPriceChanged$,
-        actions.onClickAsk$.map(price => +price - 1),
-        actions.onClickBid$.map(price => +price + 1)
-    ).map(price => (state: State) => ({ ...state, price }));
+    const priceReducer$ = actions.onPriceChanged$
+        .map(price => (state: State) => ({ ...state, price }));
+
+    const priceReducer2$ = actions.onClickAsk$
+        .map(price => (state: State) => ({ ...state, price: floor(price - 1, state) }));
+
+    const priceReducer3$ = actions.onClickBid$
+        .map(price => (state: State) => ({ ...state, price: ceil(price + 1, state) }));
 
     const sizeReducer$ = actions.onSizeChanged$
         .map(size => (state: State) => ({ ...state, size }));
@@ -117,7 +120,12 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         ordersReducer$,
         positionsReducer$,
         priceReducer$,
+        priceReducer2$,
+        priceReducer3$,
         sizeReducer$,
         marketStateReducer$
     );
 };
+
+const ceil = (price: number, state: State) => Math.ceil(price / state.groupedSize) * state.groupedSize;
+const floor = (price: number, state: State) => Math.floor(price / state.groupedSize) * state.groupedSize;

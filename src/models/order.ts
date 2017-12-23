@@ -14,6 +14,6 @@ export class Order {
     }
 
     public ceiledPrice(size: number) {
-        return Math.ceil((this.price + size) / size) * size;
+        return Math.ceil(this.price / size) * size;
     }
 }
