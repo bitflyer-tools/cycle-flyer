@@ -15,9 +15,9 @@ export class Board {
 
     public remove(side: string, price: number) {
         if (side === "BUY") {
-            this.asks = this.asks.filter(ask => ask.price > price);
+            this.asks = this.asks.filter(ask => ask.price >= price);
         } else {
-            this.bids = this.bids.filter(bid => bid.price < price);
+            this.bids = this.bids.filter(bid => bid.price <= price);
         }
     }
 
