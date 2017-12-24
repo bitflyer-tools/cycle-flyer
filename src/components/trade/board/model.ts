@@ -4,6 +4,7 @@ import {Actions} from "./intent";
 import {State} from "./index";
 import {Board} from "../../../models/board";
 import {Position} from "../../../models/position";
+import {ceilBy, floorBy} from "../../../util";
 
 const defaultState: State = {
     board: new Board({ bids: [], asks: [] }),
@@ -18,10 +19,10 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
     const askPriceReducer$ = actions.onClickAsk$
-        .map(price => (state: State) => ({ ...state, price: floor(price - 1, state) }));
+        .map(price => (state: State) => ({ ...state, price: floorBy(price - 1, state.groupedSize) }));
 
     const bidPriceReducer$ = actions.onClickBid$
-        .map(price => (state: State) => ({ ...state, price: ceil(price + 1, state) }));
+        .map(price => (state: State) => ({ ...state, price: ceilBy(price + 1, state.groupedSize) }));
 
     const boardReducer$ = actions.onBoardLoaded$
         .map(board => (state: State) => ({ ...state, board: state.board.merge(board.asks, board.bids) }));
@@ -53,6 +54,3 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         groupedSizePlusReducer$
     );
 };
-
-const ceil = (price: number, state: State) => Math.ceil(price / state.groupedSize) * state.groupedSize;
-const floor = (price: number, state: State) => Math.floor(price / state.groupedSize) * state.groupedSize;

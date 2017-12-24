@@ -3,6 +3,7 @@ import Stream from "xstream";
 import throttle from "xstream/extra/throttle";
 import {State} from "./index";
 import {BoardOrder} from "../../../models/board";
+import {ceilBy, floorBy} from "../../../util";
 
 export const view = (state$: Stream<State>) =>
     state$
@@ -20,6 +21,7 @@ export const view = (state$: Stream<State>) =>
                 div(".asks", state.board.groupedAsks(state.groupedSize).map(ask =>
                     div(".ask", { dataset: { price: ask.price } }, [
                         span(".bar", { style: barStyle(ask.size) }),
+                        myPosition(state, ask),
                         myOrder("SELL", state, ask),
                         span(padWithZero(ask.size)),
                         span(ask.price.toLocaleString())
@@ -30,7 +32,8 @@ export const view = (state$: Stream<State>) =>
                         span(".bar", { style: barStyle(bid.size) } ),
                         span(bid.price.toLocaleString()),
                         span(padWithZero(bid.size)),
-                        myOrder("BUY", state, bid)
+                        myOrder("BUY", state, bid),
+                        myPosition(state, bid)
                     ])
                 ))
             ])
@@ -44,18 +47,28 @@ const barStyle = (size: number): object => {
     return { width: `${width}%` };
 };
 
-const myOrder = (side: string, state: State, order: BoardOrder): VNode => {
+const myPosition = (state: State, order: BoardOrder): VNode | undefined => {
+    const price = state.position.price;
+    if (state.position.side === "SELL") {
+        if (price === 0 || ceilBy(price, state.groupedSize) !== order.price) { return; }
+    } else {
+        if (price === 0 || floorBy(price, state.groupedSize) !== order.price) { return; }
+    }
+    return span(".my-position", "💰")
+};
+
+const myOrder = (side: string, state: State, order: BoardOrder): VNode | undefined => {
     if (side === "SELL") {
         const orders = state.orders
             .filter(o => o.side === "SELL")
-            .filter(o => o.ceiledPrice(state.groupedSize) === order.price);
+            .filter(o => ceilBy(o.price, state.groupedSize) === order.price);
 
         if (orders.length === 0) { return; }
         return span(".my-order", orders.reduce((acc, order) => acc + order.size, 0).toString())
     } else {
         const orders = state.orders
             .filter(o => o.side === "BUY")
-            .filter(o => o.flooredPrice(state.groupedSize) === order.price);
+            .filter(o => floorBy(o.price, state.groupedSize) === order.price);
 
         if (orders.length === 0) { return; }
         return span(".my-order", orders.reduce((acc, order) => acc + order.size, 0).toString())

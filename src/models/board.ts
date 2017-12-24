@@ -1,3 +1,5 @@
+import {ceilBy, floorBy} from "../util";
+
 export class Board {
     public asks: BoardOrder[];
     public bids: BoardOrder[];
@@ -49,11 +51,11 @@ export class Board {
     }
 
     private floorBySize(boardOrders: BoardOrder[], priceSize: number): BoardOrder[] {
-        return this.groupBy(boardOrders, order => order.flooredPrice(priceSize));
+        return this.groupBy(boardOrders, order => floorBy(order.price, priceSize));
     }
 
     private ceilBySize(boardOrders: BoardOrder[], priceSize: number): BoardOrder[] {
-        return this.groupBy(boardOrders, order => order.ceiledPrice(priceSize));
+        return this.groupBy(boardOrders, order => ceilBy(order.price, priceSize));
     }
 
     private groupBy(boardOrders: BoardOrder[], fn: (order: BoardOrder) => number): BoardOrder[] {
@@ -73,13 +75,5 @@ export class BoardOrder {
     constructor(json: object) {
         this.price = json.price;
         this.size = json.size;
-    }
-
-    public flooredPrice(size: number) {
-        return Math.floor(this.price / size) * size;
-    }
-
-    public ceiledPrice(size: number) {
-        return Math.ceil((this.price) / size) * size;
     }
 }

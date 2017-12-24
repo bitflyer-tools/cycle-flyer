@@ -8,12 +8,4 @@ export class Order {
         this.side = json.side;
         this.size = json.size;
     }
-    
-    public flooredPrice(size: number) {
-        return Math.floor(this.price / size) * size;
-    }
-
-    public ceiledPrice(size: number) {
-        return Math.ceil(this.price / size) * size;
-    }
 }
