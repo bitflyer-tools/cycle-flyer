@@ -9,7 +9,6 @@ import {
 import {State} from "./model";
 
 export const request = (actions: Actions, state$: Stream<State>): Stream<RequestInput> => {
-    const board = Stream.of(getBoard());
     const orders = Stream.periodic(3000).mapTo(getOrders()).startWith(getOrders());
     const positions = Stream.periodic(3000).mapTo(getPositions()).startWith(getPositions());
 
@@ -37,7 +36,6 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
         .map(_ => cancelOrders());
 
     return Stream.merge(
-        board,
         orders,
         positions,
         marketBuy,

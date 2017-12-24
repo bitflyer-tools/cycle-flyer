@@ -1,17 +1,12 @@
 import {Sources} from "./index";
 import {MemoryStream, Stream} from 'xstream';
 import {Response, ResponseStream} from "@cycle/http";
-import {Board} from "../../models/board";
 import {createOrderHistory, OrderHistory} from "../../models/orderHistory";
 import {Position} from "../../models/position";
 
 export interface Actions {
     onApiKeyLoaded$: Stream<string>;
     onApiSecretLoaded$: Stream<string>;
-    onBoardLoaded$: Stream<Board>;
-    onBoardSnapshotLoaded$: Stream<Board>;
-    onClickAsk$: Stream<number>;
-    onClickBid$: Stream<number>;
     onClickClearButton$: Stream<null>;
     onClickClearOrderButton$: Stream<null>;
     onClickGroupSizePlusButton$: Stream<null>;
@@ -20,7 +15,6 @@ export interface Actions {
     onClickLimitSellButton$: Stream<null>;
     onClickMarketBuyButton$: Stream<null>;
     onClickMarketSellButton$: Stream<null>;
-    onCollateralLoaded$: Stream<number>;
     onExecutionCreated$: Stream<object>;
     onHistoryCreated$: Stream<OrderHistory>;
     onOrderCreated$: Stream<object>;
@@ -28,7 +22,6 @@ export interface Actions {
     onPositionsLoaded$: Stream<object[]>;
     onPriceChanged$: Stream<number>;
     onSizeChanged$: Stream<number>;
-    onStateLoaded$: Stream<object>;
 }
 
 export const intent = (sources: Sources): Actions => {
@@ -39,28 +32,6 @@ export const intent = (sources: Sources): Actions => {
     const onApiSecretLoaded$ = sources.storage.local.getItem("api-secret")
         .filter(apiSecret => apiSecret && apiSecret !== "")
         .take(1);
-
-    const onBoardLoaded$ = sources.pubnub.board$;
-
-    const onBoardSnapshotLoaded$ = Stream.merge(
-        sources.HTTP.select("board")
-            .map(response$ => response$.replaceError(() => Stream.of(null)))
-            .flatten()
-            .filter(response => !!response)
-            .map(response => new Board(JSON.parse(response.text))),
-        sources.pubnub.boardSnapshot$
-            .map(board => new Board(board)),
-    );
-
-    const onClickAsk$ = sources.DOM.select(".ask")
-        .events("click")
-        .map(event => event.currentTarget as HTMLElement)
-        .map(target => +target.dataset.price);
-
-    const onClickBid$ = sources.DOM.select(".bid")
-        .events("click")
-        .map(event => event.currentTarget as HTMLElement)
-        .map(target => +target.dataset.price);
 
     const onClickClearButton$ = sources.DOM.select(".clear-button")
         .events("click", { preventDefault: true })
@@ -93,12 +64,6 @@ export const intent = (sources: Sources): Actions => {
     const onClickLimitSellButton$ = sources.DOM.select(".limit-order-buttons").select(".sell-button")
         .events("click", { preventDefault: true })
         .mapTo(null);
-
-    const onCollateralLoaded$ = sources.HTTP.select("collateral")
-        .map(response$ => response$.replaceError(() => Stream.of(null)))
-        .flatten()
-        .filter(response => !!response)
-        .map(response => JSON.parse(response.text).collateral);
 
     const onExecutionCreated$ = sources.pubnub.execution$;
 
@@ -139,10 +104,6 @@ export const intent = (sources: Sources): Actions => {
     return {
         onApiKeyLoaded$,
         onApiSecretLoaded$,
-        onBoardLoaded$,
-        onBoardSnapshotLoaded$,
-        onClickAsk$,
-        onClickBid$,
         onClickClearButton$,
         onClickClearOrderButton$,
         onClickGroupSizePlusButton$,
@@ -151,7 +112,6 @@ export const intent = (sources: Sources): Actions => {
         onClickLimitSellButton$,
         onClickMarketBuyButton$,
         onClickMarketSellButton$,
-        onCollateralLoaded$,
         onExecutionCreated$,
         onHistoryCreated$,
         onOrderCreated$,
