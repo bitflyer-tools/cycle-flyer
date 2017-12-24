@@ -1,8 +1,8 @@
 import {Sources} from "./index";
 import {MemoryStream, Stream} from 'xstream';
-import {ResponseStream, Response} from "@cycle/http";
-import {History} from "./model";
+import {Response, ResponseStream} from "@cycle/http";
 import {Board} from "../../models/board";
+import {createOrderHistory, OrderHistory} from "../../models/orderHistory";
 
 export interface Actions {
     onApiKeyLoaded$: Stream<string>;
@@ -21,7 +21,7 @@ export interface Actions {
     onClickMarketSellButton$: Stream<null>;
     onCollateralLoaded$: Stream<number>;
     onExecutionCreated$: Stream<object>;
-    onHistoryCreated$: Stream<History>;
+    onHistoryCreated$: Stream<OrderHistory>;
     onOrderCreated$: Stream<object>;
     onOrdersLoaded$: Stream<object>;
     onPositionsLoaded$: Stream<object[]>;
@@ -102,8 +102,8 @@ export const intent = (sources: Sources): Actions => {
     const onExecutionCreated$ = sources.pubnub.execution$;
 
     const onHistoryCreated$ = Stream.merge(
-        sources.HTTP.select("market-order").map(stream => createHistoryStream("MarketOrder", stream)).flatten(),
-        sources.HTTP.select("limit-order").map(stream => createHistoryStream("LimitOrder", stream)).flatten()
+        sources.HTTP.select("market-order").map(stream => createHistoryStream("Market", stream)).flatten(),
+        sources.HTTP.select("limit-order").map(stream => createHistoryStream("Limit", stream)).flatten()
     );
 
     const onOrderCreated$ = sources.HTTP.select("market-order")
@@ -167,22 +167,13 @@ export const intent = (sources: Sources): Actions => {
     };
 };
 
-const createHistoryStream = (name: string, stream$: MemoryStream<Response> & ResponseStream): Stream<History> => {
-    return stream$
+const createHistoryStream = (name: string, stream$: MemoryStream<Response> & ResponseStream): Stream<OrderHistory> =>
+    stream$
         .map(response => {
             const send = JSON.parse(response.request.send);
-            return createHistory(name, `${send.side} / ${send.size} / ${send.price || "MARKET"}`, "success");
+            return createOrderHistory(name, send.side, send.size, send.price, "success");
         })
         .replaceError(error => {
             const send = JSON.parse(error.response.request.send);
-            return Stream.of(createHistory(name, `${send.side} / ${send.size} / ${send.price || "MARKET"}`, "failed"));
-        })
-};
-
-const createHistory = (name: string, description: string, status: string): History =>
-    ({
-        createdAt: new Date(),
-        description: description,
-        name: name,
-        status: status
-    });
+            return Stream.of(createOrderHistory(name, send.side, send.size, send.price, "failed"));
+        });

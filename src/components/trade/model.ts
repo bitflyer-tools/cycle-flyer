@@ -4,20 +4,14 @@ import {Actions} from "./intent";
 import {Position} from "../../models/position";
 import {Board} from "../../models/board";
 import {Order} from "../../models/order";
-
-export interface History {
-    createdAt: Date;
-    description: string;
-    name: string;
-    status: string;
-}
+import {OrderHistory} from "../../models/orderHistory";
 
 export interface State {
     board: Board;
     collateral: number;
     currentPrice: number;
     groupedSize: number;
-    histories: History[];
+    histories: OrderHistory[];
     isOrdering: boolean;
     orders: Order[];
     position: Position;
