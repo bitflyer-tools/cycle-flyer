@@ -3,6 +3,7 @@ import {MemoryStream, Stream} from 'xstream';
 import {Response, ResponseStream} from "@cycle/http";
 import {Board} from "../../models/board";
 import {createOrderHistory, OrderHistory} from "../../models/orderHistory";
+import {Position} from "../../models/position";
 
 export interface Actions {
     onApiKeyLoaded$: Stream<string>;
@@ -122,7 +123,8 @@ export const intent = (sources: Sources): Actions => {
         .map(response$ => response$.replaceError(() => Stream.of(null)))
         .flatten()
         .filter(response => !!response)
-        .map(response => JSON.parse(response.text));
+        .map(response => JSON.parse(response.text))
+        .map(positions => new Position(positions));
 
     const onPriceChanged$ = sources.DOM.select("#price-input")
         .events("keyup")
@@ -133,12 +135,6 @@ export const intent = (sources: Sources): Actions => {
         .events("keyup")
         .map(event => event.target as HTMLInputElement)
         .map(element => +element.value);
-
-    const onStateLoaded$ = sources.HTTP.select("status")
-        .map(response$ => response$.replaceError(() => Stream.of(null)))
-        .flatten()
-        .filter(response => !!response)
-        .map(response => JSON.parse(response.text));
 
     return {
         onApiKeyLoaded$,
@@ -163,7 +159,6 @@ export const intent = (sources: Sources): Actions => {
         onPositionsLoaded$,
         onPriceChanged$,
         onSizeChanged$,
-        onStateLoaded$
     };
 };
 

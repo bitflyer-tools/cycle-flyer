@@ -10,11 +10,8 @@ import {State} from "./model";
 
 export const request = (actions: Actions, state$: Stream<State>): Stream<RequestInput> => {
     const board = Stream.of(getBoard());
-
-    const collateral = Stream.periodic(10000).mapTo(getCollateral()).startWith(getCollateral());
     const orders = Stream.periodic(3000).mapTo(getOrders()).startWith(getOrders());
     const positions = Stream.periodic(3000).mapTo(getPositions()).startWith(getPositions());
-    const state = Stream.periodic(3000).mapTo(getState()).startWith(getState());
 
     const marketBuy = actions.onClickMarketBuyButton$
         .compose(sampleCombine(state$))
@@ -41,7 +38,6 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
 
     return Stream.merge(
         board,
-        collateral,
         orders,
         positions,
         marketBuy,
@@ -49,7 +45,6 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
         limitBuy,
         limitSell,
         clear,
-        clearOrders,
-        state
+        clearOrders
     );
 };

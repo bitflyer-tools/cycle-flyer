@@ -1,28 +1,13 @@
 import {Reducer} from "cycle-onionify";
 import Stream from "xstream";
 import {Actions} from "./intent";
-import {Position} from "../../models/position";
 import {Board} from "../../models/board";
 import {Order} from "../../models/order";
-import {OrderHistory} from "../../models/orderHistory";
-
-export interface State {
-    board: Board;
-    collateral: number;
-    currentPrice: number;
-    groupedSize: number;
-    histories: OrderHistory[];
-    isOrdering: boolean;
-    orders: Order[];
-    position: Position;
-    price: number;
-    size: number;
-    marketState: object;
-}
+import {State} from "./index";
+import {Position} from "../../models/position";
 
 const defaultState: State = {
     board: new Board({ bids: [], asks: [] }),
-    collateral: 0.0,
     currentPrice: 0,
     groupedSize: 1,
     histories: [],
@@ -30,8 +15,7 @@ const defaultState: State = {
     orders: [],
     position: new Position([]),
     price: 0,
-    size: 0,
-    marketState: {}
+    size: 0
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
@@ -42,9 +26,6 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
     const boardSnapshotReducer$ = actions.onBoardSnapshotLoaded$
         .map(board => (state: State) => ({ ...state, board }));
-
-    const collateralReducer$ = actions.onCollateralLoaded$
-        .map(collateral => (state: State) => ({ ...state, collateral }));
 
     const currentPriceReducer$ = actions.onExecutionCreated$
         .map(execution => (state: State) => {
@@ -82,8 +63,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map(orders => orders.map(order => new Order(order)))
         .map(orders => (state: State) => ({ ...state, orders }));
 
-    const positionsReducer$ = actions.onPositionsLoaded$
-        .map(positions => new Position(positions))
+    const positionReducer$ = actions.onPositionsLoaded$
         .map(position => (state: State) => ({ ...state, position }));
 
     const priceReducer$ = actions.onPriceChanged$
@@ -98,26 +78,21 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const sizeReducer$ = actions.onSizeChanged$
         .map(size => (state: State) => ({ ...state, size }));
 
-    const marketStateReducer$ = actions.onStateLoaded$
-        .map(marketState => (state: State) => ({ ...state, marketState}));
-
     return Stream.merge(
         defaultReducer$,
         boardReducer$,
         boardSnapshotReducer$,
-        collateralReducer$,
         currentPriceReducer$,
         groupedSizeMinusReducer$,
         groupedSizePlusReducer$,
         historyReducer$,
         isOrderingReducer$,
         ordersReducer$,
-        positionsReducer$,
+        positionReducer$,
         priceReducer$,
         priceReducer2$,
         priceReducer3$,
-        sizeReducer$,
-        marketStateReducer$
+        sizeReducer$
     );
 };
 
