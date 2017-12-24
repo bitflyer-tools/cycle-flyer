@@ -13,7 +13,7 @@ export const createOrderHistory = (
     status: string
 ): OrderHistory => ({
     createdAt: new Date(),
-    description: `${side} / ${size} / ${price.toLocaleString() || "MARKET"}`,
+    description: `${side} / ${size} / ${(price && price.toLocaleString()) || "MARKET"}`,
     name: name,
     status: status
 });

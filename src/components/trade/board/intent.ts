@@ -26,7 +26,6 @@ export const intent = (sources: Sources): Actions => {
 
     const onClickAsk$ = sources.DOM.select(".ask")
         .events("click")
-        .debug()
         .map(event => event.currentTarget as HTMLElement)
         .map(target => +target.dataset.price);
 
