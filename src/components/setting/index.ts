@@ -7,6 +7,7 @@ import {model} from "./model";
 import {StorageRequest, StorageSource} from '@cycle/storage';
 import {view} from './view';
 import {intent} from './intent';
+import "./index.styl";
 
 export interface Sources {
     DOM: DOMSource;

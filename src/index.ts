@@ -8,6 +8,7 @@ import switchPath from "switch-path";
 import {Root} from "./components/index";
 import storageDriver from "@cycle/storage";
 import {makePubnubDriver} from "./drivers/pubnubDriver";
+import "./index.styl";
 
 run(routerify(onionify(Root), switchPath), {
     DOM: makeDOMDriver("#app"),

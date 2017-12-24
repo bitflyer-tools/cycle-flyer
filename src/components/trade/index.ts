@@ -16,6 +16,7 @@ import {Board} from "../../models/board";
 import {OrderHistory} from "../../models/orderHistory";
 import {Order} from "../../models/order";
 import {Position} from "../../models/position";
+import "./index.styl";
 
 export interface Sources {
     DOM: DOMSource;

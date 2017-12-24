@@ -7,6 +7,7 @@ import {Sources} from "../index";
 import {Sinks} from "../../index";
 import {OrderHistory} from "../../../models/orderHistory";
 import {Position} from "../../../models/position";
+import "./index.styl"
 
 export interface State {
     collateral: number;

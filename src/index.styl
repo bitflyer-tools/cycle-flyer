@@ -1,0 +1,66 @@
+html, body 
+  height: 100%
+  margin: 0
+  padding: 0
+  color: rgba(232, 232, 232, 1)
+  background: rgba(44, 57, 64, 1)
+  font-family:-apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif
+  letter-spacing: .08em
+
+body ::-webkit-scrollbar 
+  display: none
+
+body ::-webkit-scrollbar-track 
+  display: none
+
+body ::-webkit-scrollbar-thumb 
+  display: none
+
+a 
+  color: rgba(232, 232, 232, .5)
+  text-decoration: none
+
+button, input 
+  outline: none
+
+a:hover 
+  color: rgba(232, 232, 232, .2)
+
+hr 
+  margin: 24px auto
+
+#app 
+  height: 100%
+
+  #wrapper
+    height: 100%
+    display: grid
+    grid-template-columns: 1fr
+    grid-template-rows: 60px 1fr
+
+  .content
+    grid-column: 1
+    grid-row: 2
+
+  .header
+    grid-column: 1
+    grid-row: 1
+    width: 100%
+    background: rgba(27, 31, 39, 1)
+    box-shadow: 0 0 4px rgba(0, 0, 0, .2)
+
+    .header-wrapper
+      margin: 0 auto
+      padding: 0 32px
+
+    .header-title
+      display: inline-block
+      margin-right: 20px
+      font-size: 18px
+      font-weight: 400
+
+    a.menu-trade, a.menu-setting
+      display: inline-block
+      margin-right: 12px
+      line-height: 60px
+      font-size: 14px
