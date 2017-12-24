@@ -8,7 +8,6 @@ export const view = (state$: Stream<State>, boardComponentDOM$: Stream<VNode>, s
     state$
         .compose(sampleCombine(boardComponentDOM$))
         .compose(sampleCombine(summaryComponentDOM$))
-        .compose(throttle(100))
         .map(([[state, boardComponentDOM], summaryComponentDOM]) =>
             div(".trade", [
                 summaryComponentDOM,
