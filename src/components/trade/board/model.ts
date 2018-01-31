@@ -30,7 +30,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const boardSnapshotReducer$ = actions.onBoardSnapshotLoaded$
         .map(board => (state: State) => ({ ...state, board }));
 
-    const groupSize = [1, 100, 500, 1000, 2500, 5000, 10000, 25000, 50000];
+    const groupSize = [1, 50, 100, 200, 300, 400, 500, 1000, 2000, 3000, 4000, 5000, 10000, 25000, 50000];
 
     const groupedSizePlusReducer$ = actions.onClickGroupSizePlusButton$
         .map(_ => (state: State) => {
