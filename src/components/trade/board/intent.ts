@@ -14,15 +14,11 @@ export interface Actions {
 export const intent = (sources: Sources): Actions => {
     const onBoardLoaded$ = sources.pubnub.board$;
 
-    const onBoardSnapshotLoaded$ = Stream.merge(
-        sources.HTTP.select("board")
+    const onBoardSnapshotLoaded$ = sources.HTTP.select("board")
             .map(response$ => response$.replaceError(() => Stream.of(null)))
             .flatten()
             .filter(response => !!response)
-            .map(response => new Board(JSON.parse(response.text))),
-        sources.pubnub.boardSnapshot$
-            .map(board => new Board(board)),
-    );
+            .map(response => new Board(JSON.parse(response.text)));
 
     const onClickAsk$ = sources.DOM.select(".ask")
         .events("click")
