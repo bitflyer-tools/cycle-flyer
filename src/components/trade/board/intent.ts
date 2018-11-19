@@ -15,10 +15,10 @@ export const intent = (sources: Sources): Actions => {
     const onBoardLoaded$ = sources.pubnub.board$;
 
     const onBoardSnapshotLoaded$ = sources.HTTP.select("board")
-            .map(response$ => response$.replaceError(() => Stream.of(null)))
-            .flatten()
-            .filter(response => !!response)
-            .map(response => new Board(JSON.parse(response.text)));
+        .map(response$ => response$.replaceError(() => Stream.of(null)))
+        .flatten()
+        .filter(response => !!response)
+        .map(response => new Board(JSON.parse(response.text)));
 
     const onClickAsk$ = sources.DOM.select(".ask")
         .events("click")
