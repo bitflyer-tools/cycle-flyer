@@ -7,7 +7,7 @@ import {ceilBy, floorBy} from "../../../util";
 
 export const view = (state$: Stream<State>) =>
     state$
-        .compose(throttle(250))
+        .compose(throttle(100))
         .map(state =>
             div(".board", [
                 div(".board-header",[

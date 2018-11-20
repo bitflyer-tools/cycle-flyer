@@ -51,20 +51,31 @@ export class Board {
     }
 
     private floorBySize(boardOrders: BoardOrder[], priceSize: number): BoardOrder[] {
-        return this.groupBy(boardOrders, order => floorBy(order.price, priceSize));
+        return this.groupBy(boardOrders, priceSize, order => floorBy(order.price, priceSize));
     }
 
     private ceilBySize(boardOrders: BoardOrder[], priceSize: number): BoardOrder[] {
-        return this.groupBy(boardOrders, order => ceilBy(order.price, priceSize));
+        return this.groupBy(boardOrders, priceSize, order => ceilBy(order.price, priceSize));
     }
 
-    private groupBy(boardOrders: BoardOrder[], fn: (order: BoardOrder) => number): BoardOrder[] {
-        const map = boardOrders.reduce((acc: object, boardOrder: BoardOrder) => {
+    private groupBy(boardOrders: BoardOrder[], priceSize: number, fn: (order: BoardOrder) => number): BoardOrder[] {
+        const prices = boardOrders.reduce((acc: object, boardOrder: BoardOrder) => {
             const price = fn(boardOrder);
             acc[price] = (acc[price] || 0) + boardOrder.size;
             return acc;
         }, []);
-        return Object.keys(map).map(key => new BoardOrder({ price: +key, size: +map[key] }));
+        return this.mapToBoardOrder(priceSize, prices);
+    }
+
+    private mapToBoardOrder(priceSize: number, prices: object): BoardOrder[] {
+        if (priceSize > 99 && Object.keys(prices).length > 0) {
+            const min = Math.min.apply(null, Object.keys(prices));
+            const max = Math.max.apply(null, Object.keys(prices));
+            const keys = Array((max - min) / priceSize).fill(priceSize).map((value, index) => min + index * value);
+            return keys.map(key => new BoardOrder({ price: +key, size: +(prices[key] || 0) }));
+        }
+
+        return Object.keys(prices).map(key => new BoardOrder({ price: +key, size: +prices[key] }));
     }
 }
 
