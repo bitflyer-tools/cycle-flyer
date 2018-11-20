@@ -27,8 +27,8 @@ export const view = (state$: Stream<State>, boardComponentDOM$: Stream<VNode>, s
                     h4(".sub-title", "Limit"),
                     div(".limit-order-buttons.order-buttons", [
                         input("#price-input", { attrs: { value: state.price }}),
-                        button(".sell-button", { attrs: { disabled: state.isOrdering || state.size === 0 || state.currentPrice >= state.price } }, "Sell"),
-                        button(".buy-button", { attrs: { disabled: state.isOrdering || state.size === 0 || state.currentPrice <= state.price } },"Buy")
+                        button(".sell-button", { attrs: { disabled: state.isOrdering || state.size === 0 } }, "Sell"),
+                        button(".buy-button", { attrs: { disabled: state.isOrdering || state.size === 0 } },"Buy")
                     ]),
                     hr(),
                     h4(".sub-title", "Clear position"),
