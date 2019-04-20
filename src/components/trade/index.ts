@@ -17,6 +17,7 @@ import {Position} from "../../models/position";
 import "./index.styl";
 import {BoardComponent, State as BoardComponentState} from "./board/index";
 import {SocketIOSource} from "../../drivers/socketIODriver";
+import {IFDOCOrder} from "../../models/ifdocoOrder";
 
 export interface Sources {
     DOM: DOMSource;
@@ -43,6 +44,7 @@ export interface State {
     position: Position;
     price: number;
     size: number;
+    ifdocoOrder: IFDOCOrder;
     boardComponentState?: BoardComponentState;
     summaryComponentState?: SummaryComponentState;
 }

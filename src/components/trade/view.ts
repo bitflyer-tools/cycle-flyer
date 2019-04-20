@@ -1,4 +1,4 @@
-import {br, button, div, h4, hr, input, label, p, span, VNode} from "@cycle/dom";
+import {button, div, h4, hr, input, label, p, span, VNode} from "@cycle/dom";
 import Stream from "xstream";
 import sampleCombine from "xstream/extra/sampleCombine";
 import {State} from "./index";
@@ -42,15 +42,15 @@ export const view = (state$: Stream<State>, boardComponentDOM$: Stream<VNode>, s
                         p(".line-number", [
                             p(".buy", [
                                 label(".label", "Buy: "),
-                                span(".profit", "1000000"),
+                                span(".profit", state.ifdocoOrder.buyProfitLine(state.currentPrice)),
                                 span(" / "),
-                                span(".loss", "1000000")
+                                span(".loss", state.ifdocoOrder.buyLossLine(state.currentPrice))
                             ]),
                             p(".sell", [
                                 label(".label", "Sell: "),
-                                span(".profit", "1000000"),
+                                span(".profit", state.ifdocoOrder.sellProfitLine(state.currentPrice)),
                                 span(" / "),
-                                span(".loss", "1000000")
+                                span(".loss", state.ifdocoOrder.sellLossLine(state.currentPrice))
                             ])
                         ]),
                     ]),
@@ -59,25 +59,25 @@ export const view = (state$: Stream<State>, boardComponentDOM$: Stream<VNode>, s
                         p(".profit-number", [
                             p(".buy", [
                                 label(".label", "Buy: "),
-                                span(".profit-line", "10000"),
+                                span(".profit-line", state.ifdocoOrder.buyProfit(state.currentPrice, state.size)),
                                 span(" / "),
-                                span(".loss-line", "10000")
+                                span(".loss-line", state.ifdocoOrder.buyLoss(state.currentPrice, state.size))
                             ]),
                             p(".sell", [
                                 label(".label", "Sell: "),
-                                span(".profit-line", "10000"),
+                                span(".profit-line", state.ifdocoOrder.sellProfit(state.currentPrice, state.size)),
                                 span(" / "),
-                                span(".loss-line", "10000")
+                                span(".loss-line", state.ifdocoOrder.sellLoss(state.currentPrice, state.size))
                             ])
                         ])
                     ]),
                     div(".price-width", [
                         label(".label", "Price width"),
-                        input("#price-width-input", { attrs: { value: state.size }})
+                        input("#price-width-input", { attrs: { value: state.ifdocoOrder.width }})
                     ]),
                     div(".ratio", [
                         label(".label", "Profit / Loss Ratio %"),
-                        input("#ratio-input", { attrs: { value: state.size }})
+                        input("#ratio-input", { attrs: { value: state.ifdocoOrder.ratio }})
                     ]),
                     div(".ranged-ifdoco-order-buttons.order-buttons", [
                         button(".sell-button", { attrs: { disabled: state.isOrdering || state.size === 0 } }, "Sell"),

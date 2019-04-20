@@ -22,6 +22,8 @@ export interface Actions {
     onPositionsLoaded$: Stream<object[]>;
     onPriceChanged$: Stream<number>;
     onSizeChanged$: Stream<number>;
+    onPriceWidthChanged$: Stream<number>;
+    onRatioChanged$: Stream<number>;
 }
 
 export const intent = (sources: Sources): Actions => {
@@ -101,6 +103,16 @@ export const intent = (sources: Sources): Actions => {
         .map(event => event.target as HTMLInputElement)
         .map(element => +element.value);
 
+    const onPriceWidthChanged$ = sources.DOM.select("#price-width-input")
+        .events("keyup")
+        .map(event => event.target as HTMLInputElement)
+        .map(element => +element.value);
+
+    const onRatioChanged$ = sources.DOM.select("#ratio-input")
+        .events("keyup")
+        .map(event => event.target as HTMLInputElement)
+        .map(element => +element.value);
+
     return {
         onApiKeyLoaded$,
         onApiSecretLoaded$,
@@ -119,6 +131,8 @@ export const intent = (sources: Sources): Actions => {
         onPositionsLoaded$,
         onPriceChanged$,
         onSizeChanged$,
+        onPriceWidthChanged$,
+        onRatioChanged$
     };
 };
 
