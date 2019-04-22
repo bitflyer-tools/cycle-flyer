@@ -37,6 +37,36 @@ export const limitOrder = (price: number, size: number, side: string): RequestIn
     return requestInput("limit-order", "/v1/me/sendchildorder", "POST", json);
 };
 
+export const ifdocoOrder = (profitLine: number, lossLine: number, size: number, side: string): RequestInput => {
+    const json = {
+        "order_method": "IFDOCO",
+        "time_in_force": "GTC",
+        "parameters": [
+            {
+                "product_code": "FX_BTC_JPY",
+                "condition_type": "MARKET",
+                "side": side,
+                "size": Math.abs(size)
+            },
+            {
+                "product_code": "FX_BTC_JPY",
+                "condition_type": "LIMIT",
+                "side": side == "BUY" ? "SELL" : "BUY",
+                "price": profitLine,
+                "size": Math.abs(size)
+            },
+            {
+                "product_code": "FX_BTC_JPY",
+                "condition_type": "STOP",
+                "side": side == "BUY" ? "SELL" : "BUY",
+                "trigger_price": lossLine,
+                "size": Math.abs(size)
+            }]
+    };
+
+    return requestInput("ifdoco-order", "/v1/me/sendparentorder", "POST", json);
+};
+
 export const cancelOrders = (): RequestInput =>
     requestInput("cancelOrders", "/v1/me/cancelallchildorders", "POST", { "product_code": "FX_BTC_JPY" });
 
