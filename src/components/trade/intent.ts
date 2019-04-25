@@ -15,6 +15,8 @@ export interface Actions {
     onClickLimitSellButton$: Stream<null>;
     onClickMarketBuyButton$: Stream<null>;
     onClickMarketSellButton$: Stream<null>;
+    onClickIFDOCOBuyButton$: Stream<null>;
+    onClickIFDOCOSellButton$: Stream<null>;
     onExecutionCreated$: Stream<object>;
     onHistoryCreated$: Stream<OrderHistory>;
     onOrderCreated$: Stream<object>;
@@ -71,7 +73,8 @@ export const intent = (sources: Sources): Actions => {
 
     const onHistoryCreated$ = Stream.merge(
         sources.HTTP.select("market-order").map(stream => createHistoryStream("Market", stream)).flatten(),
-        sources.HTTP.select("limit-order").map(stream => createHistoryStream("Limit", stream)).flatten()
+        sources.HTTP.select("limit-order").map(stream => createHistoryStream("Limit", stream)).flatten(),
+        sources.HTTP.select("ifdoco-order").map(stream => createIFDOCOHistoryStream(stream)).flatten()
     );
 
     const onOrderCreated$ = sources.HTTP.select("market-order")
@@ -113,6 +116,14 @@ export const intent = (sources: Sources): Actions => {
         .map(event => event.target as HTMLInputElement)
         .map(element => +element.value);
 
+    const onClickIFDOCOBuyButton$ = sources.DOM.select(".ranged-ifdoco-order-buttons").select(".buy-button")
+        .events("click", { preventDefault: true })
+        .mapTo(null);
+
+    const onClickIFDOCOSellButton$ = sources.DOM.select(".ranged-ifdoco-order-buttons").select(".sell-button")
+        .events("click", { preventDefault: true })
+        .mapTo(null);
+
     return {
         onApiKeyLoaded$,
         onApiSecretLoaded$,
@@ -124,6 +135,8 @@ export const intent = (sources: Sources): Actions => {
         onClickLimitSellButton$,
         onClickMarketBuyButton$,
         onClickMarketSellButton$,
+        onClickIFDOCOBuyButton$,
+        onClickIFDOCOSellButton$,
         onExecutionCreated$,
         onHistoryCreated$,
         onOrderCreated$,
@@ -146,3 +159,33 @@ const createHistoryStream = (name: string, stream$: MemoryStream<Response> & Res
             const send = JSON.parse(error.response.request.send);
             return Stream.of(createOrderHistory(name, send.side, send.size, send.price, "failed"));
         });
+
+const createIFDOCOHistoryStream = (stream$: MemoryStream<Response> & ResponseStream): Stream<OrderHistory> =>
+    stream$
+        .map((response: any) => {
+            const send = JSON.parse(response.request.send);
+            const orderHistories: [OrderHistory] = send.parameters.map((order: any) => {
+                return createOrderHistory(orderName(order.condition_type), order.side, order.size, order.price || order.trigger_price, "success");
+            });
+            return Stream.fromArray(orderHistories);
+        })
+        .replaceError((error: any) => {
+            const send = JSON.parse(error.response.request.send);
+            const orderHistories: [OrderHistory] = send.parameters.map((order: any) => {
+                return createOrderHistory(orderName(order.condition_type), order.side, order.size, order.price || order.trigger_price, "failed");
+            });
+            return Stream.of(Stream.fromArray(orderHistories));
+        })
+        .flatten();
+
+const orderName = (conditionType: string): string => {
+  if (conditionType == "MARKET") {
+      return "Market";
+  } else if (conditionType == "LIMIT") {
+      return "Limit";
+  } else if (conditionType == "STOP") {
+      return "Stop";
+  } else {
+      return "Undefined"
+  }
+};
