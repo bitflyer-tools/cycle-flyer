@@ -65,7 +65,7 @@ export const intent = (sources: Sources): Actions => {
         .events("click", { preventDefault: true })
         .mapTo(null);
 
-    const onExecutionCreated$ = sources.pubnub.execution$;
+    const onExecutionCreated$ = sources.socket.execution$;
 
     const onHistoryCreated$ = Stream.merge(
         sources.HTTP.select("market-order").map(stream => createHistoryStream("Market", stream)).flatten(),

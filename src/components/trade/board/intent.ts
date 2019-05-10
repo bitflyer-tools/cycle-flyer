@@ -12,7 +12,7 @@ export interface Actions {
 }
 
 export const intent = (sources: Sources): Actions => {
-    const onBoardLoaded$ = sources.pubnub.board$;
+    const onBoardLoaded$ = sources.socket.board$;
 
     const onBoardSnapshotLoaded$ = sources.HTTP.select("board")
         .map(response$ => response$.replaceError(() => Stream.of(null)))
