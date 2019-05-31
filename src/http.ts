@@ -16,6 +16,12 @@ export const getPositions = (): RequestInput =>
 export const getOrders = (): RequestInput =>
     requestInput("orders", "/v1/me/getchildorders", "GET", undefined, { "child_order_state": "ACTIVE" });
 
+export const getParentOrders = (): RequestInput =>
+    requestInput("parentOrders", "/v1/me/getparentorders", "GET", undefined, { "parent_order_state": "ACTIVE" });
+
+export const getParentOrder = (parentOrderId: number): RequestInput =>
+    requestInput("parentOrder", "/v1/me/getparentorder", "GET", undefined, { "parent_order_id": parentOrderId });
+
 export const marketOrder = (size: number, side: string): RequestInput => {
     const json = {
         "product_code": "FX_BTC_JPY",
