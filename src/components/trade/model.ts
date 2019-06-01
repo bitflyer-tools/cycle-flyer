@@ -14,6 +14,7 @@ const defaultState: State = {
     position: new Position([]),
     price: 0,
     size: 0,
+    stopOrders: [],
     ifdocoOrder: new IFDOCOrder(10000, 50)
 };
 
@@ -48,14 +49,17 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const priceReducer$ = actions.onPriceChanged$
         .map(price => (state: State) => ({ ...state, price }));
 
-    const sizeReducer$ = actions.onSizeChanged$
-        .map(size => (state: State) => ({ ...state, size }));
-
     const priceWidthReducer$ = actions.onPriceWidthChanged$
         .map(price => (state: State) => ({ ...state, ifdocoOrder: new IFDOCOrder(price, state.ifdocoOrder.ratio) }));
 
     const ratioReducer$ = actions.onRatioChanged$
         .map(ratio => (state: State) => ({ ...state, ifdocoOrder: new IFDOCOrder(state.ifdocoOrder.width, ratio) }));
+
+    const sizeReducer$ = actions.onSizeChanged$
+        .map(size => (state: State) => ({ ...state, size }));
+
+    const stopOrdersReducer$ = actions.onStopOrdersLoaded$
+        .map(stopOrders => (state: State) => ({ ...state, stopOrders }));
 
     return Stream.merge(
         defaultReducer$,
@@ -65,8 +69,9 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         ordersReducer$,
         positionReducer$,
         priceReducer$,
-        sizeReducer$,
         priceWidthReducer$,
-        ratioReducer$
+        ratioReducer$,
+        sizeReducer$,
+        stopOrdersReducer$
     );
 };

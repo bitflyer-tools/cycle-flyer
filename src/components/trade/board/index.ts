@@ -8,6 +8,7 @@ import {Sinks, Sources} from "../index";
 import {Board} from "../../../models/board";
 import {Order} from "../../../models/order";
 import {Position} from "../../../models/position";
+import {StopOrder} from "../../../models/stopOrder";
 
 export interface State {
     board: Board;
@@ -16,6 +17,7 @@ export interface State {
     orders: Order[];
     position: Position;
     price: number;
+    stopOrders: StopOrder[];
 }
 
 export const BoardComponent = (sources: Sources): Sinks => {

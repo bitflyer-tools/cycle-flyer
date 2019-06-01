@@ -18,6 +18,7 @@ import "./index.styl";
 import {BoardComponent, State as BoardComponentState} from "./board/index";
 import {SocketIOSource} from "../../drivers/socketIODriver";
 import {IFDOCOrder} from "../../models/ifdocoOrder";
+import {StopOrder} from "../../models/stopOrder";
 
 export interface Sources {
     DOM: DOMSource;
@@ -44,6 +45,7 @@ export interface State {
     position: Position;
     price: number;
     size: number;
+    stopOrders: StopOrder[];
     ifdocoOrder: IFDOCOrder;
     boardComponentState?: BoardComponentState;
     summaryComponentState?: SummaryComponentState;
@@ -75,7 +77,8 @@ export const Trade = (sources: Sources): Sinks => {
                 currentPrice: state.currentPrice,
                 position: state.position,
                 orders: state.orders,
-                price: state.price
+                price: state.price,
+                stopOrders: state.stopOrders
             },
             set: (state: State, boardComponentState: BoardComponentState) => ({
                 ...state,
