@@ -4,6 +4,8 @@ import throttle from "xstream/extra/throttle";
 import {State} from "./index";
 import {BoardOrder} from "../../../models/board";
 import {ceilBy, floorBy} from "../../../util";
+import {StopOrder} from "../../../models/stopOrder";
+import {Order} from "../../../models/order";
 
 export const view = (state$: Stream<State>) =>
     state$
@@ -23,6 +25,7 @@ export const view = (state$: Stream<State>) =>
                         span(".bar", { style: barStyle(ask.size) }),
                         myPosition(state, ask),
                         myOrder("SELL", state, ask),
+                        myStopOrder("SELL", state, ask),
                         span(padWithZero(ask.size)),
                         span(ask.price.toLocaleString())
                     ])
@@ -33,6 +36,7 @@ export const view = (state$: Stream<State>) =>
                         span(bid.price.toLocaleString()),
                         span(padWithZero(bid.size)),
                         myOrder("BUY", state, bid),
+                        myStopOrder("BUY", state, bid),
                         myPosition(state, bid)
                     ])
                 ))
@@ -54,23 +58,43 @@ const myPosition = (state: State, order: BoardOrder): VNode | undefined => {
     } else {
         if (price === 0 || floorBy(price, state.groupedSize) !== order.price) { return; }
     }
-    return span(".my-position", "💰")
+    return span(".my-position", "💰");
 };
 
-const myOrder = (side: string, state: State, order: BoardOrder): VNode | undefined => {
-    if (side === "SELL") {
-        const orders = state.orders
-            .filter(o => o.side === "SELL")
-            .filter(o => ceilBy(o.price, state.groupedSize) === order.price);
-
-        if (orders.length === 0) { return; }
-        return span(".my-order", orders.reduce((acc, order) => acc + order.size, 0).toString())
+const myOrder = (side: string, state: State, boardOrder: BoardOrder): VNode | undefined => {
+    const orders = state.orders.filter(order => matchOrder(side, order, boardOrder, state.groupedSize));
+    if (orders.length === 0) {
+        return;
     } else {
-        const orders = state.orders
-            .filter(o => o.side === "BUY")
-            .filter(o => floorBy(o.price, state.groupedSize) === order.price);
+        return span(".my-order", orders.reduce((acc, order) => acc + order.size, 0).toString());
+    }
+};
 
-        if (orders.length === 0) { return; }
-        return span(".my-order", orders.reduce((acc, order) => acc + order.size, 0).toString())
+const myStopOrder = (side: string, state: State, order: BoardOrder): VNode | undefined => {
+    const orders = state.stopOrders.filter(stopOrder => matchOrderInv(side, stopOrder, order, state.groupedSize));
+    if (orders.length === 0) {
+        return;
+    } else {
+        return span(".my-stop-order", orders.reduce((acc, order) => acc + order.size, 0).toString());
+    }
+};
+
+const matchOrder = (side: string, order: Order | StopOrder, boardOrder: BoardOrder, groupedSize: number): boolean => {
+    if (side === "SELL") {
+        return order.side === "SELL" && ceilBy(order.price, groupedSize) === boardOrder.price;
+    } else if (side === "BUY") {
+        return order.side === "BUY" && floorBy(order.price, groupedSize) === boardOrder.price;
+    } else {
+        return false;
+    }
+};
+
+const matchOrderInv = (side: string, order: Order | StopOrder, boardOrder: BoardOrder, groupedSize: number): boolean => {
+    if (side === "SELL") {
+        return order.side === "BUY" && floorBy(order.price, groupedSize) === boardOrder.price;
+    } else if (side === "BUY") {
+        return order.side === "SELL" && ceilBy(order.price, groupedSize) === boardOrder.price;
+    } else {
+        return false;
     }
 };
