@@ -21,6 +21,9 @@ const defaultState: State = {
 export const model = (actions: Actions): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
+    const cancelOrdersReducer$ = actions.onCancelOrders$
+        .map(_ => (state: State) => ({ ...state, orders: [], stopOrders: [] }));
+
     const currentPriceReducer$ = actions.onExecutionCreated$
         .map(execution => (state: State) => {
             state.boardComponentState && state.boardComponentState.board.remove(execution.side, execution.price);
@@ -69,6 +72,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
     return Stream.merge(
         defaultReducer$,
+        cancelOrdersReducer$,
         currentPriceReducer$,
         historyReducer$,
         isOrderingReducer$,

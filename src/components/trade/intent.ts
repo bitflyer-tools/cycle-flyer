@@ -8,6 +8,7 @@ import {StopOrder} from "../../models/stopOrder";
 export interface Actions {
     onApiKeyLoaded$: Stream<string>;
     onApiSecretLoaded$: Stream<string>;
+    onCancelOrders$: Stream<null>;
     onClickClearButton$: Stream<null>;
     onClickClearOrderButton$: Stream<null>;
     onClickGroupSizePlusButton$: Stream<null>;
@@ -39,6 +40,12 @@ export const intent = (sources: Sources): Actions => {
     const onApiSecretLoaded$ = sources.storage.local.getItem("api-secret")
         .filter((apiSecret: string) => apiSecret && apiSecret !== "")
         .take(1);
+
+    const onCancelOrders$ = sources.HTTP.select("cancel-orders")
+        .map(response$ => response$.replaceError(() => Stream.of(null)))
+        .flatten()
+        .filter(response => !!response)
+        .mapTo(null);
 
     const onClickClearButton$ = sources.DOM.select(".clear-button")
         .events("click", { preventDefault: true })
@@ -80,7 +87,7 @@ export const intent = (sources: Sources): Actions => {
         sources.HTTP.select("ifdoco-order").map(stream => createIFDOCOHistoryStream(stream)).flatten()
     );
 
-    const onIFDOCOOrdersLoaded$ = sources.HTTP.select("parentOrders")
+    const onIFDOCOOrdersLoaded$ = sources.HTTP.select("parent-orders")
         .map(response$ => response$.replaceError(() => Stream.of(null)))
         .flatten()
         .filter(response => !!response)
@@ -100,7 +107,7 @@ export const intent = (sources: Sources): Actions => {
         .map(response => JSON.parse(response.text));
 
     const onStopOrdersLoaded$ = Stream.combine(
-        sources.HTTP.select("parentOrders")
+        sources.HTTP.select("parent-orders")
             .map(response$ => response$.replaceError(() => Stream.of(null)))
             .flatten()
             .filter(response => !!response)
@@ -108,7 +115,7 @@ export const intent = (sources: Sources): Actions => {
             .filter(o => o["parent_order_type"] == "STOP")
             .map(orders => orders.map(o => new StopOrder(o)))
             .startWith([]),
-        sources.HTTP.select("parentOrder")
+        sources.HTTP.select("parent-order")
             .map(response$ => response$.replaceError(() => Stream.of(null)))
             .flatten()
             .filter(response => !!response)
@@ -156,6 +163,7 @@ export const intent = (sources: Sources): Actions => {
     return {
         onApiKeyLoaded$,
         onApiSecretLoaded$,
+        onCancelOrders$,
         onClickClearButton$,
         onClickClearOrderButton$,
         onClickGroupSizePlusButton$,
