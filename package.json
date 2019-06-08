@@ -29,10 +29,14 @@
   },
   "scripts": {
     "build": "node fuse",
+    "lint": "tslint -c tslint.json 'src/**/*.ts'",
     "start": "serve .",
     "watch": "node fuse.dev",
     "deploy": "now --public --token=$NOW_TOKEN && now alias --token=$NOW_TOKEN && now-pipeline-prune"
   },
   "author": "unhappychoice",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "tslint": "^5.18.0"
+  }
 }
