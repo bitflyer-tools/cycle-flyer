@@ -1,24 +1,24 @@
 import {DOMSource, VNode} from "@cycle/dom";
 import {HTTPSource, RequestInput} from "@cycle/http";
-import {Reducer, StateSource} from "cycle-onionify";
-import Stream from "xstream";
-import {model} from "./model";
-import {HistoryAction, RouterSource} from 'cyclic-router';
-import {StorageRequest, StorageSource} from "@cycle/storage";
-import {intent} from "./intent";
-import {request} from "./request";
-import {view} from "./view";
-import {State as SummaryComponentState} from "./summary";
-import {SummaryComponent} from "./summary/index";
 import isolate from "@cycle/isolate";
-import {OrderHistory} from "../../models/orderHistory";
-import {Order} from "../../models/order";
-import {Position} from "../../models/position";
-import "./index.styl";
-import {BoardComponent, State as BoardComponentState} from "./board/index";
+import {StorageRequest, StorageSource} from "@cycle/storage";
+import {Reducer, StateSource} from "cycle-onionify";
+import {HistoryAction, RouterSource} from "cyclic-router";
+import Stream from "xstream";
 import {SocketIOSource} from "../../drivers/socketIODriver";
 import {IFDOCOrder} from "../../models/ifdocoOrder";
+import {Order} from "../../models/order";
+import {OrderHistory} from "../../models/orderHistory";
+import {Position} from "../../models/position";
 import {StopOrder} from "../../models/stopOrder";
+import {BoardComponent, State as BoardComponentState} from "./board/index";
+import "./index.styl";
+import {intent} from "./intent";
+import {model} from "./model";
+import {request} from "./request";
+import {State as SummaryComponentState} from "./summary";
+import {SummaryComponent} from "./summary/index";
+import {view} from "./view";
 
 export interface Sources {
     DOM: DOMSource;
@@ -59,14 +59,14 @@ export const Trade = (sources: Sources): Sinks => {
                 ...state.summaryComponentState,
                 currentPrice: state.currentPrice,
                 histories: state.histories,
-                position: state.position
+                position: state.position,
             },
             set: (state: State, summaryComponentState: SummaryComponentState) => ({
                 ...state,
+                position: summaryComponentState.position,
                 summaryComponentState,
-                position: summaryComponentState.position
-            })
-        }
+            }),
+        },
     })(sources);
 
     const boardComponent = isolate(BoardComponent, {
@@ -75,17 +75,17 @@ export const Trade = (sources: Sources): Sinks => {
             get: (state: State) => state.boardComponentState && {
                 ...state.boardComponentState,
                 currentPrice: state.currentPrice,
-                position: state.position,
                 orders: state.orders,
+                position: state.position,
                 price: state.price,
-                stopOrders: state.stopOrders
+                stopOrders: state.stopOrders,
             },
             set: (state: State, boardComponentState: BoardComponentState) => ({
                 ...state,
                 boardComponentState,
-                price: boardComponentState.price
-            })
-        }
+                price: boardComponentState.price,
+            }),
+        },
     })(sources);
 
     const actions = intent(sources);
@@ -98,6 +98,6 @@ export const Trade = (sources: Sources): Sinks => {
         HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP),
         onion: Stream.merge(reducer$, boardComponent.onion, summaryComponent.onion),
         router: Stream.empty(),
-        storage: Stream.empty()
-    }
+        storage: Stream.empty(),
+    };
 };

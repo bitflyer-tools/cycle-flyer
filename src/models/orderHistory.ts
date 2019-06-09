@@ -10,10 +10,10 @@ export const createOrderHistory = (
     side: string,
     size: number,
     price: number,
-    status: string
+    status: string,
 ): OrderHistory => ({
     createdAt: new Date(),
     description: `${side} / ${size} / ${(price && price.toLocaleString()) || "MARKET"}`,
-    name: name,
-    status: status
+    name,
+    status,
 });

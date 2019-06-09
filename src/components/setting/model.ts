@@ -9,21 +9,21 @@ export interface State {
 
 const defaultState: State = {
     apiKey: "",
-    apiSecret: ""
+    apiSecret: "",
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => typeof state === "undefined" ? defaultState : state);
 
     const apiKeyReducer$ = Stream.merge(actions.onApiKeyLoaded$, actions.onApiKeyInputChanged$)
-        .map(apiKey => (state: State) => ({ ...state, apiKey }));
+        .map((apiKey) => (state: State) => ({ ...state, apiKey }));
 
     const apiSecretReducer$ = Stream.merge(actions.onApiSecretLoaded$, actions.onApiSecretInputChanged$)
-        .map(apiSecret => (state: State) => ({ ...state, apiSecret }));
+        .map((apiSecret) => (state: State) => ({ ...state, apiSecret }));
 
     return Stream.merge(
         defaultReducer$,
         apiKeyReducer$,
-        apiSecretReducer$
+        apiSecretReducer$,
     );
 };
