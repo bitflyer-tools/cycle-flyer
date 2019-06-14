@@ -84,7 +84,7 @@ export const view = (state$: Stream<State>, boardComponentDOM$: Stream<VNode>, s
                         input("#ratio-input", { attrs: { value: state.ifdocoOrder.ratio }}),
                     ]),
                     div(".ranged-ifdoco-order-buttons.order-buttons", [
-                        button("sell-button", { attrs: { disabled: tradeButtonDisabled(state) } }, "Sell"),
+                        button(".sell-button", { attrs: { disabled: tradeButtonDisabled(state) } }, "Sell"),
                         button(".buy-button", { attrs: { disabled: tradeButtonDisabled(state) } }, "Buy"),
                     ]),
                 ]),

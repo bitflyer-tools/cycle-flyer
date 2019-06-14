@@ -1,4 +1,4 @@
-import {Reducer} from "cycle-onionify";
+import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {Position} from "../../../models/position";
 import {State} from "./index";
@@ -25,5 +25,5 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         collateralReducer$,
         defaultReducer$,
         marketStateReducer$,
-    );
+    ) as Stream<Reducer<State>>;
 };

@@ -11,13 +11,13 @@ export interface Actions {
 
 export const intent = (sources: Sources): Actions => {
     const onCollateralLoaded$ = sources.HTTP.select("collateral")
-        .map((response$) => response$.replaceError(() => Stream.of(null)))
+        .map((response$) => response$.replaceError(() => Stream.never()))
         .flatten()
         .filter((response) => !!response)
         .map((response) => JSON.parse(response.text).collateral);
 
     const onStateLoaded$ = sources.HTTP.select("status")
-        .map((response$) => response$.replaceError(() => Stream.of(null)))
+        .map((response$) => response$.replaceError(() => Stream.never()))
         .flatten()
         .filter((response) => !!response)
         .map((response) => JSON.parse(response.text));
@@ -25,5 +25,5 @@ export const intent = (sources: Sources): Actions => {
     return {
         onCollateralLoaded$,
         onStateLoaded$,
-    };
+    } as Actions;
 };

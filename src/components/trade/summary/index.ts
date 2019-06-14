@@ -13,21 +13,21 @@ export interface State {
     collateral: number;
     currentPrice: number;
     histories: OrderHistory[];
-    marketState: object;
+    marketState: any;
     position: Position;
 }
 
 export const SummaryComponent = (sources: Sources): Sinks => {
     const actions = intent(sources);
     const reducer$ = model(actions);
-    const view$ = view(sources.onion.state$);
+    const view$ = view(sources.state.stream as any);
     const request$ = request();
 
     return {
         DOM: view$,
         HTTP: request$,
-        onion: reducer$,
-        router: Stream.empty(),
-        storage: Stream.empty(),
+        router: Stream.never(),
+        state: reducer$,
+        storage: Stream.never(),
     };
 };

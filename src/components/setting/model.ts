@@ -1,4 +1,4 @@
-import {Reducer} from "cycle-onionify";
+import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {Actions} from "./intent";
 
@@ -25,5 +25,5 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         defaultReducer$,
         apiKeyReducer$,
         apiSecretReducer$,
-    );
+    ) as Stream<Reducer<State>>;
 };

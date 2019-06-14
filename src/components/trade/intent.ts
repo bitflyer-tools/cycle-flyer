@@ -23,8 +23,8 @@ export interface Actions {
     onHistoryCreated$: Stream<OrderHistory>;
     onIFDOCOOrdersLoaded$: Stream<object[]>;
     onOrderCreated$: Stream<object>;
-    onOrdersLoaded$: Stream<object>;
-    onPositionsLoaded$: Stream<Position[]>;
+    onOrdersLoaded$: Stream<object[]>;
+    onPositionsLoaded$: Stream<Position>;
     onPriceChanged$: Stream<number>;
     onSizeChanged$: Stream<number>;
     onStopOrdersLoaded$: Stream<StopOrder[]>;
@@ -33,18 +33,17 @@ export interface Actions {
 }
 
 export const intent = (sources: Sources): Actions => {
-    const onApiKeyLoaded$ = sources.storage.local.getItem("api-key")
+    const onApiKeyLoaded$ = (sources.storage as any).local.getItem("api-key")
         .filter((apiKey: string) => apiKey && apiKey !== "")
         .take(1);
 
-    const onApiSecretLoaded$ = sources.storage.local.getItem("api-secret")
+    const onApiSecretLoaded$ = (sources.storage as any).local.getItem("api-secret")
         .filter((apiSecret: string) => apiSecret && apiSecret !== "")
         .take(1);
 
     const onCancelOrders$ = sources.HTTP.select("cancel-orders")
-        .map((response$) => response$.replaceError(() => Stream.of(null)))
+        .map((response$) => response$.replaceError(() => Stream.never()))
         .flatten()
-        .filter((response) => !!response)
         .mapTo(null);
 
     const onClickClearButton$ = sources.DOM.select(".clear-button")
@@ -88,47 +87,41 @@ export const intent = (sources: Sources): Actions => {
     );
 
     const onIFDOCOOrdersLoaded$ = sources.HTTP.select("parent-orders")
-        .map((response$) => response$.replaceError(() => Stream.of(null)))
+        .map((response$) => response$.replaceError(() => Stream.never()))
         .flatten()
-        .filter((response) => !!response)
         .map((response) => JSON.parse(response.text))
-        .filter((orders) => orders.filter((o) => o.parent_order_type === "IFDOCO"));
+        .filter((orders) => orders.filter((o: any) => o.parent_order_type === "IFDOCO"));
 
     const onOrderCreated$ = sources.HTTP.select("market-order")
-        .map((response$) => response$.replaceError(() => Stream.of(null)))
+        .map((response$) => response$.replaceError(() => Stream.never()))
         .flatten()
-        .filter((response) => !!response)
         .map((response) => JSON.parse(response.text));
 
     const onOrdersLoaded$ = sources.HTTP.select("orders")
-        .map((response$) => response$.replaceError(() => Stream.of(null)))
+        .map((response$) => response$.replaceError(() => Stream.never()))
         .flatten()
-        .filter((response) => !!response)
         .map((response) => JSON.parse(response.text));
 
     const onStopOrdersLoaded$ = Stream.combine(
         sources.HTTP.select("parent-orders")
-            .map((response$) => response$.replaceError(() => Stream.of(null)))
+            .map((response$) => response$.replaceError(() => Stream.never()))
             .flatten()
-            .filter((response) => !!response)
             .map((response) => JSON.parse(response.text))
             .filter((o) => o.parent_order_type === "STOP")
-            .map((orders) => orders.map((o) => new StopOrder(o)))
+            .map((orders) => orders.map((o: any) => new StopOrder(o)))
             .startWith([]),
         sources.HTTP.select("parent-order")
-            .map((response$) => response$.replaceError(() => Stream.of(null)))
+            .map((response$) => response$.replaceError(() => Stream.never()))
             .flatten()
-            .filter((response) => !!response)
             .map((response) => JSON.parse(response.text))
-            .map((o) => o.parameters.filter((or) => or.condition_type === "STOP"))
-            .map((orders) => orders.map((o) => new StopOrder(o)))
+            .map((o) => o.parameters.filter((or: any) => or.condition_type === "STOP"))
+            .map((orders) => orders.map((o: any) => new StopOrder(o)))
             .startWith([]),
     ).map(([s1, s2]) => s1.concat(s2));
 
     const onPositionsLoaded$ = sources.HTTP.select("positions")
-        .map((response$) => response$.replaceError(() => Stream.of(null)))
+        .map((response$) => response$.replaceError(() => Stream.never()))
         .flatten()
-        .filter((response) => !!response)
         .map((response) => JSON.parse(response.text))
         .map((positions) => new Position(positions));
 
@@ -190,7 +183,7 @@ export const intent = (sources: Sources): Actions => {
 
 const createHistoryStream = (name: string, stream$: MemoryStream<Response> & ResponseStream): Stream<OrderHistory> =>
     stream$
-        .map((response) => {
+        .map((response: any) => {
             const send = JSON.parse(response.request.send);
             return createOrderHistory(name, send.side, send.size, send.price, "success");
         })

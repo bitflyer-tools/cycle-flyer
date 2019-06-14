@@ -9,12 +9,12 @@ export interface Actions {
 }
 
 export const intent = (sources: Sources): Actions => {
-    const onApiKeyLoaded$ = sources.storage.local.getItem("api-key")
-        .filter((apiKey) => apiKey && apiKey !== "")
+    const onApiKeyLoaded$ = (sources.storage as any).local.getItem("api-key")
+        .filter((apiKey: string) => apiKey && apiKey !== "")
         .take(1);
 
-    const onApiSecretLoaded$ = sources.storage.local.getItem("api-secret")
-        .filter((apiSecret) => apiSecret && apiSecret !== "")
+    const onApiSecretLoaded$ = (sources.storage as any).local.getItem("api-secret")
+        .filter((apiSecret: string) => apiSecret && apiSecret !== "")
         .take(1);
 
     const onApiKeyInputChanged$ = sources.DOM.select("#api-key-input")

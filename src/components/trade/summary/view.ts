@@ -57,7 +57,7 @@ export const view = (state$: Stream<State>) =>
                     ]),
                 ),
             ),
-        ]);
+        ]));
 
 const collateralString = (state: State): string => {
     if (!state.position.price) { return state.collateral.toLocaleString(); }

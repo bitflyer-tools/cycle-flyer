@@ -1,8 +1,9 @@
-import {Reducer} from "cycle-onionify";
+import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {IFDOCOrder} from "../../models/ifdocoOrder";
 import {Order} from "../../models/order";
 import {Position} from "../../models/position";
+import {StopOrder} from "../../models/stopOrder";
 import {State} from "./index";
 import {Actions} from "./intent";
 
@@ -22,10 +23,10 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
     const cancelOrdersReducer$ = actions.onCancelOrders$
-        .map((_) => (state: State) => ({ ...state, orders: [], stopOrders: [] }));
+        .map((_) => (state: State) => ({ ...state, orders: [] as Order[], stopOrders: [] as StopOrder[] }));
 
     const currentPriceReducer$ = actions.onExecutionCreated$
-        .map((execution) => (state: State) => {
+        .map((execution: any) => (state: State) => {
             if (state.boardComponentState) { state.boardComponentState.board.remove(execution.side, execution.price); }
             return { ...state, currentPrice: execution.price };
         });
@@ -43,8 +44,8 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     ).map((isOrdering) => (state: State) => ({ ...state, isOrdering }));
 
     const ordersReducer$ = actions.onOrdersLoaded$
-        .map((orders) => orders.map((order) => new Order(order)))
-        .map((orders) => (state: State) => ({ ...state, orders }));
+        .map((orders: object[]) => orders.map((order) => new Order(order)))
+        .map((orders: Order[]) => (state: State) => ({ ...state, orders }));
 
     const positionReducer$ = actions.onPositionsLoaded$
         .map((position) => (state: State) => ({ ...state, position }));
@@ -65,7 +66,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map((stopOrders) => (state: State) => ({ ...state, stopOrders }));
 
     const stopOrdersDeleteReducer$ = actions.onExecutionCreated$
-        .map((execution) => (state: State) => {
+        .map((execution: any) => (state: State) => {
             const stopOrders = state.stopOrders.filter((order) => !order.isExcuted(execution.price));
             return { ...state, stopOrders };
         });
@@ -84,5 +85,5 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         sizeReducer$,
         stopOrdersReducer$,
         stopOrdersDeleteReducer$,
-    );
+    ) as Stream<Reducer<State>>;
 };

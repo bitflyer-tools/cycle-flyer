@@ -5,9 +5,9 @@ export class Board {
     public asks: BoardOrder[];
     public bids: BoardOrder[];
 
-    constructor(json: object) {
-        this.asks = json.asks.map((ask) => new BoardOrder(ask));
-        this.bids = json.bids.map((bid) => new BoardOrder(bid));
+    constructor(json: any) {
+        this.asks = json.asks.map((ask: object) => new BoardOrder(ask));
+        this.bids = json.bids.map((bid: object) => new BoardOrder(bid));
     }
 
     public spread(): number {
@@ -60,7 +60,7 @@ export class Board {
     }
 
     private groupBy(boardOrders: BoardOrder[], priceSize: number, fn: (order: BoardOrder) => number): BoardOrder[] {
-        const prices = boardOrders.reduce((acc: object, boardOrder: BoardOrder) => {
+        const prices = boardOrders.reduce((acc: any, boardOrder: BoardOrder) => {
             const price = fn(boardOrder);
             acc[price] = (acc[price] || 0) + boardOrder.size;
             return acc;
@@ -68,10 +68,10 @@ export class Board {
         return this.mapToBoardOrder(priceSize, prices);
     }
 
-    private mapToBoardOrder(priceSize: number, prices: object): BoardOrder[] {
+    private mapToBoardOrder(priceSize: number, prices: any): BoardOrder[] {
         if (priceSize > 99 && Object.keys(prices).length > 0) {
-            const min = Math.min.apply(null, Object.keys(prices));
-            const max = Math.max.apply(null, Object.keys(prices));
+            const min = Math.min.apply(null, Object.keys(prices).map((price) => +price));
+            const max = Math.max.apply(null, Object.keys(prices).map((price) => +price));
             const keys = Array((max - min) / priceSize).fill(priceSize).map((value, index) => min + index * value);
             return keys.map((key) => new BoardOrder({ price: +key, size: +(prices[key] || 0) }));
         }
