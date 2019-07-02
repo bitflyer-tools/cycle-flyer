@@ -22,7 +22,7 @@
     "serve": "latest",
     "stylus": "^0.54.5",
     "switch-path": "^1.2.0",
-    "typescript": "^2.5.3",
+    "typescript": "^3.0.0",
     "xstream": "11.x.x"
   },
   "scripts": {
