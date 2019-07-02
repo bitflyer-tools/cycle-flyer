@@ -5,7 +5,6 @@ import Stream from "xstream";
 import {model} from "./model";
 import {HistoryAction, RouterSource} from 'cyclic-router';
 import {StorageRequest, StorageSource} from "@cycle/storage";
-import {PubnubSource} from "../../drivers/pubnubDriver";
 import {intent} from "./intent";
 import {request} from "./request";
 import {view} from "./view";
@@ -17,13 +16,14 @@ import {Order} from "../../models/order";
 import {Position} from "../../models/position";
 import "./index.styl";
 import {BoardComponent, State as BoardComponentState} from "./board/index";
+import {SocketIOSource} from "../../drivers/socketIODriver";
 
 export interface Sources {
     DOM: DOMSource;
     HTTP: HTTPSource;
     onion: StateSource<object>;
-    pubnub: PubnubSource;
     router: RouterSource;
+    socket: SocketIOSource;
     storage: StorageSource;
 }
 
