@@ -3,6 +3,6 @@ import Stream from "xstream";
 import {getBoard} from "../../../http";
 
 export const request = (): Stream<RequestInput> => {
-    const board = Stream.periodic(3000).mapTo(getBoard()).startWith(getBoard());
+    const board = Stream.periodic(15000).mapTo(getBoard()).startWith(getBoard());
     return Stream.merge(board);
 };

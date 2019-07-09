@@ -4,6 +4,7 @@ import {Actions} from "./intent";
 import {Order} from "../../models/order";
 import {State} from "./index";
 import {Position} from "../../models/position";
+import {IFDOCOrder} from "../../models/ifdocoOrder";
 
 const defaultState: State = {
     currentPrice: 0,
@@ -12,7 +13,8 @@ const defaultState: State = {
     orders: [],
     position: new Position([]),
     price: 0,
-    size: 0
+    size: 0,
+    ifdocoOrder: new IFDOCOrder(1000, 50)
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
@@ -49,6 +51,12 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const sizeReducer$ = actions.onSizeChanged$
         .map(size => (state: State) => ({ ...state, size }));
 
+    const priceWidthReducer$ = actions.onPriceWidthChanged$
+        .map(price => (state: State) => ({ ...state, ifdocoOrder: new IFDOCOrder(price, state.ifdocoOrder.ratio) }));
+
+    const ratioReducer$ = actions.onRatioChanged$
+        .map(ratio => (state: State) => ({ ...state, ifdocoOrder: new IFDOCOrder(state.ifdocoOrder.width, ratio) }));
+
     return Stream.merge(
         defaultReducer$,
         currentPriceReducer$,
@@ -57,6 +65,8 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         ordersReducer$,
         positionReducer$,
         priceReducer$,
-        sizeReducer$
+        sizeReducer$,
+        priceWidthReducer$,
+        ratioReducer$
     );
 };
