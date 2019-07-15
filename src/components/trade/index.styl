@@ -1,5 +1,4 @@
 .trade
-  height: 100%
   margin: 0 auto
   display: grid
   grid-template-columns: 380px 1fr 380px
@@ -8,9 +7,12 @@
 /* .trade .order */
 
 .order
+  height: calc(100vh - 60px - 64px)
   grid-column: 3
   grid-row: 1
   padding: 32px
+  overflow: scroll
+  will-change: transform
 
   .sub-title
     margin-top: 0
@@ -20,18 +22,28 @@
   .label
     font-size: 13px
     font-weight: 400
+    &.buy, &.sell
+      width: 40px
+      display: inline-block
+
+  .line-number
+    .buy, .sell
+      font-family: 'Fira Code', 'Courier New', Courier, monospace, sans-serif
+      font-size: 13px
+    .right
+      display: inline-block
+      width: 276px
+      text-align: right
 
   .profit, .profit-line
-    font-size: 13px
     color: green
 
   .loss, .loss-line
-    font-size: 13px
     color: red
 
   #size-input, #price-input
     display: block
-    width: 290px
+    width: 316px
     height: 32px
     margin: 20px 0
     text-align: center
@@ -42,10 +54,10 @@
     border-radius: 4px
 
   #ratio-input, #price-width-input
-    display: block
-    width: 290px
+    display: inline-block
+    width: 148px
     height: 32px
-    margin: 20px 0
+    margin: 0 0 20px
     text-align: center
     background: rgba(27, 31, 39, .4)
     color: rgba(233, 233, 233, 1)
@@ -53,13 +65,18 @@
     border: none
     border-radius: 4px
 
+  .ratio, .price-width
+    label
+      display: inline-block
+      width: 164px
+
   .order-buttons
     width: 316px
     margin: 0
 
     button
       height: 32px
-      width: 136px
+      width: 148px
       font-size: 14px
       color: rgba(232, 232, 232, 1)
       border: none
