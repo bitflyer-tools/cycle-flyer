@@ -61,6 +61,12 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const stopOrdersReducer$ = actions.onStopOrdersLoaded$
         .map(stopOrders => (state: State) => ({ ...state, stopOrders }));
 
+    const stopOrdersDeleteReducer$ = actions.onExecutionCreated$
+        .map(execution => (state: State) => {
+            const stopOrders = state.stopOrders.filter(order => !order.isExcuted(execution.price));
+            return { ...state, stopOrders };
+        });
+
     return Stream.merge(
         defaultReducer$,
         currentPriceReducer$,
@@ -72,6 +78,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         priceWidthReducer$,
         ratioReducer$,
         sizeReducer$,
-        stopOrdersReducer$
+        stopOrdersReducer$,
+        stopOrdersDeleteReducer$
     );
 };
