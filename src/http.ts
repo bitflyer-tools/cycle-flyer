@@ -1,5 +1,5 @@
 import {RequestInput} from "@cycle/http";
-import hash = require("hash.js");
+import * as hash from "hash.js";
 
 export const getBoard = (): RequestInput =>
     requestInput("board", "/v1/getboard", "GET");
@@ -81,7 +81,7 @@ const requestInput = (category: string, path: string, method: string, json?: obj
     const [key, secret] = getApiKeys();
 
     const url = `https://api.bitflyer.jp${path}`;
-    const query = { product_code: "FX_BTC_JPY", ...q };
+    const query: any = { product_code: "FX_BTC_JPY", ...q };
     const queryString = "?" + Object.keys(query).reduce((acc, k) => acc + `&${k}=${query[k]}`, "").slice(1);
 
     const send = json ? JSON.stringify(json) : "";
@@ -110,5 +110,5 @@ const signature = (
     timestamp: string,
 ): string => {
     const text = timestamp + method + path + query + send;
-    return hash.hmac(hash.sha256, secret).update(text).digest("hex");
+    return hash.hmac((hash as any).sha256, secret).update(text).digest("hex");
 };

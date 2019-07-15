@@ -12,10 +12,11 @@ export interface Actions {
 }
 
 export const intent = (sources: Sources): Actions => {
-    const onBoardLoaded$ = sources.socket.board$;
+    const onBoardLoaded$ = sources.socket.board$
+        .map((json) => new Board(json));
 
     const onBoardSnapshotLoaded$ = sources.HTTP.select("board")
-        .map((response$) => response$.replaceError(() => Stream.of(null)))
+        .map((response$) => response$.replaceError(() => Stream.never()))
         .flatten()
         .filter((response) => !!response)
         .map((response) => new Board(JSON.parse(response.text)));

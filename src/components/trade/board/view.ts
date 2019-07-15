@@ -1,11 +1,11 @@
 import {button, div, span, VNode} from "@cycle/dom";
 import Stream from "xstream";
 import throttle from "xstream/extra/throttle";
-import {BoardOrder} from "../../../models/board";
+import {BoardOrder} from "../../../models/boardOrder";
 import {Order} from "../../../models/order";
 import {StopOrder} from "../../../models/stopOrder";
 import {ceilBy, floorBy} from "../../../util";
-import {State} from "./index";
+import {State} from "./";
 
 export const view = (state$: Stream<State>) =>
     state$
@@ -20,7 +20,7 @@ export const view = (state$: Stream<State>) =>
                     span("Spread"),
                     span(".spread", state.board.spread().toLocaleString()),
                 ]),
-                div(".asks", state.board.groupedAsks(state.groupedSize).map((ask) =>
+                div(".asks", state.board.groupedAsks(state.groupedSize).map((ask: BoardOrder) =>
                     div(".ask", { dataset: { price: ask.price } }, [
                         span(".bar", { style: barStyle(ask.size) }),
                         myPosition(state, ask),
@@ -30,7 +30,7 @@ export const view = (state$: Stream<State>) =>
                         span(ask.price.toLocaleString()),
                     ]),
                 )),
-                div(".bids", state.board.groupedBids(state.groupedSize).map((bid) =>
+                div(".bids", state.board.groupedBids(state.groupedSize).map((bid: BoardOrder) =>
                     div(".bid", { dataset: { price: bid.price } }, [
                         span(".bar", { style: barStyle(bid.size) } ),
                         span(bid.price.toLocaleString()),
@@ -51,29 +51,29 @@ const barStyle = (size: number): object => {
     return { width: `${width}%` };
 };
 
-const myPosition = (state: State, order: BoardOrder): VNode | undefined => {
+const myPosition = (state: State, order: BoardOrder): VNode | null => {
     const price = state.position.price;
     if (state.position.side === "SELL") {
-        if (price === 0 || ceilBy(price, state.groupedSize) !== order.price) { return; }
+        if (price === 0 || ceilBy(price, state.groupedSize) !== order.price) { return null; }
     } else {
-        if (price === 0 || floorBy(price, state.groupedSize) !== order.price) { return; }
+        if (price === 0 || floorBy(price, state.groupedSize) !== order.price) { return null; }
     }
     return span(".my-position", "💰");
 };
 
-const myOrder = (side: string, state: State, boardOrder: BoardOrder): VNode | undefined => {
+const myOrder = (side: string, state: State, boardOrder: BoardOrder): VNode | null => {
     const orders = state.orders.filter((order) => matchOrder(side, order, boardOrder, state.groupedSize));
     if (orders.length === 0) {
-        return;
+        return null;
     } else {
         return span(".my-order", orders.reduce((acc, order) => acc + order.size, 0).toString());
     }
 };
 
-const myStopOrder = (side: string, state: State, order: BoardOrder): VNode | undefined => {
+const myStopOrder = (side: string, state: State, order: BoardOrder): VNode | null => {
     const orders = state.stopOrders.filter((stopOrder) => matchOrderInv(side, stopOrder, order, state.groupedSize));
     if (orders.length === 0) {
-        return;
+        return null;
     } else {
         return span(".my-stop-order", orders.reduce((acc, o) => acc + o.size, 0).toString());
     }

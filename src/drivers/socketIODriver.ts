@@ -8,10 +8,10 @@ export const makeSocketIODriver = () => (): SocketIOSource => {
 };
 
 export class SocketIOSource {
-    public boardSnapshot$ = Stream.create();
-    public board$ = Stream.create();
-    public ticker$ = Stream.create();
-    public execution$ = Stream.create();
+    public boardSnapshot$: Stream<object> = Stream.create();
+    public board$: Stream<object> = Stream.create();
+    public ticker$: Stream<object> = Stream.create();
+    public execution$: Stream<object> = Stream.create();
 
     private channelNames = [
         "lightning_board_snapshot_FX_BTC_JPY",

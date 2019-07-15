@@ -14,13 +14,13 @@ import {
 import {State} from "./index";
 import {Actions} from "./intent";
 
-export const request = (actions: Actions, state$: Stream<State>): Stream<RequestInput> => {
+export const request = (actions: Actions, state$: Stream<State>): Stream<string | RequestInput | null> => {
     const orders = Stream.periodic(10000).mapTo(getOrders()).startWith(getOrders());
     const parentOrders = Stream.periodic(10000).mapTo(getParentOrders()).startWith(getParentOrders());
     const positions = Stream.periodic(10000).mapTo(getPositions()).startWith(getPositions());
 
     const ifdocoOrders = actions.onIFDOCOOrdersLoaded$
-        .map((os) => Stream.fromArray(os.map((order) => getParentOrder(order.parent_order_id))))
+        .map((os) => Stream.fromArray(os.map((order: any) => getParentOrder(order.parent_order_id))))
         .flatten();
 
     const marketBuy = actions.onClickMarketBuyButton$
@@ -81,5 +81,5 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
         ifdocoOrders,
         clear,
         clearOrders,
-    );
+    ) as Stream<string | RequestInput | null>;
 };

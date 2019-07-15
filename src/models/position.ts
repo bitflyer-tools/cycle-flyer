@@ -7,7 +7,7 @@ export class Position {
     public size: number;
     public price: number;
 
-    constructor(positions: object[]) {
+    constructor(positions: any[]) {
         if (!positions || positions.length === 0) {
             this.side = "";
             this.size = 0;
