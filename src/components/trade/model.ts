@@ -14,7 +14,7 @@ const defaultState: State = {
     position: new Position([]),
     price: 0,
     size: 0,
-    ifdocoOrder: new IFDOCOrder(1000, 50)
+    ifdocoOrder: new IFDOCOrder(10000, 50)
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {

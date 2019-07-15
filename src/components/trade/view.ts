@@ -38,51 +38,47 @@ export const view = (state$: Stream<State>, boardComponentDOM$: Stream<VNode>, s
                     hr(),
                     h4(".sub-title", "Ranged IFDOCO"),
                     div(".line", [
-                        label(".label", "Calculated Profit / Loss line"),
                         p(".line-number", [
                             p(".buy", [
-                                label(".label", "Buy: "),
-                                span(".profit", state.ifdocoOrder.buyProfitLine(state.currentPrice)),
-                                span(" / "),
-                                span(".loss", state.ifdocoOrder.buyLossLine(state.currentPrice))
+                                label(".label.buy", "Buy"),
+                                span(".right", [
+                                    span(".profit", "+" + state.ifdocoOrder.profitDifference()),
+                                    span("/"),
+                                    span(".loss", "-" + state.ifdocoOrder.lossDifference()),
+                                    span(" ("),
+                                    span(".profit-line", state.ifdocoOrder.buyProfit(state.currentPrice, state.size)),
+                                    span("/"),
+                                    span(".loss-line", state.ifdocoOrder.buyLoss(state.currentPrice, state.size)),
+                                    span(")")
+                                ])
                             ]),
                             p(".sell", [
-                                label(".label", "Sell: "),
-                                span(".profit", state.ifdocoOrder.sellProfitLine(state.currentPrice)),
-                                span(" / "),
-                                span(".loss", state.ifdocoOrder.sellLossLine(state.currentPrice))
+                                label(".label.sell", "Sell"),
+                                span(".right", [
+                                    span(".profit", "-" + state.ifdocoOrder.profitDifference()),
+                                    span("/"),
+                                    span(".loss", "+" + state.ifdocoOrder.lossDifference()),
+                                    span(" ("),
+                                    span(".profit-line", state.ifdocoOrder.sellProfit(state.currentPrice, state.size)),
+                                    span("/"),
+                                    span(".loss-line", state.ifdocoOrder.sellLoss(state.currentPrice, state.size)),
+                                    span(")")
+                                ])
                             ])
                         ]),
-                    ]),
-                    div(".profit-loss", [
-                        label(".label", "Calculated Profit / Loss"),
-                        p(".profit-number", [
-                            p(".buy", [
-                                label(".label", "Buy: "),
-                                span(".profit-line", state.ifdocoOrder.buyProfit(state.currentPrice, state.size)),
-                                span(" / "),
-                                span(".loss-line", state.ifdocoOrder.buyLoss(state.currentPrice, state.size))
-                            ]),
-                            p(".sell", [
-                                label(".label", "Sell: "),
-                                span(".profit-line", state.ifdocoOrder.sellProfit(state.currentPrice, state.size)),
-                                span(" / "),
-                                span(".loss-line", state.ifdocoOrder.sellLoss(state.currentPrice, state.size))
-                            ])
-                        ])
                     ]),
                     div(".price-width", [
                         label(".label", "Price width"),
                         input("#price-width-input", { attrs: { value: state.ifdocoOrder.width }})
                     ]),
                     div(".ratio", [
-                        label(".label", "Profit / Loss Ratio %"),
+                        label(".label", "Profit / Loss Ratio"),
                         input("#ratio-input", { attrs: { value: state.ifdocoOrder.ratio }})
                     ]),
                     div(".ranged-ifdoco-order-buttons.order-buttons", [
                         button(".sell-button", { attrs: { disabled: state.isOrdering || state.size === 0 || state.ifdocoOrder.width === 0 } }, "Sell"),
                         button(".buy-button", { attrs: { disabled: state.isOrdering || state.size === 0 || state.ifdocoOrder.width === 0 } },"Buy")
-                    ])
+                    ]),
                 ])
             ])
         );
