@@ -14,19 +14,19 @@ export class IFDOCOrder {
     }
 
     public buyProfitLine(currentPrice: number): number {
-        return currentPrice + this.width * this.ratio / 100
+        return currentPrice + this.profitDifference()
     }
 
     public buyLossLine(currentPrice: number): number {
-        return currentPrice - this.width * (100 - this.ratio) / 100
+        return currentPrice - this.lossDifference()
     }
 
     public sellProfitLine(currentPrice: number): number {
-        return currentPrice - this.width * this.ratio / 100
+        return currentPrice - this.profitDifference()
     }
 
     public sellLossLine(currentPrice: number): number {
-        return currentPrice + this.width * (100 - this.ratio) / 100
+        return currentPrice + this.lossDifference()
     }
 
     public buyProfit(currentPrice: number, size: number): number {
@@ -43,5 +43,13 @@ export class IFDOCOrder {
 
     public sellLoss(currentPrice: number, size: number): number {
         return (currentPrice - this.sellLossLine(currentPrice)) * size * -1
+    }
+
+    public profitDifference(): number {
+        return this.width * this.ratio / 100
+    }
+
+    public lossDifference(): number {
+        return this.width * (100 - this.ratio) / 100
     }
 }
