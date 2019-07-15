@@ -2,12 +2,26 @@ import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
 import sampleCombine from "xstream/extra/sampleCombine";
 import {Actions} from "./intent";
-import {cancelOrders, getOrders, getPositions, ifdocoOrder, limitOrder, marketOrder} from '../../http';
+import {
+    cancelOrders,
+    getOrders,
+    getParentOrder,
+    getParentOrders,
+    getPositions,
+    ifdocoOrder,
+    limitOrder,
+    marketOrder
+} from '../../http';
 import {State} from "./index";
 
 export const request = (actions: Actions, state$: Stream<State>): Stream<RequestInput> => {
-    const orders = Stream.periodic(5000).mapTo(getOrders()).startWith(getOrders());
-    const positions = Stream.periodic(5000).mapTo(getPositions()).startWith(getPositions());
+    const orders = Stream.periodic(10000).mapTo(getOrders()).startWith(getOrders());
+    const parentOrders = Stream.periodic(10000).mapTo(getParentOrders()).startWith(getParentOrders());
+    const positions = Stream.periodic(10000).mapTo(getPositions()).startWith(getPositions());
+
+    const ifdocoOrders = actions.onIFDOCOOrdersLoaded$
+        .map(orders => Stream.fromArray(orders.map(order => getParentOrder(order["parent_order_id"]))))
+        .flatten();
 
     const marketBuy = actions.onClickMarketBuyButton$
         .compose(sampleCombine(state$))
@@ -56,6 +70,7 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
 
     return Stream.merge(
         orders,
+        parentOrders,
         positions,
         marketBuy,
         marketSell,
@@ -63,6 +78,7 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
         limitSell,
         ifdocoBuy,
         ifdocoSell,
+        ifdocoOrders,
         clear,
         clearOrders
     );

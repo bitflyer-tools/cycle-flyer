@@ -12,7 +12,8 @@ const defaultState: State = {
     groupedSize: 1,
     orders: [],
     position: new Position([]),
-    price: 0
+    price: 0,
+    stopOrders: []
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {

@@ -3,10 +3,12 @@ import {MemoryStream, Stream} from 'xstream';
 import {Response, ResponseStream} from "@cycle/http";
 import {createOrderHistory, OrderHistory} from "../../models/orderHistory";
 import {Position} from "../../models/position";
+import {StopOrder} from "../../models/stopOrder";
 
 export interface Actions {
     onApiKeyLoaded$: Stream<string>;
     onApiSecretLoaded$: Stream<string>;
+    onCancelOrders$: Stream<null>;
     onClickClearButton$: Stream<null>;
     onClickClearOrderButton$: Stream<null>;
     onClickGroupSizePlusButton$: Stream<null>;
@@ -19,23 +21,31 @@ export interface Actions {
     onClickIFDOCOSellButton$: Stream<null>;
     onExecutionCreated$: Stream<object>;
     onHistoryCreated$: Stream<OrderHistory>;
+    onIFDOCOOrdersLoaded$: Stream<object[]>;
     onOrderCreated$: Stream<object>;
     onOrdersLoaded$: Stream<object>;
-    onPositionsLoaded$: Stream<object[]>;
+    onPositionsLoaded$: Stream<Position[]>;
     onPriceChanged$: Stream<number>;
     onSizeChanged$: Stream<number>;
+    onStopOrdersLoaded$: Stream<StopOrder[]>;
     onPriceWidthChanged$: Stream<number>;
     onRatioChanged$: Stream<number>;
 }
 
 export const intent = (sources: Sources): Actions => {
     const onApiKeyLoaded$ = sources.storage.local.getItem("api-key")
-        .filter(apiKey => apiKey && apiKey !== "")
+        .filter((apiKey: string) => apiKey && apiKey !== "")
         .take(1);
 
     const onApiSecretLoaded$ = sources.storage.local.getItem("api-secret")
-        .filter(apiSecret => apiSecret && apiSecret !== "")
+        .filter((apiSecret: string) => apiSecret && apiSecret !== "")
         .take(1);
+
+    const onCancelOrders$ = sources.HTTP.select("cancel-orders")
+        .map(response$ => response$.replaceError(() => Stream.of(null)))
+        .flatten()
+        .filter(response => !!response)
+        .mapTo(null);
 
     const onClickClearButton$ = sources.DOM.select(".clear-button")
         .events("click", { preventDefault: true })
@@ -77,6 +87,13 @@ export const intent = (sources: Sources): Actions => {
         sources.HTTP.select("ifdoco-order").map(stream => createIFDOCOHistoryStream(stream)).flatten()
     );
 
+    const onIFDOCOOrdersLoaded$ = sources.HTTP.select("parent-orders")
+        .map(response$ => response$.replaceError(() => Stream.of(null)))
+        .flatten()
+        .filter(response => !!response)
+        .map(response => JSON.parse(response.text))
+        .filter(orders => orders.filter(o => o["parent_order_type"] == "IFDOCO"));
+
     const onOrderCreated$ = sources.HTTP.select("market-order")
         .map(response$ => response$.replaceError(() => Stream.of(null)))
         .flatten()
@@ -88,6 +105,25 @@ export const intent = (sources: Sources): Actions => {
         .flatten()
         .filter(response => !!response)
         .map(response => JSON.parse(response.text));
+
+    const onStopOrdersLoaded$ = Stream.combine(
+        sources.HTTP.select("parent-orders")
+            .map(response$ => response$.replaceError(() => Stream.of(null)))
+            .flatten()
+            .filter(response => !!response)
+            .map(response => JSON.parse(response.text))
+            .filter(o => o["parent_order_type"] == "STOP")
+            .map(orders => orders.map(o => new StopOrder(o)))
+            .startWith([]),
+        sources.HTTP.select("parent-order")
+            .map(response$ => response$.replaceError(() => Stream.of(null)))
+            .flatten()
+            .filter(response => !!response)
+            .map(response => JSON.parse(response.text))
+            .map(o => o["parameters"].filter(or => or["condition_type"] == "STOP"))
+            .map(orders => orders.map(o => new StopOrder(o)))
+            .startWith([])
+    ).map(([s1, s2]) => s1.concat(s2));
 
     const onPositionsLoaded$ = sources.HTTP.select("positions")
         .map(response$ => response$.replaceError(() => Stream.of(null)))
@@ -127,6 +163,7 @@ export const intent = (sources: Sources): Actions => {
     return {
         onApiKeyLoaded$,
         onApiSecretLoaded$,
+        onCancelOrders$,
         onClickClearButton$,
         onClickClearOrderButton$,
         onClickGroupSizePlusButton$,
@@ -139,13 +176,15 @@ export const intent = (sources: Sources): Actions => {
         onClickIFDOCOSellButton$,
         onExecutionCreated$,
         onHistoryCreated$,
+        onIFDOCOOrdersLoaded$,
         onOrderCreated$,
         onOrdersLoaded$,
         onPositionsLoaded$,
         onPriceChanged$,
-        onSizeChanged$,
         onPriceWidthChanged$,
-        onRatioChanged$
+        onRatioChanged$,
+        onSizeChanged$,
+        onStopOrdersLoaded$
     };
 };
 

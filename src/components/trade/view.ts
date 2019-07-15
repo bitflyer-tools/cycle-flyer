@@ -33,7 +33,7 @@ export const view = (state$: Stream<State>, boardComponentDOM$: Stream<VNode>, s
                     h4(".sub-title", "Clear position"),
                     div(".order-buttons", [
                         button(".clear-button", { attrs: { disabled: state.isOrdering || state.position.size === 0 } }, "Clear Position"),
-                        button(".clear-order-button", { attrs: { disabled: state.isOrdering || state.orders.length === 0} }, "Clear Orders"),
+                        button(".clear-order-button", { attrs: { disabled: state.isOrdering || (state.orders.length === 0 && state.stopOrders.length === 0) } }, "Clear Orders"),
                     ]),
                     hr(),
                     h4(".sub-title", "Ranged IFDOCO"),
