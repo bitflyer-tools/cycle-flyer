@@ -16,6 +16,9 @@ jobs:
       - run:
           name: Test
           command: npm test
+      - run:
+          name: Lint
+          command: yarn lint
       - save_cache:
           paths:
             - ~/workspace/node_modules

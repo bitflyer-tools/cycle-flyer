@@ -11,9 +11,9 @@ export class StopOrder {
 
     public isExcuted(currentPrice: number): boolean {
         if (this.side === "BUY") {
-            return currentPrice >= this.price
+            return currentPrice >= this.price;
         } else {
-            return currentPrice <= this.price
+            return currentPrice <= this.price;
         }
     }
 }

@@ -20,20 +20,28 @@ export const view = (state$: Stream<State>, boardComponentDOM$: Stream<VNode>, s
                     h4(".sub-title", "Market"),
                     div(".market-order-buttons.order-buttons", [
                         button(".sell-button", { attrs: { disabled: state.isOrdering || state.size === 0 } }, "Sell"),
-                        button(".buy-button", { attrs: { disabled: state.isOrdering || state.size === 0 } },"Buy")
+                        button(".buy-button", { attrs: { disabled: state.isOrdering || state.size === 0 } }, "Buy"),
                     ]),
                     hr(),
                     h4(".sub-title", "Limit"),
                     div(".limit-order-buttons.order-buttons", [
                         input("#price-input", { attrs: { value: state.price }}),
                         button(".sell-button", { attrs: { disabled: state.isOrdering || state.size === 0 } }, "Sell"),
-                        button(".buy-button", { attrs: { disabled: state.isOrdering || state.size === 0 } },"Buy")
+                        button(".buy-button", { attrs: { disabled: state.isOrdering || state.size === 0 } }, "Buy"),
                     ]),
                     hr(),
                     h4(".sub-title", "Clear position"),
                     div(".order-buttons", [
-                        button(".clear-button", { attrs: { disabled: state.isOrdering || state.position.size === 0 } }, "Clear Position"),
-                        button(".clear-order-button", { attrs: { disabled: state.isOrdering || (state.orders.length === 0 && state.stopOrders.length === 0) } }, "Clear Orders"),
+                        button(
+                            ".clear-button",
+                            { attrs: { disabled: state.isOrdering || state.position.size === 0 } },
+                            "Clear Position",
+                        ),
+                        button(
+                            ".clear-order-button",
+                            { attrs: { disabled: clearOrderButtonDisabled(state) } },
+                            "Clear Orders",
+                        ),
                     ]),
                     hr(),
                     h4(".sub-title", "Ranged IFDOCO"),
@@ -49,8 +57,8 @@ export const view = (state$: Stream<State>, boardComponentDOM$: Stream<VNode>, s
                                     span(".profit-line", state.ifdocoOrder.buyProfit(state.currentPrice, state.size)),
                                     span("/"),
                                     span(".loss-line", state.ifdocoOrder.buyLoss(state.currentPrice, state.size)),
-                                    span(")")
-                                ])
+                                    span(")"),
+                                ]),
                             ]),
                             p(".sell", [
                                 label(".label.sell", "Sell"),
@@ -62,23 +70,29 @@ export const view = (state$: Stream<State>, boardComponentDOM$: Stream<VNode>, s
                                     span(".profit-line", state.ifdocoOrder.sellProfit(state.currentPrice, state.size)),
                                     span("/"),
                                     span(".loss-line", state.ifdocoOrder.sellLoss(state.currentPrice, state.size)),
-                                    span(")")
-                                ])
-                            ])
+                                    span(")"),
+                                ]),
+                            ]),
                         ]),
                     ]),
                     div(".price-width", [
                         label(".label", "Price width"),
-                        input("#price-width-input", { attrs: { value: state.ifdocoOrder.width }})
+                        input("#price-width-input", { attrs: { value: state.ifdocoOrder.width }}),
                     ]),
                     div(".ratio", [
                         label(".label", "Profit / Loss Ratio"),
-                        input("#ratio-input", { attrs: { value: state.ifdocoOrder.ratio }})
+                        input("#ratio-input", { attrs: { value: state.ifdocoOrder.ratio }}),
                     ]),
                     div(".ranged-ifdoco-order-buttons.order-buttons", [
-                        button(".sell-button", { attrs: { disabled: state.isOrdering || state.size === 0 || state.ifdocoOrder.width === 0 } }, "Sell"),
-                        button(".buy-button", { attrs: { disabled: state.isOrdering || state.size === 0 || state.ifdocoOrder.width === 0 } },"Buy")
+                        button("sell-button", { attrs: { disabled: tradeButtonDisabled(state) } }, "Sell"),
+                        button(".buy-button", { attrs: { disabled: tradeButtonDisabled(state) } }, "Buy"),
                     ]),
-                ])
-            ])
+                ]),
+            ]),
         );
+
+const clearOrderButtonDisabled = (state: State): boolean =>
+    state.isOrdering || (state.orders.length + state.stopOrders.length) === 0;
+
+const tradeButtonDisabled = (state: State): boolean =>
+    state.isOrdering || state.size === 0 || state.ifdocoOrder.width === 0;

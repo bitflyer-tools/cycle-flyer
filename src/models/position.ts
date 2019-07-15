@@ -1,4 +1,8 @@
 export class Position {
+
+    private static round(n: number): number {
+        return Math.round(n * 100000000) / 100000000;
+    }
     public side: string;
     public size: number;
     public price: number;
@@ -8,7 +12,7 @@ export class Position {
             this.side = "";
             this.size = 0;
             this.price = 0;
-            return
+            return;
         }
 
         const size = positions.reduce((acc, position) => acc + position.size, 0.0);
@@ -24,26 +28,19 @@ export class Position {
     }
 
     public toPriceString(): string {
-        if (this.price === 0) return "None";
+        if (this.price === 0) { return "None"; }
         return this.price.toLocaleString();
-    };
-
+    }
     public toSizeString(): string {
-        if (this.size === 0) return "None";
+        if (this.size === 0) { return "None"; }
         return this.size.toString();
     }
 
     public toDiffString(currentPrice: number): string {
-        if (this.price === 0) return "None";
+        if (this.price === 0) { return "None"; }
         return (currentPrice - this.price).toLocaleString().replace("-", "- ");
-    };
-
-    public toProfitString(currentPrice: number): string {
-        if (this.price === 0) return "None";
-        return this.profit(currentPrice).toLocaleString().replace("-", "- ");
-    };
-
-    private static round(number: number): number {
-        return Math.round(number * 100000000) / 100000000;
     }
-}
+    public toProfitString(currentPrice: number): string {
+        if (this.price === 0) { return "None"; }
+        return this.profit(currentPrice).toLocaleString().replace("-", "- ");
+    }}

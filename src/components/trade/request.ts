@@ -1,7 +1,6 @@
 import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
 import sampleCombine from "xstream/extra/sampleCombine";
-import {Actions} from "./intent";
 import {
     cancelOrders,
     getOrders,
@@ -10,9 +9,10 @@ import {
     getPositions,
     ifdocoOrder,
     limitOrder,
-    marketOrder
-} from '../../http';
+    marketOrder,
+} from "../../http";
 import {State} from "./index";
+import {Actions} from "./intent";
 
 export const request = (actions: Actions, state$: Stream<State>): Stream<RequestInput> => {
     const orders = Stream.periodic(10000).mapTo(getOrders()).startWith(getOrders());
@@ -20,7 +20,7 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
     const positions = Stream.periodic(10000).mapTo(getPositions()).startWith(getPositions());
 
     const ifdocoOrders = actions.onIFDOCOOrdersLoaded$
-        .map(orders => Stream.fromArray(orders.map(order => getParentOrder(order["parent_order_id"]))))
+        .map((os) => Stream.fromArray(os.map((order) => getParentOrder(order.parent_order_id))))
         .flatten();
 
     const marketBuy = actions.onClickMarketBuyButton$
@@ -44,7 +44,7 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
         .map(([_, state]) => marketOrder(state.position.size, state.position.side === "BUY" ? "SELL" : "BUY"));
 
     const clearOrders = actions.onClickClearOrderButton$
-        .map(_ => cancelOrders());
+        .map((_) => cancelOrders());
 
     const ifdocoBuy = actions.onClickIFDOCOBuyButton$
         .compose(sampleCombine(state$))
@@ -53,8 +53,8 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
                 state.ifdocoOrder.buyProfitLine(state.currentPrice),
                 state.ifdocoOrder.buyLossLine(state.currentPrice),
                 state.size,
-                "BUY"
-            )
+                "BUY",
+            ),
         );
 
     const ifdocoSell = actions.onClickIFDOCOSellButton$
@@ -64,8 +64,8 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
                 state.ifdocoOrder.sellProfitLine(state.currentPrice),
                 state.ifdocoOrder.sellLossLine(state.currentPrice),
                 state.size,
-                "SELL"
-            )
+                "SELL",
+            ),
         );
 
     return Stream.merge(
@@ -80,6 +80,6 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<Request
         ifdocoSell,
         ifdocoOrders,
         clear,
-        clearOrders
+        clearOrders,
     );
 };

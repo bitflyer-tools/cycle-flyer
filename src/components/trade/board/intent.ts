@@ -1,4 +1,4 @@
-import {Stream} from 'xstream';
+import {Stream} from "xstream";
 import {Board} from "../../../models/board";
 import {Sources} from "../index";
 
@@ -15,20 +15,20 @@ export const intent = (sources: Sources): Actions => {
     const onBoardLoaded$ = sources.socket.board$;
 
     const onBoardSnapshotLoaded$ = sources.HTTP.select("board")
-        .map(response$ => response$.replaceError(() => Stream.of(null)))
+        .map((response$) => response$.replaceError(() => Stream.of(null)))
         .flatten()
-        .filter(response => !!response)
-        .map(response => new Board(JSON.parse(response.text)));
+        .filter((response) => !!response)
+        .map((response) => new Board(JSON.parse(response.text)));
 
     const onClickAsk$ = sources.DOM.select(".ask")
         .events("click")
-        .map(event => event.currentTarget as HTMLElement)
-        .map(target => +target.dataset.price);
+        .map((event) => event.currentTarget as HTMLElement)
+        .map((target) => +target.dataset.price);
 
     const onClickBid$ = sources.DOM.select(".bid")
         .events("click")
-        .map(event => event.currentTarget as HTMLElement)
-        .map(target => +target.dataset.price);
+        .map((event) => event.currentTarget as HTMLElement)
+        .map((target) => +target.dataset.price);
 
     const onClickGroupSizePlusButton$ = sources.DOM.select(".board-header").select(".plus")
         .events("click")
@@ -43,7 +43,7 @@ export const intent = (sources: Sources): Actions => {
         onBoardSnapshotLoaded$,
         onClickAsk$,
         onClickBid$,
+        onClickGroupSizeMinusButton$,
         onClickGroupSizePlusButton$,
-        onClickGroupSizeMinusButton$
     };
 };
