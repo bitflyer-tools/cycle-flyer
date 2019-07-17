@@ -2124,8 +2124,9 @@ now-pipeline@latest:
     ramda "0.25.0"
 
 now@latest:
-  version "15.6.2"
-  resolved "https://registry.yarnpkg.com/now/-/now-15.6.2.tgz#2baba11392ec5d131465b1f8c0684b35222922bf"
+  version "15.8.0"
+  resolved "https://registry.yarnpkg.com/now/-/now-15.8.0.tgz#0f7c41d76162c6163953a98e0a7e05437357dfc8"
+  integrity sha512-0RfVPAyzI6oR6IN0oxsMrANXXvyVZ34//VDGZ+Z4xW4DxtAxB5bls2m1VXpqmyu2Asc7RrdHOL9XthNE+70OXA==
 
 npm-bundled@^1.0.1:
   version "1.0.6"
