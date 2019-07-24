@@ -20,7 +20,7 @@ export const view = (state$: Stream<State>) =>
                     span("Spread"),
                     span(".spread", state.board.spread().toLocaleString()),
                 ]),
-                div(".asks", state.board.groupedAsks(state.groupedSize).map((ask: BoardOrder) =>
+                div(".asks", state.board.groupedAsks(state.groupedSize).slice(0, 200).map((ask: BoardOrder) =>
                     div(".ask", { dataset: { price: ask.price } }, [
                         span(".bar", { style: barStyle(ask.size) }),
                         myPosition(state, ask),
@@ -30,7 +30,7 @@ export const view = (state$: Stream<State>) =>
                         span(ask.price.toLocaleString()),
                     ]),
                 )),
-                div(".bids", state.board.groupedBids(state.groupedSize).map((bid: BoardOrder) =>
+                div(".bids", state.board.groupedBids(state.groupedSize).slice(0, 200).map((bid: BoardOrder) =>
                     div(".bid", { dataset: { price: bid.price } }, [
                         span(".bar", { style: barStyle(bid.size) } ),
                         span(bid.price.toLocaleString()),
