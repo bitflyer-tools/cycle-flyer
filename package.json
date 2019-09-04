@@ -16,7 +16,7 @@
     "cyclic-router": "^6.0.0",
     "fuse-box": "^3.0.0-nex.26",
     "hash.js": "^1.1.7",
-    "http-proxy-middleware": "^0.19.1",
+    "http-proxy-middleware": "^0.20.0",
     "now": "latest",
     "now-pipeline": "latest",
     "serve": "latest",
