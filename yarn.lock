@@ -18,14 +18,14 @@
     esutils "^2.0.2"
     js-tokens "^4.0.0"
 
-"@cycle/dom@^22.2.0", "@cycle/dom@^22.3.0":
-  version "22.3.0"
-  resolved "https://registry.yarnpkg.com/@cycle/dom/-/dom-22.3.0.tgz#d103071b6135305ead46579d8ab340be5ffede70"
-  integrity sha512-7VMGsiQsHp8cHD+o3HcuOrvHkTlS7TY1aNyLoEJD0p5cWmxzaiotapFH+6rDpNq4FzuiIeZLR5SPHVNEt9pBQA==
+"@cycle/dom@^22.2.0", "@cycle/dom@^22.4.0":
+  version "22.4.0"
+  resolved "https://registry.yarnpkg.com/@cycle/dom/-/dom-22.4.0.tgz#51edcab0328a547fb17609156f44f71ff44d2782"
+  integrity sha512-tJQA+i+iK4L2Z0wy+bVTE3agsq1xAuGK2TjKalb51bIP5lHxffoFFb+RYAxwwcLDPxejruSSVUcg3GQn8lp7Lw==
   dependencies:
     "@cycle/run" "^5.2.0"
     snabbdom "^0.7.2"
-    snabbdom-selector "^4.1.0"
+    snabbdom-selector "^4.2.0"
     xstream "11.x"
 
 "@cycle/history@^7.2.0":
@@ -2789,12 +2789,12 @@ signal-exit@^3.0.0, signal-exit@^3.0.2:
   version "3.0.2"
   resolved "https://registry.yarnpkg.com/signal-exit/-/signal-exit-3.0.2.tgz#b5fdc08f1287ea1178628e415e25132b73646c6d"
 
-snabbdom-selector@^4.1.0:
-  version "4.1.0"
-  resolved "https://registry.yarnpkg.com/snabbdom-selector/-/snabbdom-selector-4.1.0.tgz#209c0bd9478fc654892b4704fb40bafe556fa4c7"
-  integrity sha512-NDWOVSUR6yPlxH2F9XRwnF59UObLnItfSXcIw6+azkyrEDqT2c8pZ85UHvjijsgdve3g19qsC0/69tB5eZqTvA==
+snabbdom-selector@^4.2.0:
+  version "4.2.0"
+  resolved "https://registry.yarnpkg.com/snabbdom-selector/-/snabbdom-selector-4.2.0.tgz#f5a2719eecfbebf5da18a6bf96f0d9008b4d66c3"
+  integrity sha512-hNIg1xDMxssUeMC/4r3OGxXhm8pbyJ0KIG0pXrA3J5ZQK+FkPa+WA9DYw4ROMLq5/LrfurMNMvy3IMm+0CzcnA==
   dependencies:
-    tree-selector "^2.0.0"
+    tree-selector "^2.1.0"
 
 snabbdom-to-html@5.1.1:
   version "5.1.1"
@@ -3120,10 +3120,10 @@ tough-cookie@~2.4.3:
     psl "^1.1.24"
     punycode "^1.4.1"
 
-tree-selector@^2.0.0:
-  version "2.1.0"
-  resolved "https://registry.yarnpkg.com/tree-selector/-/tree-selector-2.1.0.tgz#281439d6df074ca9f629ecc409407c7c50a41ac8"
-  integrity sha512-Giao15zxN5PvdzJv7HDubn3aSrlsWD9TG9xngYkiuChhIgPH6cQqvCGV5sJ/sWahm7nRtPx46hKax81eyz1sOg==
+tree-selector@^2.1.0:
+  version "2.1.1"
+  resolved "https://registry.yarnpkg.com/tree-selector/-/tree-selector-2.1.1.tgz#644af6c3aa361aabdd8ae545b58f82155884fc17"
+  integrity sha512-NVFYU6YzyUHSMS7+qbhdHlBHG5P9IPjycQa+8MnIBDpq/UWEkMD+lAL/56x7Fty+mAq9SWgtg9D4flZfuOZdDg==
 
 tslib@^1.8.0, tslib@^1.8.1, tslib@^1.9.0:
   version "1.10.0"
