@@ -49,10 +49,10 @@
     snabbdom-to-html "5.1.1"
     xstream "11.x"
 
-"@cycle/http@15.1.0":
-  version "15.1.0"
-  resolved "https://registry.yarnpkg.com/@cycle/http/-/http-15.1.0.tgz#90d367268eab6a53b3a9ddba9c8df2812f2a6883"
-  integrity sha512-uc89K8G7cgNjmnmuGAAmlDORHAmZXi2x3AOXcmIPlTWCSMEzYlCq2n5r27EiEez+RRgEbI2ZquOh/V1AEOSvtA==
+"@cycle/http@15.2.0":
+  version "15.2.0"
+  resolved "https://registry.yarnpkg.com/@cycle/http/-/http-15.2.0.tgz#c6c8e0e8be156c913062a37b37502e3c0f35abd4"
+  integrity sha512-+Xv8kv247CLzCo9UkDu8Z3QUm6l+G7A200L2KHTAVd7pjA+4w2LF4MQdJ9csNmCG0t25V8NFpfcJtqsN/r9AsQ==
   dependencies:
     "@cycle/run" "^5.2.0"
     "@types/superagent" "3.8.4"
