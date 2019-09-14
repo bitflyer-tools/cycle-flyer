@@ -2,7 +2,7 @@ const { CSSPlugin, FuseBox, StylusPlugin } = require('fuse-box');
 
 const fuse = FuseBox.init({
   homeDir: 'src',
-  output: 'dist/$name.js',
+  output: 'public/$name.js',
   target: "browser",
   sourceMaps: { project: true, vendor: true },
   plugins: [
@@ -10,7 +10,7 @@ const fuse = FuseBox.init({
       StylusPlugin({ compress: true }),
       CSSPlugin({
         group: "main.css",
-        outFile: "dist/main.css",
+        outFile: "public/main.css",
         inject: false
       })
     ]

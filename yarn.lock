@@ -1248,9 +1248,10 @@ fstream@^1.0.0:
     mkdirp ">=0.5 0"
     rimraf "2"
 
-fuse-box@^3.0.0-nex.26:
+fuse-box@^3.7.1:
   version "3.7.1"
   resolved "https://registry.yarnpkg.com/fuse-box/-/fuse-box-3.7.1.tgz#d32879ceee4c8bcec9bbd8fcfe5b29e7142371cd"
+  integrity sha512-aM7t9bUcRpNNQu9M+YjXXzx9JSJQVPWeY+8iTyv7OhvJNWHrqqEWPzbn9OfcyFa2AfPwAUyC/uzWexBbjtTvsA==
   dependencies:
     acorn "^5.7.3"
     acorn-jsx "^4.0.1"
