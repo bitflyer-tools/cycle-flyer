@@ -14,7 +14,7 @@
     "@cycle/storage": "^5.0.3",
     "@types/socket.io-client": "^1.4.32",
     "cyclic-router": "^6.0.0",
-    "fuse-box": "^3.0.0-nex.26",
+    "fuse-box": "^3.7.1",
     "hash.js": "^1.1.7",
     "http-proxy-middleware": "^0.20.0",
     "now": "latest",
@@ -29,9 +29,9 @@
   "scripts": {
     "build": "node fuse",
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
-    "start": "serve .",
+    "start": "serve ./public",
     "watch": "node fuse.dev",
-    "deploy": "now --public --token=$NOW_TOKEN && now alias --token=$NOW_TOKEN && now-pipeline-prune"
+    "deploy": "now --public --token=$NOW_TOKEN --prod && now-pipeline-prune"
   },
   "author": "unhappychoice",
   "license": "MIT",
