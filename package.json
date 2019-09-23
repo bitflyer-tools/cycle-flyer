@@ -20,7 +20,7 @@
     "now": "latest",
     "now-pipeline": "latest",
     "serve": "latest",
-    "socket.io-client": "^2.2.0",
+    "socket.io-client": "^2.3.0",
     "stylus": "^0.54.7",
     "switch-path": "^1.2.0",
     "typescript": "^3.6.3",
