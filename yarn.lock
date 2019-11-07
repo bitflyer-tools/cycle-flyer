@@ -28,10 +28,10 @@
     snabbdom-selector "^4.2.0"
     xstream "11.x"
 
-"@cycle/history@^7.3.0":
-  version "7.3.0"
-  resolved "https://registry.yarnpkg.com/@cycle/history/-/history-7.3.0.tgz#37d317bdf11973c5a4767c65b15491087c8512ce"
-  integrity sha512-JO7emQUUT9mYmP8H5rDv5/UHcIcRJnL6kT9CtXQbetiiPt7w/2YbHg2bfKvgdF+FQu6TLQMUgxDYbxMl/nZM7Q==
+"@cycle/history@^7.4.0":
+  version "7.4.0"
+  resolved "https://registry.yarnpkg.com/@cycle/history/-/history-7.4.0.tgz#83868a4d68c933cfdb89b16d85aad0ccec5b40a0"
+  integrity sha512-lNE9H0a1XXHR6fXP2gu0z7mQ8e0kxpA30ZQMALHFtuajVO0sN/vLlb9o/9+yQhcreN3qWQM6lImV6pXpFrQUgg==
   dependencies:
     "@cycle/run" "^5.2.0"
     "@types/history" "^4.7.2"
