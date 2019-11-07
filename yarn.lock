@@ -61,10 +61,10 @@
     superagent "^3.8.3"
     xstream "11.x"
 
-"@cycle/isolate@^5.0.0", "@cycle/isolate@^5.1.0":
-  version "5.1.0"
-  resolved "https://registry.yarnpkg.com/@cycle/isolate/-/isolate-5.1.0.tgz#40ef9f863d0ba10d30c2c908a6b9d444381d17e3"
-  integrity sha512-erR7ZYhZ6V47sIooCI2NArpe9IcMQlF/8NX4nG4nog108Q7KERI3eEigB3Du1gpHi+XhhwUvf9wI+i5cqXz+cQ==
+"@cycle/isolate@^5.0.0", "@cycle/isolate@^5.2.0":
+  version "5.2.0"
+  resolved "https://registry.yarnpkg.com/@cycle/isolate/-/isolate-5.2.0.tgz#42150b2d6ffabf35e745acc8baee5184dda9c474"
+  integrity sha512-BLyyd/EceQnuGaUVSBotdZkBEUeJq1zMbdK7LPdc7WMiJbinkduHue+rOe3BGbK3Ba7LGt7kjRBEfzLke9FGkg==
   dependencies:
     "@cycle/run" "^5.2.0"
     xstream "^11.7.0"
