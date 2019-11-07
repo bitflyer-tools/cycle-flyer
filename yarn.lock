@@ -38,10 +38,10 @@
     history "4.7.x"
     xstream "11.x"
 
-"@cycle/html@^3.2.0":
-  version "3.2.0"
-  resolved "https://registry.yarnpkg.com/@cycle/html/-/html-3.2.0.tgz#608a67ca6ee4c9eb15afa38f4c8370e65c476a89"
-  integrity sha512-dnVfrI187v9q05CB9ZwJyS04X8KUx+lmNUUAAz63uyfei06r/2aK/iLsTSTpwgoFnJoEiixl+2skgTELDy36bw==
+"@cycle/html@^3.3.0":
+  version "3.3.0"
+  resolved "https://registry.yarnpkg.com/@cycle/html/-/html-3.3.0.tgz#287870dbd31f14556f0bd0656e00b73073892e61"
+  integrity sha512-9/0MgNMhiGccRxp7Xj0XdUJFv+gN7FCm5G4T/pXZogqtB10U9f2Q+b7gAmKUCdPazmZIMUypnSNrnTbsa7uCBg==
   dependencies:
     "@cycle/dom" "^22.2.0"
     "@cycle/run" "^5.2.0"
