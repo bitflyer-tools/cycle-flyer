@@ -18,13 +18,13 @@
     esutils "^2.0.2"
     js-tokens "^4.0.0"
 
-"@cycle/dom@^22.2.0", "@cycle/dom@^22.4.0":
-  version "22.4.0"
-  resolved "https://registry.yarnpkg.com/@cycle/dom/-/dom-22.4.0.tgz#51edcab0328a547fb17609156f44f71ff44d2782"
-  integrity sha512-tJQA+i+iK4L2Z0wy+bVTE3agsq1xAuGK2TjKalb51bIP5lHxffoFFb+RYAxwwcLDPxejruSSVUcg3GQn8lp7Lw==
+"@cycle/dom@^22.2.0", "@cycle/dom@^22.6.0":
+  version "22.6.0"
+  resolved "https://registry.yarnpkg.com/@cycle/dom/-/dom-22.6.0.tgz#08b57b202c598b47da1dd55e50612a7c0ba7ff64"
+  integrity sha512-87hg0nzpQf7ofSQ66eF4qMpLyx099sqCO8C57BQy6lZeczsNBvmZCcXsOkJP1Eca5euJnMwe9jxFez3F4Tep5Q==
   dependencies:
     "@cycle/run" "^5.2.0"
-    snabbdom "^0.7.2"
+    snabbdom "^0.7.4"
     snabbdom-selector "^4.2.0"
     xstream "11.x"
 
@@ -2835,10 +2835,10 @@ snabbdom@0.7.2:
   resolved "https://registry.yarnpkg.com/snabbdom/-/snabbdom-0.7.2.tgz#e9d3930e6374ef8766706ccee4c6ed7b331afa64"
   integrity sha512-rDY283fYUB/3z2tjXsRRccsbVJqmGLtP+iI1tfa1DDHo2xZ49cq1leq9JmYyvZQhESuYJRY/is6WYhP2UuiRVg==
 
-snabbdom@^0.7.2:
-  version "0.7.3"
-  resolved "https://registry.yarnpkg.com/snabbdom/-/snabbdom-0.7.3.tgz#27b29b41228779ae5d99696a07edaaff4912fc54"
-  integrity sha512-XNh90GQiV36hWdfSL46fIVrSSvmBuZlWk3++qaEgBeQWQJCqTphcbjTODPv8/vyZHJaB3VhePsWfGxi/zBxXyw==
+snabbdom@^0.7.4:
+  version "0.7.4"
+  resolved "https://registry.yarnpkg.com/snabbdom/-/snabbdom-0.7.4.tgz#817f07e8d3fb870960c3763b8da56f1ba982d31a"
+  integrity sha512-nnN+7uZ2NTIiu7EPMNwSDhmrYXqwlfCP/j72RdzvDPujXyvQxOW7Jl9yuLayzxMHDNWQR7FM6Pcn4wnDpKRe6Q==
 
 snapdragon-node@^2.0.1:
   version "2.1.1"
