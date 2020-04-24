@@ -18,10 +18,10 @@
     esutils "^2.0.2"
     js-tokens "^4.0.0"
 
-"@cycle/dom@^22.2.0", "@cycle/dom@^22.6.0":
-  version "22.6.0"
-  resolved "https://registry.yarnpkg.com/@cycle/dom/-/dom-22.6.0.tgz#08b57b202c598b47da1dd55e50612a7c0ba7ff64"
-  integrity sha512-87hg0nzpQf7ofSQ66eF4qMpLyx099sqCO8C57BQy6lZeczsNBvmZCcXsOkJP1Eca5euJnMwe9jxFez3F4Tep5Q==
+"@cycle/dom@^22.2.0", "@cycle/dom@^22.7.0":
+  version "22.7.0"
+  resolved "https://registry.yarnpkg.com/@cycle/dom/-/dom-22.7.0.tgz#91b97fdc90129f3a2a73d908adb101c2a5abbf94"
+  integrity sha512-QR6R7lqRTRFdbSVSptPIXLtbJS1DOmSjibwaazrRbLmty9nhtdZDsuzFk6np/R2m8ScfkWSLPPMjVwy0gImSwg==
   dependencies:
     "@cycle/run" "^5.2.0"
     snabbdom "^0.7.4"
