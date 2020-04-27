@@ -36,6 +36,6 @@
   "author": "unhappychoice",
   "license": "MIT",
   "devDependencies": {
-    "tslint": "^6.1.1"
+    "tslint": "^6.1.2"
   }
 }
