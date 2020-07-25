@@ -31,7 +31,7 @@
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
     "start": "serve ./public",
     "watch": "node fuse.dev",
-    "deploy": "now --public --token=$NOW_TOKEN --prod && now-pipeline-prune"
+    "deploy": "now --public --token=$NOW_TOKEN --prod -c && now-pipeline-prune"
   },
   "author": "unhappychoice",
   "license": "MIT",
