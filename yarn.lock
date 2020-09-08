@@ -3954,9 +3954,9 @@ xmlhttprequest-ssl@~1.5.4:
   resolved "https://registry.yarnpkg.com/xmlhttprequest-ssl/-/xmlhttprequest-ssl-1.5.5.tgz#c2876b06168aadc40e57d97e81191ac8f4398b3e"
 
 "xstream@10.x || 11.x", xstream@11.x, xstream@11.x.x, xstream@>=11, xstream@^11.7.0:
-  version "11.12.0"
-  resolved "https://registry.yarnpkg.com/xstream/-/xstream-11.12.0.tgz#a85fded069cc8ac3aedc9538e5d94ab6d0ce845a"
-  integrity sha512-rceZqhyRPJdmDNh8hyFEnOacNrL4pTVkNZzoLvFqOVaIZHbM3bS15ycqI5V9eJXCRMfgEapwzcNzPjkIRUkv2Q==
+  version "11.13.0"
+  resolved "https://registry.yarnpkg.com/xstream/-/xstream-11.13.0.tgz#5c566be4c2e2f74a7a876d5e08d1ed8e039bfb70"
+  integrity sha512-IiTO53rJ+Y5Jj7qMq0f3nwWU1KsajkJkzudTXJa/f3DQ1ifw5O6z/IFZuYF4osfPKhU85jyGaSfY3zqdiMNTVw==
   dependencies:
     symbol-observable "1.2.0"
 
