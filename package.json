@@ -23,7 +23,7 @@
     "socket.io-client": "^2.3.0",
     "stylus": "^0.54.8",
     "switch-path": "^1.2.0",
-    "typescript": "^4.0.2",
+    "typescript": "^4.0.3",
     "xstream": "11.x.x"
   },
   "scripts": {
