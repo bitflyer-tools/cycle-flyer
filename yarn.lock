@@ -87,10 +87,10 @@
     quicktask "1.1.0"
     xstream ">=11"
 
-"@cycle/storage@^5.0.3":
-  version "5.0.3"
-  resolved "https://registry.yarnpkg.com/@cycle/storage/-/storage-5.0.3.tgz#9484e9f0b6c44abf5395c9ca5b008d3626e6b64f"
-  integrity sha512-W3TPfSRB/npttFaOwWAN5CkBrR0dlQzHE+c0w8ZPN99F/sS8AcTuz4qlxTQrgNXIpRTFRoG7fgJFanG/B3trIA==
+"@cycle/storage@^5.1.2":
+  version "5.1.2"
+  resolved "https://registry.yarnpkg.com/@cycle/storage/-/storage-5.1.2.tgz#445b1b32409bd27c3e6ee1c5a2f93d7b31afdcdd"
+  integrity sha512-Lz9LoHCa7wpGfTexbj5x2Xqa360lImmsPiLvci7z6ocEL8+qwx9IBSJlKp10N8BMoePQbOshmKfja5bntTGGng==
 
 "@most/multicast@^1.2.5":
   version "1.3.0"
