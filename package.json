@@ -14,7 +14,7 @@
     "@cycle/storage": "^5.1.2",
     "@types/socket.io-client": "^1.4.34",
     "cyclic-router": "^6.0.0",
-    "fuse-box": "^3.7.1",
+    "fuse-box": "^4.0.0",
     "hash.js": "^1.1.7",
     "http-proxy-middleware": "^1.0.6",
     "now": "latest",
