@@ -3,3 +3,4 @@ public/index.js
 public/main.css
 
 .vercel
+out/

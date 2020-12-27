@@ -1,10 +1,11 @@
-import * as SocketIOClient from "socket.io-client";
+import * as io from "socket.io-client";
 import Stream from "xstream";
+import Socket = SocketIOClient.Socket;
 
 export const makeSocketIODriver = () => (): SocketIOSource => {
     const serverURL = "https://io.lightstream.bitflyer.com";
     const options = { transports: ["websocket"] };
-    return new SocketIOSource(SocketIOClient(serverURL, options));
+    return new SocketIOSource(io(serverURL, options));
 };
 
 export class SocketIOSource {
@@ -19,7 +20,7 @@ export class SocketIOSource {
         "lightning_executions_FX_BTC_JPY",
     ];
 
-    constructor(client: SocketIOClient.Socket) {
+    constructor(client: Socket) {
         client.on("connect", () => {
             this.channelNames.forEach((channelName) => client.emit("subscribe", channelName));
         });
