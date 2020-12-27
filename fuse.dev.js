@@ -19,11 +19,7 @@ const fuse = FuseBox.init({
 fuse.bundle("index").instructions("> index.ts").watch().hmr();
 fuse.dev({
   root: "./public",
-  proxy: {
-    '**': {
-      target: 'http://localhost:4444',
-      pathRewrite: { "^/.*": "" }
-    }
-  }
+  port: 4444,
+  fallback: 'index.html',
 });
 fuse.run();
