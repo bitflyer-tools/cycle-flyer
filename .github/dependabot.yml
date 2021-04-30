@@ -1,0 +1,29 @@
+version: 2
+updates:
+- package-ecosystem: npm
+  directory: "/"
+  schedule:
+    interval: daily
+    time: "12:00"
+    timezone: Asia/Tokyo
+  open-pull-requests-limit: 20
+  reviewers:
+  - unhappychoice
+  ignore:
+  - dependency-name: http-proxy-middleware
+    versions:
+    - 1.1.1
+    - 1.1.2
+    - 1.2.0
+  - dependency-name: electron
+    versions:
+    - 11.3.0
+    - 12.0.1
+    - 12.0.4
+  - dependency-name: typescript
+    versions:
+    - 4.1.4
+    - 4.2.2
+  - dependency-name: socket.io-client
+    versions:
+    - 3.1.0
