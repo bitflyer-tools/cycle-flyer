@@ -4784,10 +4784,10 @@ snabbdom@^0.7.4:
   resolved "https://registry.yarnpkg.com/snabbdom/-/snabbdom-0.7.4.tgz#817f07e8d3fb870960c3763b8da56f1ba982d31a"
   integrity sha512-nnN+7uZ2NTIiu7EPMNwSDhmrYXqwlfCP/j72RdzvDPujXyvQxOW7Jl9yuLayzxMHDNWQR7FM6Pcn4wnDpKRe6Q==
 
-socket.io-client@^4.0.0:
-  version "4.0.0"
-  resolved "https://registry.yarnpkg.com/socket.io-client/-/socket.io-client-4.0.0.tgz#643cc25e5b5bbe37be75ecd317156a3335bb495a"
-  integrity sha512-27yQxmXJAEYF19Ygyl8FPJ0if0wegpSmkIIbrWJeI7n7ST1JyH8bbD5v3fjjGY5cfCanACJ3dARUAyiVFNrlTQ==
+socket.io-client@^4.0.2:
+  version "4.0.2"
+  resolved "https://registry.yarnpkg.com/socket.io-client/-/socket.io-client-4.0.2.tgz#bcbfc1a5b075167cbc9180aabebc6f8b3a83f462"
+  integrity sha512-z6Hw9Cs+cc7BEkSPlDrtHFpAI++xXMklG9iEEyPJdK4WcFcVrhrXcczYVDZmV3GIpFed5hL3LEXhpnmMy8DqDg==
   dependencies:
     "@types/component-emitter" "^1.2.10"
     backo2 "~1.0.2"
