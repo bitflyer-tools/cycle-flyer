@@ -108,6 +108,17 @@
     ora "^5.0.0"
     pretty-ms "^7.0.0"
 
+"@electron-forge/async-ora@6.0.0-beta.57":
+  version "6.0.0-beta.57"
+  resolved "https://registry.yarnpkg.com/@electron-forge/async-ora/-/async-ora-6.0.0-beta.57.tgz#14da07e663ff62b47fef6ae489d4a679790715c2"
+  integrity sha512-pinf6bB5etIKNwFgMx2V+kwsFlkjU4mApALv0Jn/lmcH5dlAB4zPwuKTccC44xVO4pp/bV1HWb1XJ4lHVxYaJg==
+  dependencies:
+    colors "^1.4.0"
+    debug "^4.3.1"
+    log-symbols "^4.0.0"
+    ora "^5.0.0"
+    pretty-ms "^7.0.0"
+
 "@electron-forge/cli@^6.0.0-beta.54":
   version "6.0.0-beta.54"
   resolved "https://registry.yarnpkg.com/@electron-forge/cli/-/cli-6.0.0-beta.54.tgz#5105b1eab38f8f66d39903174f49428c155dbb0e"
@@ -239,6 +250,15 @@
     fs-extra "^9.0.1"
     which "^2.0.2"
 
+"@electron-forge/maker-base@6.0.0-beta.57":
+  version "6.0.0-beta.57"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-6.0.0-beta.57.tgz#b30d7734360a96115667f59abab3d76f77cf6d87"
+  integrity sha512-VnoSCeyCHBv9q0Bz9JRgKC1b4k3z/Qb2T9DrpMqEVW6ClZVkOAZVmjyEtb+Xn8DnRPc4UtSjpAquycC/AZJ4MQ==
+  dependencies:
+    "@electron-forge/shared-types" "6.0.0-beta.57"
+    fs-extra "^10.0.0"
+    which "^2.0.2"
+
 "@electron-forge/maker-deb@^6.0.0-beta.54":
   version "6.0.0-beta.54"
   resolved "https://registry.yarnpkg.com/@electron-forge/maker-deb/-/maker-deb-6.0.0-beta.54.tgz#00aa6d7fd7c6b5984079c374b24a3c99052ed379"
@@ -270,15 +290,15 @@
   optionalDependencies:
     electron-winstaller "^4.0.1"
 
-"@electron-forge/maker-zip@^6.0.0-beta.54":
-  version "6.0.0-beta.54"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-zip/-/maker-zip-6.0.0-beta.54.tgz#83d322afd912587fd233e87c30339d8150f29bed"
-  integrity sha512-wbJhK1rDOCZMTtKrjvavT8R+Yi+v/6axsnTXvzbkzzMQ0xADKNslTwzO6mmbBJea4oIbYmQ44DRAjI21TNyQ/A==
+"@electron-forge/maker-zip@^6.0.0-beta.57":
+  version "6.0.0-beta.57"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-zip/-/maker-zip-6.0.0-beta.57.tgz#1162e5d6e3fe2802e46390633331b5ddf70830a7"
+  integrity sha512-5EcCN/tD6EBmA5oD/hQOTRENKq12vp6S8HgVXNib6CtVrnGVVLYukiqJ8NGC7S/0VMTO+NtZyHax21+xnuk6TA==
   dependencies:
-    "@electron-forge/maker-base" "6.0.0-beta.54"
-    "@electron-forge/shared-types" "6.0.0-beta.54"
-    cross-zip "^3.0.0"
-    fs-extra "^9.0.1"
+    "@electron-forge/maker-base" "6.0.0-beta.57"
+    "@electron-forge/shared-types" "6.0.0-beta.57"
+    cross-zip "^4.0.0"
+    fs-extra "^10.0.0"
 
 "@electron-forge/plugin-base@6.0.0-beta.54":
   version "6.0.0-beta.54"
@@ -302,6 +322,16 @@
     "@electron-forge/async-ora" "6.0.0-beta.54"
     electron-packager "^15.0.0"
     electron-rebuild "^2.0.3"
+    ora "^5.0.0"
+
+"@electron-forge/shared-types@6.0.0-beta.57":
+  version "6.0.0-beta.57"
+  resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-6.0.0-beta.57.tgz#0c7f23eb150abed991c1e606dcd5fa9f07f3caf5"
+  integrity sha512-8jRAf7HsfQC5BA8MTOwh8cXmqJ8JJqzO7WzDW9A50tHOKbpBxPW9YM8036SZzZ4GNZYBSWmJt3d3vW+KFLeYXg==
+  dependencies:
+    "@electron-forge/async-ora" "6.0.0-beta.57"
+    electron-packager "^15.0.0"
+    electron-rebuild "^2.3.2"
     ora "^5.0.0"
 
 "@electron-forge/template-base@6.0.0-beta.54":
@@ -361,7 +391,7 @@
     global-agent "^2.0.2"
     global-tunnel-ng "^2.7.1"
 
-"@malept/cross-spawn-promise@^1.0.0", "@malept/cross-spawn-promise@^1.1.0":
+"@malept/cross-spawn-promise@^1.0.0", "@malept/cross-spawn-promise@^1.1.0", "@malept/cross-spawn-promise@^1.1.1":
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/@malept/cross-spawn-promise/-/cross-spawn-promise-1.1.1.tgz#504af200af6b98e198bce768bc1730c6936ae01d"
   integrity sha512-RTBGWL5FWQcg9orDOCcp4LvItNzUPcyEU9bwaeJX0rJ1IQxzucC48Y0/sQLp/g6t99IQgAlGIaesJS+gTn7tVQ==
@@ -1416,12 +1446,10 @@ cross-spawn@^7.0.1:
     shebang-command "^2.0.0"
     which "^2.0.1"
 
-cross-zip@^3.0.0:
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/cross-zip/-/cross-zip-3.1.0.tgz#2b7d33f2a893bf83e232ccbabf4c6c706f6b313c"
-  integrity sha512-aX02l0SD3KE27pMl69gkxDdDM5D3u9Ic4Je+2b1B2fP0dWnlWWY6ns2Vk5DEgCXJRhL3GasSpicNQRNbDkq0+w==
-  dependencies:
-    rimraf "^3.0.0"
+cross-zip@^4.0.0:
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/cross-zip/-/cross-zip-4.0.0.tgz#c29bfb2c001659a6d480ae9596f3bee83b48a230"
+  integrity sha512-MEzGfZo0rqE10O/B+AEcCSJLZsrWuRUvmqJTqHNqBtALhaJc3E3ixLGLJNTRzEA2K34wbmOHC4fwYs9sVsdcCA==
 
 crypto-random-string@^2.0.0:
   version "2.0.0"
@@ -1492,7 +1520,7 @@ debug@^3.1.0, debug@^3.2.6:
   dependencies:
     ms "^2.1.1"
 
-debug@^4.0.1, debug@^4.1.0, debug@^4.1.1, debug@~4.3.1:
+debug@^4.0.1, debug@^4.1.0, debug@^4.1.1, debug@^4.3.1, debug@~4.3.1:
   version "4.3.1"
   resolved "https://registry.yarnpkg.com/debug/-/debug-4.3.1.tgz#f0d229c505e0c6d8c49ac553d1b13dc183f6b2ee"
   integrity sha512-doEwdvm4PCeK4K3RQN2ZC2BYUBaxwLARCqZmMjtF8a51J2Rb0xpVloFRnCODwqjpwnAoao4pelN8l3RJdv3gRQ==
@@ -1719,6 +1747,24 @@ electron-rebuild@^2.0.3:
   integrity sha512-EHr1bkqXTN/jQJuh2/IunF9QGa9yOgpE9KdQ9A7VHshd7ycWvoXjWzaXaimfa1nu1l7vKqLLu7N2COe3Jn9NuA==
   dependencies:
     "@malept/cross-spawn-promise" "^1.1.0"
+    colors "^1.3.3"
+    debug "^4.1.1"
+    detect-libc "^1.0.3"
+    fs-extra "^9.0.1"
+    got "^11.7.0"
+    lzma-native "^6.0.1"
+    node-abi "^2.19.2"
+    node-gyp "^7.1.0"
+    ora "^5.1.0"
+    tar "^6.0.5"
+    yargs "^16.0.0"
+
+electron-rebuild@^2.3.2:
+  version "2.3.5"
+  resolved "https://registry.yarnpkg.com/electron-rebuild/-/electron-rebuild-2.3.5.tgz#10dc38d1ffe1515ba2eef8b8be8e973ad1e1d597"
+  integrity sha512-1sQ1DRtQGpglFhc3urD4olMJzt/wxlbnAAsf+WY2xHf5c50ZovivZvCXSpVgTOP9f4TzOMvelWyspyfhxQKHzQ==
+  dependencies:
+    "@malept/cross-spawn-promise" "^1.1.1"
     colors "^1.3.3"
     debug "^4.1.1"
     detect-libc "^1.0.3"
@@ -2161,6 +2207,15 @@ fresh@0.5.2:
   version "0.5.2"
   resolved "https://registry.yarnpkg.com/fresh/-/fresh-0.5.2.tgz#3d8cadd90d976569fa835ab1f8e4b23a105605a7"
   integrity sha1-PYyt2Q2XZWn6g1qx+OSyOhBWBac=
+
+fs-extra@^10.0.0:
+  version "10.0.0"
+  resolved "https://registry.yarnpkg.com/fs-extra/-/fs-extra-10.0.0.tgz#9ff61b655dde53fb34a82df84bb214ce802e17c1"
+  integrity sha512-C5owb14u9eJwizKGdchcDUQeFtlSHHthBk8pbX9Vc1PFZrLombudjDnNns88aYslCyF6IY5SUw3Roz6xShcEIQ==
+  dependencies:
+    graceful-fs "^4.2.0"
+    jsonfile "^6.0.1"
+    universalify "^2.0.0"
 
 fs-extra@^4.0.0:
   version "4.0.3"
