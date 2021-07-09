@@ -23,7 +23,7 @@
     chalk "^2.0.0"
     js-tokens "^4.0.0"
 
-"@cycle/dom@^22.2.0", "@cycle/dom@^22.8.0":
+"@cycle/dom@^22.2.0":
   version "22.8.0"
   resolved "https://registry.yarnpkg.com/@cycle/dom/-/dom-22.8.0.tgz#c97aa888b23de2e8efc6f5595fcc8dd3abacb69a"
   integrity sha512-YnB4zUGOXVdPFXaVzYEUHXNqJlz1190Qfj1UpEBSiiJMPw+jskrNPrlhzqpE1MVjtpNlBJVoe+Vq73d2MnP3Bw==
@@ -31,6 +31,16 @@
     "@cycle/run" "^5.2.0"
     snabbdom "^0.7.4"
     snabbdom-selector "^4.2.0"
+    xstream "11.x"
+
+"@cycle/dom@^23.0.0":
+  version "23.0.0"
+  resolved "https://registry.yarnpkg.com/@cycle/dom/-/dom-23.0.0.tgz#41f6b1c3fa57be79d0f33fb0fc2dd8bc0d1527c0"
+  integrity sha512-cbwEJALcjvn8f7i7PjG9Z48yX8un44QXhu/0g3oe6vbAahO59maxL/QwnWACO8Y38FjIurhAOpqEeJzfaYKyjw==
+  dependencies:
+    "@cycle/run" "^5.2.0"
+    snabbdom "^3.0.0"
+    snabbdom-selector "^5.0.0"
     xstream "11.x"
 
 "@cycle/history@^8.0.0":
@@ -5542,6 +5552,13 @@ snabbdom-selector@^4.2.0:
   dependencies:
     tree-selector "^2.1.0"
 
+snabbdom-selector@^5.0.0:
+  version "5.0.0"
+  resolved "https://registry.yarnpkg.com/snabbdom-selector/-/snabbdom-selector-5.0.0.tgz#b0d296ba61e36c84eaa6506d0a592ba23a11cdad"
+  integrity sha512-bJgpomacLM3jVhghsFxLcws8B6k+GVcnB/Af3avannj/zavIM1vLagvQHTFXzRVkf6nfxYaf/q58gekClDJoYA==
+  dependencies:
+    tree-selector "^2.1.0"
+
 snabbdom-to-html@5.1.1:
   version "5.1.1"
   resolved "https://registry.yarnpkg.com/snabbdom-to-html/-/snabbdom-to-html-5.1.1.tgz#c89ae3dc9bbe2e28ed6b7d78f96c46be731817b2"
@@ -5564,6 +5581,11 @@ snabbdom@^0.7.4:
   version "0.7.4"
   resolved "https://registry.yarnpkg.com/snabbdom/-/snabbdom-0.7.4.tgz#817f07e8d3fb870960c3763b8da56f1ba982d31a"
   integrity sha512-nnN+7uZ2NTIiu7EPMNwSDhmrYXqwlfCP/j72RdzvDPujXyvQxOW7Jl9yuLayzxMHDNWQR7FM6Pcn4wnDpKRe6Q==
+
+snabbdom@^3.0.0:
+  version "3.0.3"
+  resolved "https://registry.yarnpkg.com/snabbdom/-/snabbdom-3.0.3.tgz#13ff22fbdd1c971ace1af55d4831bdb4972aafd0"
+  integrity sha512-+HEwNccHj1lTKx3I7vKm7La+FhhcJFJloPkmPE0pwYQFq6aZSx2SCJrUKotD/+L8kA+EHcXRmBe5Yd2LX1WlQQ==
 
 snapdragon-node@^2.0.1:
   version "2.1.1"
