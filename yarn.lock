@@ -269,13 +269,13 @@
     fs-extra "^10.0.0"
     which "^2.0.2"
 
-"@electron-forge/maker-deb@^6.0.0-beta.59":
-  version "6.0.0-beta.59"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-deb/-/maker-deb-6.0.0-beta.59.tgz#13a20011062a49c2d99f1adf23ce043202ef988c"
-  integrity sha512-HrdUWajIA5Vis7WFSjAjzxX3M+fhHU2Di22xEHZEi9Ya+qpJf9U/MQjzf5Etc5tVgAtfcIL5+lFj0/KEdNYu0g==
+"@electron-forge/maker-deb@^6.0.0-beta.60":
+  version "6.0.0-beta.60"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-deb/-/maker-deb-6.0.0-beta.60.tgz#73e2a2f01d82b9d42f38292e2c353568cae784c0"
+  integrity sha512-Jtt6n8CRuU2ws0sa/7arm9DtZHbZlxAqYgpDBm/RKszkjb0SeKW33zlY1UUYpuenL+F4nseSkOwjapwEjDr8Qg==
   dependencies:
-    "@electron-forge/maker-base" "6.0.0-beta.59"
-    "@electron-forge/shared-types" "6.0.0-beta.59"
+    "@electron-forge/maker-base" "6.0.0-beta.60"
+    "@electron-forge/shared-types" "6.0.0-beta.60"
   optionalDependencies:
     electron-installer-debian "^3.0.0"
 
