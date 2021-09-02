@@ -289,13 +289,13 @@
   optionalDependencies:
     electron-installer-redhat "^3.2.0"
 
-"@electron-forge/maker-squirrel@^6.0.0-beta.59":
-  version "6.0.0-beta.59"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-squirrel/-/maker-squirrel-6.0.0-beta.59.tgz#24debb74786181004950e7ef63008aefa9b22290"
-  integrity sha512-sfTY40iGFaUVb6I/S/NR2w8nfFeYJHCKnsukDuJrqto9rYM52uOkrwIMG2TOiOil+dBfC+//WCz4zW4pHDAkqw==
+"@electron-forge/maker-squirrel@^6.0.0-beta.60":
+  version "6.0.0-beta.60"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-squirrel/-/maker-squirrel-6.0.0-beta.60.tgz#3f0de512efe4541359f7ee778d0cd7c4fc7fcba4"
+  integrity sha512-GUKV9LKiZX8YF0GXYFXzuxJjqDAERg0+7c50pqCpqnX9qY+0umpxB2kO4yvPJnUpgGoCUgmY3t7orlhUg8yhbQ==
   dependencies:
-    "@electron-forge/maker-base" "6.0.0-beta.59"
-    "@electron-forge/shared-types" "6.0.0-beta.59"
+    "@electron-forge/maker-base" "6.0.0-beta.60"
+    "@electron-forge/shared-types" "6.0.0-beta.60"
     fs-extra "^10.0.0"
   optionalDependencies:
     electron-winstaller "^5.0.0"
