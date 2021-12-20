@@ -27,7 +27,7 @@
     "cyclic-router": "^6.0.0",
     "hash.js": "^1.1.7",
     "socket.io-client": "^4.4.0",
-    "stylus": "^0.55.0",
+    "stylus": "^0.56.0",
     "switch-path": "^1.2.0",
     "xstream": "11.x.x"
   },
