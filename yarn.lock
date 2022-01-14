@@ -98,14 +98,14 @@
     quicktask "1.2.0"
     xstream "10.x || 11.x"
 
-"@cycle/state@^1.5.0":
-  version "1.5.0"
-  resolved "https://registry.yarnpkg.com/@cycle/state/-/state-1.5.0.tgz#3bae95360c560c232219d344ef9427adeb768072"
-  integrity sha512-hi44ZiMipFJy1kV3dTu4XO/xJVLkuO28gtTZ4W65fVp5Y5GsFSl/pz/X02ftczzxamG5C4jwYNDu85JQZXaJDQ==
+"@cycle/state@^1.6.0":
+  version "1.6.0"
+  resolved "https://registry.yarnpkg.com/@cycle/state/-/state-1.6.0.tgz#5ac576879aa95ebaa9ebd2b4c229b8f2f96b969b"
+  integrity sha512-BXIf0ZWbQFzdYotBDNHeycWHC0c2SQxnZUD1MP/OGTHL2ocC60F9TnL3kihu847leKyQmPoJg98BaFf8jpGA3A==
   dependencies:
     "@cycle/isolate" "^5.0.0"
     "@cycle/run" "^5.2.0"
-    quicktask "1.1.0"
+    quicktask "1.2.0"
     xstream ">=11"
 
 "@cycle/storage@^5.1.2":
@@ -5097,11 +5097,6 @@ quick-lru@^5.1.1:
   version "5.1.1"
   resolved "https://registry.yarnpkg.com/quick-lru/-/quick-lru-5.1.1.tgz#366493e6b3e42a3a6885e2e99d18f80fb7a8c932"
   integrity sha512-WuyALRjWPDGtt/wzJiadO5AXY+8hZ80hVpe6MyivgraREW751X3SbhRvG3eLKOYN+8VEvqLcf3wdnt44Z4S4SA==
-
-quicktask@1.1.0:
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/quicktask/-/quicktask-1.1.0.tgz#70795fd5922fb122100e662118c73a06aadd7352"
-  integrity sha512-b3w19IEXnt5auacLAbePVsqPyVQUwmuhJQrrWnVhm4pP8PAMg2U9vFHbAD9XYXXbMDjdLJs0x5NLqwTV8uFK4g==
 
 quicktask@1.2.0:
   version "1.2.0"
