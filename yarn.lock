@@ -98,10 +98,10 @@
     quicktask "1.2.0"
     xstream "10.x || 11.x"
 
-"@cycle/state@^1.6.1":
-  version "1.6.1"
-  resolved "https://registry.yarnpkg.com/@cycle/state/-/state-1.6.1.tgz#2578936697a0999a5f2c574ba82c15592b317bde"
-  integrity sha512-Tz5/5VahZp/u+1z6O53KqnC0KYz91mB8s/7LG5aPvOYZPzVlonk5C41ZKnNAlFkl2pvn4e2iGe9XvAFR6Cpb3w==
+"@cycle/state@^1.7.0":
+  version "1.7.0"
+  resolved "https://registry.yarnpkg.com/@cycle/state/-/state-1.7.0.tgz#afc07c2560e25377471ad6ef02db339b18c303de"
+  integrity sha512-nw0uH8yHqJNPwC56lQOs0oCfTQ89Ya99T7G/X2II+KjDgEr7Xs6FHGyd3DtrCuyH2tH81cbPc2VYPrj8tUeWdQ==
   dependencies:
     "@cycle/isolate" "^5.0.0"
     "@cycle/run" "^5.2.0"
