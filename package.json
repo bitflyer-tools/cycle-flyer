@@ -15,7 +15,7 @@
   "author": "unhappychoice",
   "license": "MIT",
   "dependencies": {
-    "@cycle/dom": "^23.0.0",
+    "@cycle/dom": "^23.1.0",
     "@cycle/history": "^9.0.0",
     "@cycle/html": "^3.4.0",
     "@cycle/http": "15.4.0",
