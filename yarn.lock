@@ -118,10 +118,10 @@
   resolved "https://registry.yarnpkg.com/@cycle/storage/-/storage-5.1.2.tgz#445b1b32409bd27c3e6ee1c5a2f93d7b31afdcdd"
   integrity sha512-Lz9LoHCa7wpGfTexbj5x2Xqa360lImmsPiLvci7z6ocEL8+qwx9IBSJlKp10N8BMoePQbOshmKfja5bntTGGng==
 
-"@electron-forge/async-ora@6.0.0-beta.74":
-  version "6.0.0-beta.74"
-  resolved "https://registry.yarnpkg.com/@electron-forge/async-ora/-/async-ora-6.0.0-beta.74.tgz#ff0631ee8e43f7f6bed3e8c79fab31220982aad9"
-  integrity sha512-3DLfCyxN42/9OB/EbU27d6vusIV4KVYgyAWg5PGzCqOscF6htAY5ksMxv1e0ip52Bsbfm5T+g/LQ0ZVqpyTSeA==
+"@electron-forge/async-ora@6.0.0":
+  version "6.0.0"
+  resolved "https://registry.yarnpkg.com/@electron-forge/async-ora/-/async-ora-6.0.0.tgz#5ca7b9369f07b383b874b76f48062ac9497e0b15"
+  integrity sha512-qRbdJRvpxpmSzoNh0YzsYFR7cKsgMwI4hRbaL8qstYHs4bvEzvtmrLLEUpfGM6rh0a3AAZDC67PbOBT0dhGLLw==
   dependencies:
     chalk "^4.0.0"
     debug "^4.3.1"
@@ -129,10 +129,10 @@
     ora "^5.0.0"
     pretty-ms "^7.0.0"
 
-"@electron-forge/async-ora@6.0.0-beta.75":
-  version "6.0.0-beta.75"
-  resolved "https://registry.yarnpkg.com/@electron-forge/async-ora/-/async-ora-6.0.0-beta.75.tgz#ac4628754c998f0cc67a47170f9b2afc25bedcc6"
-  integrity sha512-QmMaeGx3ZsH42BCtRUhj4wkGBag2J8dkRsZd36/xTx5VonUTQnjp5kB2lU0I5pIfLTRiVtcGkz7xJSBumioj5Q==
+"@electron-forge/async-ora@6.0.0-beta.74":
+  version "6.0.0-beta.74"
+  resolved "https://registry.yarnpkg.com/@electron-forge/async-ora/-/async-ora-6.0.0-beta.74.tgz#ff0631ee8e43f7f6bed3e8c79fab31220982aad9"
+  integrity sha512-3DLfCyxN42/9OB/EbU27d6vusIV4KVYgyAWg5PGzCqOscF6htAY5ksMxv1e0ip52Bsbfm5T+g/LQ0ZVqpyTSeA==
   dependencies:
     chalk "^4.0.0"
     debug "^4.3.1"
@@ -213,6 +213,15 @@
     username "^5.1.0"
     yarn-or-npm "^3.0.1"
 
+"@electron-forge/maker-base@6.0.0":
+  version "6.0.0"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-6.0.0.tgz#9436e459984ec5e0e37f49e3eec2d8efbcadd718"
+  integrity sha512-zT4NQzJ4zjlKwmRtY/HeKcd/eP+R2vtYvpen5z6vuqY12+jubGgRoGyot4VT0nN5p46gcofGW/Y6aPEuND4ORg==
+  dependencies:
+    "@electron-forge/shared-types" "6.0.0"
+    fs-extra "^10.0.0"
+    which "^2.0.2"
+
 "@electron-forge/maker-base@6.0.0-beta.74":
   version "6.0.0-beta.74"
   resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-6.0.0-beta.74.tgz#78893f2818909dd9856f868c1bd77a89888f1856"
@@ -222,22 +231,13 @@
     fs-extra "^10.0.0"
     which "^2.0.2"
 
-"@electron-forge/maker-base@6.0.0-beta.75":
-  version "6.0.0-beta.75"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-6.0.0-beta.75.tgz#923d6cdad7600b29e51d0057d2072f5ddf4e2339"
-  integrity sha512-TGBggP3+GPCBl4f9BkMAIUpWaJPDaM6umHatin3I/hW6G1oa/IAWnEll9LStCetjBlXBNh0MBoh9033nDnjkvA==
+"@electron-forge/maker-deb@^6.0.0":
+  version "6.0.0"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-deb/-/maker-deb-6.0.0.tgz#eda2265bc90c37a6a63c6d6f64d0ae9001096a54"
+  integrity sha512-sZefPTN+KLz70QlkqlIZiSrEuZZLONBAX+5u4zvfcNlEVpNUhLRKSX7vlVKEqUmKsCa6SJdRejZ1jyU8d3VkzA==
   dependencies:
-    "@electron-forge/shared-types" "6.0.0-beta.75"
-    fs-extra "^10.0.0"
-    which "^2.0.2"
-
-"@electron-forge/maker-deb@^6.0.0-beta.75":
-  version "6.0.0-beta.75"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-deb/-/maker-deb-6.0.0-beta.75.tgz#819ae188d162155ed1c2317c6d107694a4b614f5"
-  integrity sha512-7Y41OkLmuUNsdZmTVboEn4tRZLz+EUUVJ4P2mRseKgrx458vRt/T059GCG6J05da4xs1TYf7l+iBe8zybgW01w==
-  dependencies:
-    "@electron-forge/maker-base" "6.0.0-beta.75"
-    "@electron-forge/shared-types" "6.0.0-beta.75"
+    "@electron-forge/maker-base" "6.0.0"
+    "@electron-forge/shared-types" "6.0.0"
   optionalDependencies:
     electron-installer-debian "^3.0.0"
 
@@ -286,6 +286,17 @@
   dependencies:
     "@electron-forge/shared-types" "6.0.0-beta.74"
 
+"@electron-forge/shared-types@6.0.0":
+  version "6.0.0"
+  resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-6.0.0.tgz#43f847a6da5f15f037db207c9843d2e63f8eaff3"
+  integrity sha512-FN+158+EvSzbL/ZGwsLxeUbYOJm8bhHCLbR7SPAmKwn/X2P8pVj4HuhiROkqdiuU4kUDmrOg/LgObODofyvIKw==
+  dependencies:
+    "@electron-forge/async-ora" "6.0.0"
+    "@electron/rebuild" "^3.2.10"
+    electron-packager "^17.1.1"
+    listr2 "^5.0.3"
+    ora "^5.0.0"
+
 "@electron-forge/shared-types@6.0.0-beta.74":
   version "6.0.0-beta.74"
   resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-6.0.0-beta.74.tgz#6d35aebe281b97d3f22655519e6ee609b7fb9b32"
@@ -294,17 +305,6 @@
     "@electron-forge/async-ora" "6.0.0-beta.74"
     "@electron/rebuild" "^3.2.10"
     electron-packager "^17.1.0"
-    listr2 "^5.0.3"
-    ora "^5.0.0"
-
-"@electron-forge/shared-types@6.0.0-beta.75":
-  version "6.0.0-beta.75"
-  resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-6.0.0-beta.75.tgz#bf85d036c104f3d34e8b3cb4f18e7c7eaae9bde6"
-  integrity sha512-BUYQbccdSYXBsV/4/pHotwM5sd+UajCf8/qFpFriaGsd6MZmz2JQnHl7Ea7gFzr5fVFeYeAjkcVmLfoXZXracA==
-  dependencies:
-    "@electron-forge/async-ora" "6.0.0-beta.75"
-    "@electron/rebuild" "^3.2.10"
-    electron-packager "^17.1.1"
     listr2 "^5.0.3"
     ora "^5.0.0"
 
