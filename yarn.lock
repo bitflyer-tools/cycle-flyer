@@ -231,6 +231,15 @@
     fs-extra "^10.0.0"
     which "^2.0.2"
 
+"@electron-forge/maker-base@6.0.1":
+  version "6.0.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-6.0.1.tgz#e0ca90aa6bc50288fa50964b68e3cbd147acc4cb"
+  integrity sha512-Jqj7MQ08SkmAP1Kwbgv0O0GYct8rIkaLqVxEvU9vJSgsNHMj2TQYmN+60BvAoL0nu9sxV2P2AWUnmp5jz1Z5jw==
+  dependencies:
+    "@electron-forge/shared-types" "6.0.1"
+    fs-extra "^10.0.0"
+    which "^2.0.2"
+
 "@electron-forge/maker-deb@^6.0.0":
   version "6.0.0"
   resolved "https://registry.yarnpkg.com/@electron-forge/maker-deb/-/maker-deb-6.0.0.tgz#eda2265bc90c37a6a63c6d6f64d0ae9001096a54"
@@ -241,13 +250,13 @@
   optionalDependencies:
     electron-installer-debian "^3.0.0"
 
-"@electron-forge/maker-rpm@^6.0.0":
-  version "6.0.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-rpm/-/maker-rpm-6.0.0.tgz#06414c582bdc20f3061f0c44d5d5c38a70f56a35"
-  integrity sha512-msKAWmW5RKmMwgGa8r5fLiWRpCZNNcn8oFEviLnMTZABP76yyChg/TY5gbWGY2C6ECKx5LAOd9ZHyjQ59SDkEQ==
+"@electron-forge/maker-rpm@^6.0.1":
+  version "6.0.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-rpm/-/maker-rpm-6.0.1.tgz#c54b69a04b2b99c749906c3956be734a5e1dfb3a"
+  integrity sha512-So2RXxgfcbFSn/7OI4xnqO57nzL7aOSdNOlq2mv8IGfJyDv0Hq5T8L+cuA0p3C4xrmurCn8wV+ASJmvdNurNOg==
   dependencies:
-    "@electron-forge/maker-base" "6.0.0"
-    "@electron-forge/shared-types" "6.0.0"
+    "@electron-forge/maker-base" "6.0.1"
+    "@electron-forge/shared-types" "6.0.1"
   optionalDependencies:
     electron-installer-redhat "^3.2.0"
 
@@ -307,6 +316,15 @@
     electron-packager "^17.1.0"
     listr2 "^5.0.3"
     ora "^5.0.0"
+
+"@electron-forge/shared-types@6.0.1":
+  version "6.0.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-6.0.1.tgz#3f2b56ed67a68c94838d21e2ae16ba38ca9134ba"
+  integrity sha512-htQjbiQY7ijuB8LGLiFtOY7qTW06YrvxFavlxOjzQnu4q7VooOZFE9pQpNxg0YgI59ntF/1x2Ad3Az+TjiuqHw==
+  dependencies:
+    "@electron/rebuild" "^3.2.10"
+    electron-packager "^17.1.1"
+    listr2 "^5.0.3"
 
 "@electron-forge/template-base@6.0.0":
   version "6.0.0"
