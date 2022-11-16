@@ -231,15 +231,6 @@
     fs-extra "^10.0.0"
     which "^2.0.2"
 
-"@electron-forge/maker-base@6.0.1":
-  version "6.0.1"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-6.0.1.tgz#e0ca90aa6bc50288fa50964b68e3cbd147acc4cb"
-  integrity sha512-Jqj7MQ08SkmAP1Kwbgv0O0GYct8rIkaLqVxEvU9vJSgsNHMj2TQYmN+60BvAoL0nu9sxV2P2AWUnmp5jz1Z5jw==
-  dependencies:
-    "@electron-forge/shared-types" "6.0.1"
-    fs-extra "^10.0.0"
-    which "^2.0.2"
-
 "@electron-forge/maker-base@^6.0.3":
   version "6.0.3"
   resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-6.0.3.tgz#867e17eb68977a682b5d8938a04f6e0f23b39b53"
@@ -249,13 +240,13 @@
     fs-extra "^10.0.0"
     which "^2.0.2"
 
-"@electron-forge/maker-deb@^6.0.1":
-  version "6.0.1"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-deb/-/maker-deb-6.0.1.tgz#fd80d8f73287658a1a719ca763ed1166bb0fd4ea"
-  integrity sha512-q0gMn/Lvpo8zjCfyQY02C4EKLu/2KM1roxSn3mT3EFMCHBfs6zXiX4Zs48Uv/3mEwNerMwXw/MIACGxbW46NhA==
+"@electron-forge/maker-deb@^6.0.3":
+  version "6.0.3"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-deb/-/maker-deb-6.0.3.tgz#d1fd3a06140db345032d6fdcb829cf42e4a04f91"
+  integrity sha512-dSVVfM3zsCeNywbXF4AfgoLbjFYi71SuoFYQwwvBB7Lx0BJK4xFLxcydHrq7Fv5Dl4bVaN/0rBQ2ohMK6OUFyg==
   dependencies:
-    "@electron-forge/maker-base" "6.0.1"
-    "@electron-forge/shared-types" "6.0.1"
+    "@electron-forge/maker-base" "^6.0.3"
+    "@electron-forge/shared-types" "^6.0.3"
   optionalDependencies:
     electron-installer-debian "^3.0.0"
 
@@ -325,15 +316,6 @@
     electron-packager "^17.1.0"
     listr2 "^5.0.3"
     ora "^5.0.0"
-
-"@electron-forge/shared-types@6.0.1":
-  version "6.0.1"
-  resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-6.0.1.tgz#3f2b56ed67a68c94838d21e2ae16ba38ca9134ba"
-  integrity sha512-htQjbiQY7ijuB8LGLiFtOY7qTW06YrvxFavlxOjzQnu4q7VooOZFE9pQpNxg0YgI59ntF/1x2Ad3Az+TjiuqHw==
-  dependencies:
-    "@electron/rebuild" "^3.2.10"
-    electron-packager "^17.1.1"
-    listr2 "^5.0.3"
 
 "@electron-forge/shared-types@^6.0.3":
   version "6.0.3"
