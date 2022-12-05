@@ -187,7 +187,7 @@
     username "^5.1.0"
     yarn-or-npm "^3.0.1"
 
-"@electron-forge/maker-base@^6.0.3", "@electron-forge/maker-base@^6.0.4":
+"@electron-forge/maker-base@^6.0.4":
   version "6.0.4"
   resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-6.0.4.tgz#7de68dd11d2a670b552860aea01767870bb44f92"
   integrity sha512-qJJ2oPFlyt6u/H67WLfZL0JclSpFj4VwxPfwxqNL/HcwXULJcOeat7oqJLY9UKBE4U2j+++xbA3LSoPAErroIg==
@@ -216,13 +216,13 @@
   optionalDependencies:
     electron-installer-redhat "^3.2.0"
 
-"@electron-forge/maker-squirrel@^6.0.3":
-  version "6.0.3"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-squirrel/-/maker-squirrel-6.0.3.tgz#9afcf94d358328c169efabcd139f94dc8dc80890"
-  integrity sha512-fK+60CiBSwfRWxPQmTiL2CKucQgsrx6O1TL+RaP/9Pp4DGnhETiU/Z5MrLgojQEjgQn+wbZd1IM2d9kpqjc6fA==
+"@electron-forge/maker-squirrel@^6.0.4":
+  version "6.0.4"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-squirrel/-/maker-squirrel-6.0.4.tgz#21b09a5165b27cc156e3c15989f7fe157752d8ac"
+  integrity sha512-1bZ5RgSex5Y45HSuOqjki2oHIq/CquVPP5sLYhObd2p2ABj4ZzyqErNFK1eerDIjoesici3KKCASqBpKf2N90Q==
   dependencies:
-    "@electron-forge/maker-base" "^6.0.3"
-    "@electron-forge/shared-types" "^6.0.3"
+    "@electron-forge/maker-base" "^6.0.4"
+    "@electron-forge/shared-types" "^6.0.4"
     fs-extra "^10.0.0"
   optionalDependencies:
     electron-winstaller "^5.0.0"
@@ -251,7 +251,7 @@
   dependencies:
     "@electron-forge/shared-types" "^6.0.4"
 
-"@electron-forge/shared-types@^6.0.3", "@electron-forge/shared-types@^6.0.4":
+"@electron-forge/shared-types@^6.0.4":
   version "6.0.4"
   resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-6.0.4.tgz#f8cdcf453459caa156d513582054b8e81057584f"
   integrity sha512-lILLKcGZqfJYVI1x6RssVh37E934rCOaSdBQ9I7LypdfI2NWL+5PLLoUqvXbok1V28m3/O5JrXdigwEIZdhjzQ==
