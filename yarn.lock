@@ -188,15 +188,6 @@
     username "^5.1.0"
     yarn-or-npm "^3.0.1"
 
-"@electron-forge/maker-base@6.1.0":
-  version "6.1.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-6.1.0.tgz#135d35a436b330f1f0e94933162eb972156e17ac"
-  integrity sha512-pNj/iVSU1NZTUtR5RiY5IyUj1+nHST/lcVmhsvu+3dpOFfcPx91+4E0nGeWMepL5mraFnZO7DQXKPd0/VJsr7w==
-  dependencies:
-    "@electron-forge/shared-types" "6.1.0"
-    fs-extra "^10.0.0"
-    which "^2.0.2"
-
 "@electron-forge/maker-base@6.1.1":
   version "6.1.1"
   resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-6.1.1.tgz#2c8fdaaaa28ff39fbf4ff26e664dc79265f96b49"
@@ -261,15 +252,6 @@
   integrity sha512-vxGzx2G7bWhz2G091MzNh+LHGrOM4gmp8FqW2VNpFJfFEYODr6D9KxitUihKAWc79bwG+YywvISXEMy5IBQu0Q==
   dependencies:
     "@electron-forge/shared-types" "6.1.1"
-
-"@electron-forge/shared-types@6.1.0":
-  version "6.1.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-6.1.0.tgz#62e4bb4191fbf72fedbe56e5c4adbd5caa854f9c"
-  integrity sha512-XemHvhVv/wvPfs5wHCp1keNZ7nFsC4U88ySLLznVNYdbe5yORNZhCiZC/vd4RykGIh+37jNnKBLXqzwxygqM4g==
-  dependencies:
-    "@electron/rebuild" "^3.2.10"
-    electron-packager "^17.1.1"
-    listr2 "^5.0.3"
 
 "@electron-forge/shared-types@6.1.1":
   version "6.1.1"
@@ -6295,10 +6277,10 @@ typescript@3.9.3:
   resolved "https://registry.yarnpkg.com/typescript/-/typescript-3.9.3.tgz#d3ac8883a97c26139e42df5e93eeece33d610b8a"
   integrity sha512-D/wqnB2xzNFIcoBG9FG8cXRDjiqSTbG2wd8DMZeQyJlP1vfTkIxH4GKveWaEBYySKIg+USu+E+EDIR47SqnaMQ==
 
-typescript@^5.0.3:
-  version "5.0.3"
-  resolved "https://registry.yarnpkg.com/typescript/-/typescript-5.0.3.tgz#fe976f0c826a88d0a382007681cbb2da44afdedf"
-  integrity sha512-xv8mOEDnigb/tN9PSMTwSEqAnUvkoXMQlicOb0IUVDBSQCgBSaAAROUZYy2IcUy5qU6XajK5jjjO7TMWqBTKZA==
+typescript@^5.0.4:
+  version "5.0.4"
+  resolved "https://registry.yarnpkg.com/typescript/-/typescript-5.0.4.tgz#b217fd20119bd61a94d4011274e0ab369058da3b"
+  integrity sha512-cW9T5W9xY37cc+jfEnaUvX91foxtHkza3Nw3wkoF4sSlKn0MONdkdEndig/qPBWXNkmplh3NzayQzCiHM4/hqw==
 
 ultron@1.0.x:
   version "1.0.2"
