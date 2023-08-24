@@ -189,15 +189,6 @@
     username "^5.1.0"
     yarn-or-npm "^3.0.1"
 
-"@electron-forge/maker-base@6.4.0":
-  version "6.4.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-6.4.0.tgz#be75ea660866c1b529d6909c5ac27b9b6b6e7be7"
-  integrity sha512-TKSBvf6PQ6IN8RZ8MZDaZITN9QZ5NzvATncxly/biWPkTXsVV290ggBSDcPX2eRAbOYM8g4B4sHuzlwMDt0XcA==
-  dependencies:
-    "@electron-forge/shared-types" "6.4.0"
-    fs-extra "^10.0.0"
-    which "^2.0.2"
-
 "@electron-forge/maker-base@6.4.1":
   version "6.4.1"
   resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-6.4.1.tgz#676520fdc726e9a157c53fa9fd54465a230e09ae"
@@ -262,15 +253,6 @@
   integrity sha512-2j1/9hlKxI2ua4DrZyDBhon740cO4b4INsl1E5/M+wmGCN7pfQF24ctizBsoobnd+L6CCqG88GfP9bZL3OTGHA==
   dependencies:
     "@electron-forge/shared-types" "6.4.1"
-
-"@electron-forge/shared-types@6.4.0":
-  version "6.4.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-6.4.0.tgz#1a55577545bcf1ac3c5c4657d62f409bf3caf0d5"
-  integrity sha512-64nWCUAttNuSqqHPZWoC6ZYaRcBXlpTqD5oHVySmgQ4wD45CSTGjS3D+s09nkRtP56vk5q9qJE8+d6S7nIKzDw==
-  dependencies:
-    "@electron/rebuild" "^3.2.10"
-    electron-packager "^17.1.2"
-    listr2 "^5.0.3"
 
 "@electron-forge/shared-types@6.4.1":
   version "6.4.1"
@@ -1980,10 +1962,10 @@ electron-winstaller@^5.0.0:
     lodash.template "^4.2.2"
     temp "^0.9.0"
 
-electron@^26.0.0:
-  version "26.0.0"
-  resolved "https://registry.yarnpkg.com/electron/-/electron-26.0.0.tgz#f054aad7db99379aba11237622e9742bbe800dea"
-  integrity sha512-x57bdCaDvgnlc41VOm/UWihJCCiI3OxJKiBgB/e5F7Zd6avo+61mO6IzQS7Bu/k/a1KPjou25EUORR6UPKznBQ==
+electron@^26.1.0:
+  version "26.1.0"
+  resolved "https://registry.yarnpkg.com/electron/-/electron-26.1.0.tgz#d26fefba5a5c68069b07a117d87aee1c4e5d172d"
+  integrity sha512-qEh19H09Pysn3ibms5nZ0haIh5pFoOd7/5Ww7gzmAwDQOulRi8Sa2naeueOyIb1GKpf+6L4ix3iceYRAuA5r5Q==
   dependencies:
     "@electron/get" "^2.0.0"
     "@types/node" "^18.11.18"
