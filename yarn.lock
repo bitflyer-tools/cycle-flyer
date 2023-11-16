@@ -239,13 +239,13 @@
   optionalDependencies:
     electron-winstaller "^5.0.0"
 
-"@electron-forge/maker-zip@^6.4.2":
-  version "6.4.2"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-zip/-/maker-zip-6.4.2.tgz#f8a064bde04bfc73756716ed4d7d62bdd455de28"
-  integrity sha512-k2nfhhnxcYbUS7rCKCisuqEalxtH9l73+lrtfL0aQZiE/BLbDXyNckDIDOPvX0tBEg62nVzUdJonZwOhZVvAMw==
+"@electron-forge/maker-zip@^7.0.0":
+  version "7.0.0"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-zip/-/maker-zip-7.0.0.tgz#7bb49f14520c1865a5eccd47802ad3d98b48b9df"
+  integrity sha512-ThsTyXnZdD1zT3qC6G4WDLnqGRsTgaiwvk1afBc2K51W+/pdrvXcRLwwn1O0CSEWijNqf6vqz7097SzdUG1gWw==
   dependencies:
-    "@electron-forge/maker-base" "6.4.2"
-    "@electron-forge/shared-types" "6.4.2"
+    "@electron-forge/maker-base" "7.0.0"
+    "@electron-forge/shared-types" "7.0.0"
     cross-zip "^4.0.0"
     fs-extra "^10.0.0"
     got "^11.8.5"
