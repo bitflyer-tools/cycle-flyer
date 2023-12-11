@@ -190,15 +190,6 @@
     username "^5.1.0"
     yarn-or-npm "^3.0.1"
 
-"@electron-forge/maker-base@7.1.0":
-  version "7.1.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-7.1.0.tgz#5f35d6e1e337ef02d28a53f5d5195f94c55b1f0a"
-  integrity sha512-W+u8y2D30vhY1xnX3g5cuwsbUV+W5zLR/I8XSfHNofu6+/LOjI2Mu9y0C/pLOMrnVbt1+F9MkxxmLNt0TRlAjg==
-  dependencies:
-    "@electron-forge/shared-types" "7.1.0"
-    fs-extra "^10.0.0"
-    which "^2.0.2"
-
 "@electron-forge/maker-base@7.2.0":
   version "7.2.0"
   resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-7.2.0.tgz#2086b1ffc110316d8336e96e72c81aefd0c62c54"
@@ -264,16 +255,6 @@
   dependencies:
     "@electron-forge/shared-types" "7.2.0"
 
-"@electron-forge/shared-types@7.1.0":
-  version "7.1.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-7.1.0.tgz#a976392f4a086c9fe2f57ee28f022d7ee74e2aa8"
-  integrity sha512-uKCrWrgNCwwZB1DUBwo4/YyqLQNL55/X9xWhOT1dyw8W1wQ/bxD33F73FYNdmoL6qgIywWGNRLdQ4e1YaSxnvg==
-  dependencies:
-    "@electron-forge/tracer" "7.1.0"
-    "@electron/packager" "^18.0.0"
-    "@electron/rebuild" "^3.2.10"
-    listr2 "^5.0.3"
-
 "@electron-forge/shared-types@7.2.0":
   version "7.2.0"
   resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-7.2.0.tgz#8642910693e957e9da18fa9fff2d8da2d14a0415"
@@ -330,13 +311,6 @@
     "@electron-forge/shared-types" "7.2.0"
     "@electron-forge/template-base" "7.2.0"
     fs-extra "^10.0.0"
-
-"@electron-forge/tracer@7.1.0":
-  version "7.1.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/tracer/-/tracer-7.1.0.tgz#171c2153418caa57e7f9073f4b7121e624858c1d"
-  integrity sha512-e3nWweJpWeFS7usi5d9GEEXiw38qreNz46I+yb4klNC/IPt8Xmmh2VsgUvuld8N9HcJ4eCU9CPLGjkeRQr9RiA==
-  dependencies:
-    chrome-trace-event "^1.0.3"
 
 "@electron-forge/tracer@7.2.0":
   version "7.2.0"
@@ -6336,10 +6310,10 @@ typescript@3.9.3:
   resolved "https://registry.yarnpkg.com/typescript/-/typescript-3.9.3.tgz#d3ac8883a97c26139e42df5e93eeece33d610b8a"
   integrity sha512-D/wqnB2xzNFIcoBG9FG8cXRDjiqSTbG2wd8DMZeQyJlP1vfTkIxH4GKveWaEBYySKIg+USu+E+EDIR47SqnaMQ==
 
-typescript@^5.3.2:
-  version "5.3.2"
-  resolved "https://registry.yarnpkg.com/typescript/-/typescript-5.3.2.tgz#00d1c7c1c46928c5845c1ee8d0cc2791031d4c43"
-  integrity sha512-6l+RyNy7oAHDfxC4FzSJcz9vnjTKxrLpDG5M2Vu4SHRVNg6xzqZp6LYSR9zjqQTu8DU/f5xwxUdADOkbrIX2gQ==
+typescript@^5.3.3:
+  version "5.3.3"
+  resolved "https://registry.yarnpkg.com/typescript/-/typescript-5.3.3.tgz#b3ce6ba258e72e6305ba66f5c9b452aaee3ffe37"
+  integrity sha512-pXWcraxM0uxAS+tN0AG/BF2TyqmHO014Z070UsJ+pFvYuRSq8KH8DmWpnbXe0pEPDHXZV3FcAbJkijJ5oNEnWw==
 
 ultron@1.0.x:
   version "1.0.2"
