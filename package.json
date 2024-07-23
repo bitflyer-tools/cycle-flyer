@@ -45,7 +45,7 @@
     "now-pipeline": "latest",
     "serve": "latest",
     "tslint": "^6.1.3",
-    "typescript": "^5.5.3"
+    "typescript": "^5.5.4"
   },
   "config": {
     "forge": {
