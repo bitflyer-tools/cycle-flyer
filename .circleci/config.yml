@@ -3,7 +3,7 @@ jobs:
   build:
     working_directory: ~/workspace
     docker:
-      - image: circleci/node:16.3.0
+      - image: cimg/node:18.20.5
     steps:
       - checkout
       - restore_cache:
