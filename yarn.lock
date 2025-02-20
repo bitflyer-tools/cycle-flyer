@@ -198,6 +198,15 @@
     fs-extra "^10.0.0"
     which "^2.0.2"
 
+"@electron-forge/maker-base@7.7.0":
+  version "7.7.0"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-base/-/maker-base-7.7.0.tgz#11882c4a3638a3031103a339459184430f6daa89"
+  integrity sha512-9u+mmBLBAUHuH0+IGw94EGVTDD4CPKX05h5pp5/PIaijy16ss5dymK4vEp3s2XJMFlza2PsCgLLYBgDcAE2Dqg==
+  dependencies:
+    "@electron-forge/shared-types" "7.7.0"
+    fs-extra "^10.0.0"
+    which "^2.0.2"
+
 "@electron-forge/maker-deb@^7.6.1":
   version "7.6.1"
   resolved "https://registry.yarnpkg.com/@electron-forge/maker-deb/-/maker-deb-7.6.1.tgz#73d4d2056ba1a50095b2727b17f669643fc32bb4"
@@ -208,13 +217,13 @@
   optionalDependencies:
     electron-installer-debian "^3.2.0"
 
-"@electron-forge/maker-rpm@^7.6.1":
-  version "7.6.1"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-rpm/-/maker-rpm-7.6.1.tgz#ff2c2cd252d4abb7bb6271979b06dc170ab5c331"
-  integrity sha512-BShfmto+XTSA01pkZp10r2ktyruVfI24sGC+y4az1vbqkmX2qN9j0Xr+G/ZMHsm76XHju0N/e1Y2pqqu2JM8/A==
+"@electron-forge/maker-rpm@^7.7.0":
+  version "7.7.0"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-rpm/-/maker-rpm-7.7.0.tgz#a88b0c557f0f4287efbcfa5de71c3c002112cbb4"
+  integrity sha512-M9cFO6bCnOuA6BwBUUw35FrnWciWeFyLuByO0KOn3zEYeBDqG2fbBgXXS6OKcRHrpnJVTwiLY5S7eviyO1DJzQ==
   dependencies:
-    "@electron-forge/maker-base" "7.6.1"
-    "@electron-forge/shared-types" "7.6.1"
+    "@electron-forge/maker-base" "7.7.0"
+    "@electron-forge/shared-types" "7.7.0"
   optionalDependencies:
     electron-installer-redhat "^3.2.0"
 
@@ -260,6 +269,16 @@
   integrity sha512-i6VdZGG8SYEBirpk+FP7bEMYtCNf9wBkK81IcPco8LP0KbsvgR8y7aUSVxG8DLoVwYB5yr0N9MYXOfNp1gkQ7A==
   dependencies:
     "@electron-forge/tracer" "7.6.1"
+    "@electron/packager" "^18.3.5"
+    "@electron/rebuild" "^3.7.0"
+    listr2 "^7.0.2"
+
+"@electron-forge/shared-types@7.7.0":
+  version "7.7.0"
+  resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-7.7.0.tgz#936e6ded34e53a2bbd82583ce1e4c127e423f33d"
+  integrity sha512-1zQsmudkAuHv0HnJtSJY3pvTeuN3fnSa9BR6cbeUlcpOfrnG4OTG03FqerHfyIWaBRVy7jGgif0NhKKE9azKyg==
+  dependencies:
+    "@electron-forge/tracer" "7.7.0"
     "@electron/packager" "^18.3.5"
     "@electron/rebuild" "^3.7.0"
     listr2 "^7.0.2"
@@ -315,6 +334,13 @@
   version "7.6.1"
   resolved "https://registry.yarnpkg.com/@electron-forge/tracer/-/tracer-7.6.1.tgz#202f437cc85671c6a04a45a6e4c8fde676376104"
   integrity sha512-nZzVzXT4xdueWYoSbgStS5LfcifW/e/WJj9VOt6xYpFxYOsQHpLkkCAc6nH0gxn+60kiU4FMU0p2kSQ2eQhWuA==
+  dependencies:
+    chrome-trace-event "^1.0.3"
+
+"@electron-forge/tracer@7.7.0":
+  version "7.7.0"
+  resolved "https://registry.yarnpkg.com/@electron-forge/tracer/-/tracer-7.7.0.tgz#a90be0b2e4c797b6cd3f1a3abcb0649cd397cf6e"
+  integrity sha512-R/JiGFzWhwfVyc6ioT4l5FFChRLS4Z2tWPeQfPcyoemdpzKpI1rvMHti42gzWXFW8GdzkhG0G3ZWfKiF3y3x/Q==
   dependencies:
     chrome-trace-event "^1.0.3"
 
