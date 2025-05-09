@@ -40,7 +40,7 @@
     "electron": "^36.2.0",
     "electron-squirrel-startup": "^1.0.1",
     "fuse-box": "^3.7.1",
-    "http-proxy-middleware": "^2.0.6",
+    "http-proxy-middleware": "^3.0.5",
     "now": "latest",
     "now-pipeline": "latest",
     "serve": "latest",
