@@ -118,14 +118,14 @@
   resolved "https://registry.yarnpkg.com/@cycle/storage/-/storage-5.1.2.tgz#445b1b32409bd27c3e6ee1c5a2f93d7b31afdcdd"
   integrity sha512-Lz9LoHCa7wpGfTexbj5x2Xqa360lImmsPiLvci7z6ocEL8+qwx9IBSJlKp10N8BMoePQbOshmKfja5bntTGGng==
 
-"@electron-forge/cli@^7.8.0":
-  version "7.8.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/cli/-/cli-7.8.0.tgz#871e6f5e491cf7c41b11847f3176369176c2e073"
-  integrity sha512-XZ+Hg7pxeE9pgrahqcpMlND+VH0l0UTZLyO5wkI+YfanNyBQksB2mw24XeEtCA6x8F2IaEYdIGgijmPF6qpjzA==
+"@electron-forge/cli@^7.8.1":
+  version "7.8.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/cli/-/cli-7.8.1.tgz#9ba3e19b58d1ce7bb4ab566ba36d23af2d00ffbd"
+  integrity sha512-QI3EShutfq9Y+2TWWrPjm4JZM3eSAKzoQvRZdVhAfVpUbyJ8K23VqJShg3kGKlPf9BXHAGvE+8LyH5s2yDr1qA==
   dependencies:
-    "@electron-forge/core" "7.8.0"
-    "@electron-forge/core-utils" "7.8.0"
-    "@electron-forge/shared-types" "7.8.0"
+    "@electron-forge/core" "7.8.1"
+    "@electron-forge/core-utils" "7.8.1"
+    "@electron-forge/shared-types" "7.8.1"
     "@electron/get" "^3.0.0"
     chalk "^4.0.0"
     commander "^11.1.0"
@@ -135,12 +135,12 @@
     log-symbols "^4.0.0"
     semver "^7.2.1"
 
-"@electron-forge/core-utils@7.8.0":
-  version "7.8.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/core-utils/-/core-utils-7.8.0.tgz#e38682c892ac260d9f60ac11c3f9f7c150e56fde"
-  integrity sha512-ZioRzqkXVOGuwkfvXN/FPZxcssJ9AkOZx6RvxomQn90F77G2KfEbw4ZwAxVTQ+jWNUzydTic5qavWle++Y5IeA==
+"@electron-forge/core-utils@7.8.1":
+  version "7.8.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/core-utils/-/core-utils-7.8.1.tgz#9c94e31e146258bbb9eeb07f7b084fde5892e83d"
+  integrity sha512-mRoPLDNZgmjyOURE/K0D3Op53XGFmFRgfIvFC7c9S/BqsRpovVblrqI4XxPRdNmH9dvhd8On9gGz+XIYAKD3aQ==
   dependencies:
-    "@electron-forge/shared-types" "7.8.0"
+    "@electron-forge/shared-types" "7.8.1"
     "@electron/rebuild" "^3.7.0"
     "@malept/cross-spawn-promise" "^2.0.0"
     chalk "^4.0.0"
@@ -150,22 +150,22 @@
     log-symbols "^4.0.0"
     semver "^7.2.1"
 
-"@electron-forge/core@7.8.0":
-  version "7.8.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/core/-/core-7.8.0.tgz#45991916312c6ee76cb627653c565182a3dd189b"
-  integrity sha512-7byf660ECZND+irOhGxvpmRXjk1bMrsTWh5J2AZMEvaXI8tub9OrZY9VSbi5fcDt0lpHPKmgVk7NRf/ZjJ+beQ==
+"@electron-forge/core@7.8.1":
+  version "7.8.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/core/-/core-7.8.1.tgz#55eb23b60a9ce873aedcdc0e41fcd4870a67ad7a"
+  integrity sha512-jkh0QPW5p0zmruu1E8+2XNufc4UMxy13WLJcm7hn9jbaXKLkMbKuEvhrN1tH/9uGp1mhr/t8sC4N67gP+gS87w==
   dependencies:
-    "@electron-forge/core-utils" "7.8.0"
-    "@electron-forge/maker-base" "7.8.0"
-    "@electron-forge/plugin-base" "7.8.0"
-    "@electron-forge/publisher-base" "7.8.0"
-    "@electron-forge/shared-types" "7.8.0"
-    "@electron-forge/template-base" "7.8.0"
-    "@electron-forge/template-vite" "7.8.0"
-    "@electron-forge/template-vite-typescript" "7.8.0"
-    "@electron-forge/template-webpack" "7.8.0"
-    "@electron-forge/template-webpack-typescript" "7.8.0"
-    "@electron-forge/tracer" "7.8.0"
+    "@electron-forge/core-utils" "7.8.1"
+    "@electron-forge/maker-base" "7.8.1"
+    "@electron-forge/plugin-base" "7.8.1"
+    "@electron-forge/publisher-base" "7.8.1"
+    "@electron-forge/shared-types" "7.8.1"
+    "@electron-forge/template-base" "7.8.1"
+    "@electron-forge/template-vite" "7.8.1"
+    "@electron-forge/template-vite-typescript" "7.8.1"
+    "@electron-forge/template-webpack" "7.8.1"
+    "@electron-forge/template-webpack-typescript" "7.8.1"
+    "@electron-forge/tracer" "7.8.1"
     "@electron/get" "^3.0.0"
     "@electron/packager" "^18.3.5"
     "@electron/rebuild" "^3.7.0"
@@ -179,6 +179,7 @@
     global-dirs "^3.0.0"
     got "^11.8.5"
     interpret "^3.1.1"
+    jiti "^2.4.2"
     listr2 "^7.0.2"
     lodash "^4.17.20"
     log-symbols "^4.0.0"
@@ -249,19 +250,19 @@
     fs-extra "^10.0.0"
     got "^11.8.5"
 
-"@electron-forge/plugin-base@7.8.0":
-  version "7.8.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/plugin-base/-/plugin-base-7.8.0.tgz#bb617781c28b99d2b65d6f2e66679b245d388e78"
-  integrity sha512-rDeeChRWIp5rQVo3Uc1q0ncUvA+kWWURW7tMuQjPvy2qVSgX+jIf5krk+T1Dp06+D4YZzEIrkibRaamAaIcR1w==
+"@electron-forge/plugin-base@7.8.1":
+  version "7.8.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/plugin-base/-/plugin-base-7.8.1.tgz#29b88971dba7c28bc1e4880be4d5db6a7c3404be"
+  integrity sha512-iCZC2d7CbsZ9l6j5d+KPIiyQx0U1QBfWAbKnnQhWCSizjcrZ7A9V4sMFZeTO6+PVm48b/r9GFPm+slpgZtYQLg==
   dependencies:
-    "@electron-forge/shared-types" "7.8.0"
+    "@electron-forge/shared-types" "7.8.1"
 
-"@electron-forge/publisher-base@7.8.0":
-  version "7.8.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/publisher-base/-/publisher-base-7.8.0.tgz#5b86f7dec28aecf19448a54b7f65371e18bcc9c7"
-  integrity sha512-wrZyptJ0Uqvlh2wYzDZfIu2HgCQ+kdGiBlcucmLY4W+GUqf043O8cbYso3D9NXQxOow55QC/1saCQkgLphprPA==
+"@electron-forge/publisher-base@7.8.1":
+  version "7.8.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/publisher-base/-/publisher-base-7.8.1.tgz#62240adb5ea94b9db2a64a75c816a68d1b87525f"
+  integrity sha512-z2C+C4pcFxyCXIFwXGDcxhU8qtVUPZa3sPL6tH5RuMxJi77768chLw2quDWk2/dfupcSELXcOMYCs7aLysCzeQ==
   dependencies:
-    "@electron-forge/shared-types" "7.8.0"
+    "@electron-forge/shared-types" "7.8.1"
 
 "@electron-forge/shared-types@7.8.0":
   version "7.8.0"
@@ -283,52 +284,52 @@
     "@electron/rebuild" "^3.7.0"
     listr2 "^7.0.2"
 
-"@electron-forge/template-base@7.8.0":
-  version "7.8.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/template-base/-/template-base-7.8.0.tgz#9721d6c42120db094c83436404a458a2cb6e5412"
-  integrity sha512-hc8NwoDqEEmZFH/p0p3MK/7xygMmI+cm8Gavoj2Mr2xS7VUUu4r3b5PwIGKvkLfPG34uwsiVwtid2t1rWGF4UA==
+"@electron-forge/template-base@7.8.1":
+  version "7.8.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/template-base/-/template-base-7.8.1.tgz#81da376241355c559744fad8c43c3012096d420d"
+  integrity sha512-k8jEUr0zWFWb16ZGho+Es2OFeKkcbTgbC6mcH4eNyF/sumh/4XZMcwRtX1i7EiZAYiL9sVxyI6KVwGu254g+0g==
   dependencies:
-    "@electron-forge/core-utils" "7.8.0"
-    "@electron-forge/shared-types" "7.8.0"
+    "@electron-forge/core-utils" "7.8.1"
+    "@electron-forge/shared-types" "7.8.1"
     "@malept/cross-spawn-promise" "^2.0.0"
     debug "^4.3.1"
     fs-extra "^10.0.0"
     username "^5.1.0"
 
-"@electron-forge/template-vite-typescript@7.8.0":
-  version "7.8.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/template-vite-typescript/-/template-vite-typescript-7.8.0.tgz#106558f6e3af263629e730fd2a60e9eaffefb7cf"
-  integrity sha512-kW3CaVxKHUYuVfY+rT3iepeZ69frBRGh3YZOngLY2buCvGIqNEx+VCgrFBRDDbOKGmwQtwO1E9wp2rtC8q6Ztg==
+"@electron-forge/template-vite-typescript@7.8.1":
+  version "7.8.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/template-vite-typescript/-/template-vite-typescript-7.8.1.tgz#f8a1fd5bd1f0d76ef3c3e0f953af6cb2dc365087"
+  integrity sha512-CccQhwUjZcc6svzuOi3BtbDal591DzyX2J5GPa6mwVutDP8EMtqJL1VyOHdcWO/7XjI6GNAD0fiXySOJiUAECA==
   dependencies:
-    "@electron-forge/shared-types" "7.8.0"
-    "@electron-forge/template-base" "7.8.0"
+    "@electron-forge/shared-types" "7.8.1"
+    "@electron-forge/template-base" "7.8.1"
     fs-extra "^10.0.0"
 
-"@electron-forge/template-vite@7.8.0":
-  version "7.8.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/template-vite/-/template-vite-7.8.0.tgz#8906aa82cb4c0efc3501da0141a9dd382715dd86"
-  integrity sha512-bf/jd8WzD0gU7Jet+WSi0Lm0SQmseb08WY27ZfJYEs2EVNMiwDfPicgQnOaqP++2yTrXhj1OY/rolZCP9CUyVw==
+"@electron-forge/template-vite@7.8.1":
+  version "7.8.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/template-vite/-/template-vite-7.8.1.tgz#0b9c7abbe2218eed6b9818b9f3fe15a34aa19f6f"
+  integrity sha512-qzSlJaBYYqQAbBdLk4DqAE3HCNz4yXbpkb+VC74ddL4JGwPdPU57DjCthr6YetKJ2FsOVy9ipovA8HX5UbXpAg==
   dependencies:
-    "@electron-forge/shared-types" "7.8.0"
-    "@electron-forge/template-base" "7.8.0"
+    "@electron-forge/shared-types" "7.8.1"
+    "@electron-forge/template-base" "7.8.1"
     fs-extra "^10.0.0"
 
-"@electron-forge/template-webpack-typescript@7.8.0":
-  version "7.8.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/template-webpack-typescript/-/template-webpack-typescript-7.8.0.tgz#26731829d8fa18196ae65bf3db46fb6659b1eac7"
-  integrity sha512-Pl8l+gv3HzqCfFIMLxlEsoAkNd0VEWeZZ675SYyqs0/kBQUifn0bKNhVE4gUZwKGgQCcG1Gvb23KdVGD3H3XmA==
+"@electron-forge/template-webpack-typescript@7.8.1":
+  version "7.8.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/template-webpack-typescript/-/template-webpack-typescript-7.8.1.tgz#2d1de5fdde28d9bfde80b311e7eaf3e47342b493"
+  integrity sha512-h922E+6zWwym1RT6WKD79BLTc4H8YxEMJ7wPWkBX59kw/exsTB/KFdiJq6r82ON5jSJ+Q8sDGqSmDWdyCfo+Gg==
   dependencies:
-    "@electron-forge/shared-types" "7.8.0"
-    "@electron-forge/template-base" "7.8.0"
+    "@electron-forge/shared-types" "7.8.1"
+    "@electron-forge/template-base" "7.8.1"
     fs-extra "^10.0.0"
 
-"@electron-forge/template-webpack@7.8.0":
-  version "7.8.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/template-webpack/-/template-webpack-7.8.0.tgz#b85b2827193142c6c836ceec8a1776471fdd28c4"
-  integrity sha512-AdLGC6NVgrd7Q0SaaeiwJKmSBjN6C2EHxZgLMy1yxNSpazU9m3DtYQilDjXqmCWfxkeNzdke0NaeDvLgdJSw5A==
+"@electron-forge/template-webpack@7.8.1":
+  version "7.8.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/template-webpack/-/template-webpack-7.8.1.tgz#f9c54e93208972eb0ab5280793bba25234f170d1"
+  integrity sha512-DA77o9kTCHrq+W211pyNP49DyAt0d1mzMp2gisyNz7a+iKvlv2DsMAeRieLoCQ44akb/z8ZsL0YLteSjKLy4AA==
   dependencies:
-    "@electron-forge/shared-types" "7.8.0"
-    "@electron-forge/template-base" "7.8.0"
+    "@electron-forge/shared-types" "7.8.1"
+    "@electron-forge/template-base" "7.8.1"
     fs-extra "^10.0.0"
 
 "@electron-forge/tracer@7.8.0":
@@ -3661,6 +3662,11 @@ jackspeak@^3.1.2:
     "@isaacs/cliui" "^8.0.2"
   optionalDependencies:
     "@pkgjs/parseargs" "^0.11.0"
+
+jiti@^2.4.2:
+  version "2.4.2"
+  resolved "https://registry.yarnpkg.com/jiti/-/jiti-2.4.2.tgz#d19b7732ebb6116b06e2038da74a55366faef560"
+  integrity sha512-rg9zJN+G4n2nfJl5MW3BMygZX56zKPNVEYYqq7adpmMh4Jn2QNEwhvQlFy6jPVdcod7txZtKHWnyZiA3a0zP7A==
 
 js-tokens@^4.0.0:
   version "4.0.0"
