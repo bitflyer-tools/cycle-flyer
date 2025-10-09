@@ -211,13 +211,13 @@
     fs-extra "^10.0.0"
     which "^2.0.2"
 
-"@electron-forge/maker-deb@^7.9.0":
-  version "7.9.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/maker-deb/-/maker-deb-7.9.0.tgz#6309d8e6b78010a32a55f2eb51a5e952f233b7e3"
-  integrity sha512-b1TRMKkeuZ2PTKVsTMWLY+82O6UQVPQ17x5hkWe0lyIxRyCfJr6hD+AqYbvEJ50ncDkvyCtENBT6GnhfbKOGxA==
+"@electron-forge/maker-deb@^7.10.0":
+  version "7.10.0"
+  resolved "https://registry.yarnpkg.com/@electron-forge/maker-deb/-/maker-deb-7.10.0.tgz#79b62e16b2d4e929116972301481d296493b3a5c"
+  integrity sha512-RlzhL/NtbYqphBuNWINwCR2kuCIE0RpYvkqa1ynDdu0n/OOiR/E1dpT0T/ZzSoyTIAZLYIcX3cHXwObzvV9bHQ==
   dependencies:
-    "@electron-forge/maker-base" "7.9.0"
-    "@electron-forge/shared-types" "7.9.0"
+    "@electron-forge/maker-base" "7.10.0"
+    "@electron-forge/shared-types" "7.10.0"
   optionalDependencies:
     electron-installer-debian "^3.2.0"
 
@@ -266,16 +266,6 @@
   integrity sha512-YAWnpTgzrf3xnjjk6pUwNfYAEMZ6YuOASEfPTKCKRo0MUpcUVvP1kB/LYlwI0LItyrGoTk0cfAw5fN/kFlB1Ng==
   dependencies:
     "@electron-forge/shared-types" "7.10.0"
-
-"@electron-forge/shared-types@7.10.0":
-  version "7.10.0"
-  resolved "https://registry.yarnpkg.com/@electron-forge/shared-types/-/shared-types-7.10.0.tgz#61204880a895938cd505d947838e06c598ab8580"
-  integrity sha512-FpLBZ1kdIQjRmo09dD/zwDAARGLTzRB2Ja4eplUx5c8ctoblCnvC+KEOYA7R5DaRpKChaW0lqpDRF3ou2W+hHA==
-  dependencies:
-    "@electron-forge/tracer" "7.10.0"
-    "@electron/packager" "^18.3.5"
-    "@electron/rebuild" "^3.7.0"
-    listr2 "^7.0.2"
 
 "@electron-forge/shared-types@7.10.0":
   version "7.10.0"
