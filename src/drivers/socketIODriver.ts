@@ -1,6 +1,5 @@
-import * as io from "socket.io-client";
+import { io, Socket } from "socket.io-client";
 import Stream from "xstream";
-import Socket = SocketIOClient.Socket;
 
 export const makeSocketIODriver = () => (): SocketIOSource => {
     const serverURL = "https://io.lightstream.bitflyer.com";

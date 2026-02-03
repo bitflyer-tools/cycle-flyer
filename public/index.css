@@ -1,0 +1,412 @@
+/* src/components/setting/index.styl */
+.setting {
+  height: 100%;
+  width: 1080px;
+  margin: 0 auto;
+}
+.setting .api-key,
+.setting .api-secret {
+  height: 48px;
+  line-height: 48px;
+}
+.setting .api-key label {
+  display: inline-block;
+  width: 120px;
+}
+.setting .api-secret label {
+  display: inline-block;
+  width: 120px;
+}
+.setting #api-key-input,
+.setting #api-secret-input {
+  -webkit-appearance: none;
+  width: 360px;
+  padding: 4px 12px;
+  border-radius: 4px;
+}
+
+/* src/components/trade/board/index.styl */
+.board {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 30px auto;
+}
+.board span {
+  display: inline-block;
+  font-size: 13px;
+}
+.board .board-header {
+  grid-column: 1/3;
+  grid-row: 1;
+  line-height: 30px;
+  vertical-align: middle;
+  text-align: center;
+  padding: 0 20px;
+}
+.board .board-header span {
+  display: inline-block;
+  margin-right: 20px;
+  line-height: 30px;
+  vertical-align: middle;
+}
+.board .board-header .grouped-size {
+  width: 50px;
+  margin: 0;
+  text-align: center;
+}
+.board .board-header .plus {
+  margin-right: 20px;
+  background: transparent;
+  color: #e8e8e8;
+  border: none;
+}
+.board .board-header .minus {
+  background: transparent;
+  color: #e8e8e8;
+  border: none;
+}
+.board .board-header .spread {
+  width: 80px;
+  margin: 0;
+  text-align: center;
+}
+.board .asks,
+.board .bids {
+  font-family:
+    "Fira Code",
+    "Courier New",
+    Courier,
+    monospace,
+    sans-serif;
+  height: calc(100vh - 90px);
+  padding: 0 12px;
+  overflow: scroll;
+  will-change: transform;
+}
+.board .asks {
+  grid-column: 1;
+  grid-row: 2;
+  text-align: right;
+  color: #f7694d;
+}
+.board .asks span {
+  margin-left: 20px;
+}
+.board .asks .bar {
+  background: rgba(247, 105, 77, 0.25);
+  right: 0;
+}
+.board .bids {
+  grid-column: 2;
+  grid-row: 2;
+  color: #eda909;
+}
+.board .bids span {
+  margin-right: 20px;
+}
+.board .bids .bar {
+  background: rgba(237, 169, 9, 0.25);
+  left: 0;
+}
+.board .ask,
+.board .bid {
+  position: relative;
+  width: 100%;
+}
+.board .bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.board .my-position {
+  color: #008000;
+}
+.board .my-order {
+  color: #e8e8e8;
+}
+.board .my-stop-order {
+  color: #f00;
+}
+
+/* src/components/trade/index.styl */
+.trade {
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 380px 1fr 380px;
+  grid-template-rows: 1fr;
+}
+.order {
+  height: calc(100vh - 60px - 64px);
+  grid-column: 3;
+  grid-row: 1;
+  padding: 32px;
+  overflow: scroll;
+  will-change: transform;
+}
+.order .sub-title {
+  margin-top: 0;
+  font-size: 14px;
+  font-weight: 400;
+}
+.order .label {
+  font-size: 13px;
+  font-weight: 400;
+}
+.order .label.buy,
+.order .label.sell {
+  width: 40px;
+  display: inline-block;
+}
+.order .line-number .buy,
+.order .line-number .sell {
+  font-family:
+    "Fira Code",
+    "Courier New",
+    Courier,
+    monospace,
+    sans-serif;
+  font-size: 13px;
+}
+.order .line-number .right {
+  display: inline-block;
+  width: 276px;
+  text-align: right;
+}
+.order .profit,
+.order .profit-line {
+  color: #008000;
+}
+.order .loss,
+.order .loss-line {
+  color: #f00;
+}
+.order #size-input,
+.order #price-input {
+  display: block;
+  width: 316px;
+  height: 32px;
+  margin: 20px 0;
+  text-align: center;
+  background: rgba(27, 31, 39, 0.4);
+  color: #e9e9e9;
+  font-size: 16px;
+  border: none;
+  border-radius: 4px;
+}
+.order #ratio-input,
+.order #price-width-input {
+  display: inline-block;
+  width: 148px;
+  height: 32px;
+  margin: 0 0 20px;
+  text-align: center;
+  background: rgba(27, 31, 39, 0.4);
+  color: #e9e9e9;
+  font-size: 16px;
+  border: none;
+  border-radius: 4px;
+}
+.order .ratio label,
+.order .price-width label {
+  display: inline-block;
+  width: 164px;
+}
+.order .order-buttons {
+  width: 316px;
+  margin: 0;
+}
+.order .order-buttons button {
+  height: 32px;
+  width: 148px;
+  font-size: 14px;
+  color: #e8e8e8;
+  border: none;
+  border-radius: 4px;
+}
+.order .order-buttons button:hover {
+  opacity: 0.8;
+}
+.order .order-buttons button:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+.order .order-buttons button:disabled:hover {
+  opacity: 0.3;
+}
+.order .order-buttons .sell-button {
+  margin-right: 20px;
+  background: #f7694d;
+}
+.order .order-buttons .buy-button {
+  background: #eda909;
+}
+.order .order-buttons .clear-button {
+  margin-right: 20px;
+  color: #2c3940;
+  background: #e8e8e8;
+}
+.order .order-buttons .clear-order-button {
+  color: #2c3940;
+  background: #e8e8e8;
+}
+
+/* src/components/trade/summary/index.styl */
+.summary {
+  grid-column: 1;
+  grid-row: 1;
+  padding: 32px;
+  background: #1b1b1b;
+  font-size: 13px;
+}
+.summary .collateral,
+.summary .current-price,
+.summary .position,
+.summary .position-size,
+.summary .position-diff,
+.summary .profit,
+.summary .market-state,
+.summary .board-state {
+  height: 32px;
+  line-height: 32px;
+}
+.summary .label {
+  display: inline-block;
+  width: 140px;
+}
+.summary .number {
+  display: inline-block;
+  width: 140px;
+}
+.summary .unit {
+  font-size: 12px;
+}
+.summary .plus {
+  color: #008000;
+}
+.summary .minus {
+  color: #f00;
+}
+.summary .health {
+  display: inline-block;
+  padding-right: 12px;
+}
+.summary .good {
+  color: #008000;
+}
+.summary .bad {
+  color: #f00;
+}
+.summary .histories {
+  padding: 0;
+  max-height: 300px;
+  height: 300px;
+  overflow: scroll;
+}
+.summary .history {
+  list-style-type: none;
+}
+.summary .history span {
+  display: inline-block;
+  font-size: 11px;
+  line-height: 24px;
+}
+.summary .history .name {
+  width: 50px;
+}
+.summary .history .description {
+  width: 180px;
+}
+.summary .history .created-at {
+  width: 50px;
+}
+.summary .history .success {
+  width: 20px;
+  color: #008000;
+}
+.summary .history .failed {
+  width: 20px;
+  color: #f00;
+}
+
+/* src/index.styl */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  color: #e8e8e8;
+  background: #2c3940;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Helvetica Neue",
+    "Segoe UI",
+    sans-serif;
+  letter-spacing: 0.08em;
+}
+body ::-webkit-scrollbar {
+  display: none;
+}
+body ::-webkit-scrollbar-track {
+  display: none;
+}
+body ::-webkit-scrollbar-thumb {
+  display: none;
+}
+a {
+  color: rgba(232, 232, 232, 0.5);
+  text-decoration: none;
+}
+button,
+input {
+  outline: none;
+}
+a:hover {
+  color: rgba(232, 232, 232, 0.2);
+}
+hr {
+  margin: 24px auto;
+  background-color: rgba(255, 255, 255, 0.4);
+  height: 1px;
+  border: 0;
+}
+#app {
+  height: 100%;
+}
+#app #wrapper {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 60px 1fr;
+}
+#app .content {
+  grid-column: 1;
+  grid-row: 2;
+}
+#app .header {
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
+  background: #1b1f27;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+}
+#app .header .header-wrapper {
+  margin: 0 auto;
+  padding: 0 32px;
+}
+#app .header .header-title {
+  display: inline-block;
+  margin-right: 20px;
+  font-size: 18px;
+  font-weight: 400;
+}
+#app .header a.menu-trade,
+#app .header a.menu-setting {
+  display: inline-block;
+  margin-right: 12px;
+  line-height: 60px;
+  font-size: 14px;
+}
+/*# sourceMappingURL=index.css.map */
