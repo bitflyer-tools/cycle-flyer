@@ -34,32 +34,24 @@ export const Root = (sources: Sources): Sinks => {
         })
         .map((route: any) => route.value({...sources, router: sources.router.path(route.path)}));
 
-    const tradeClick$ = sources.DOM.select(".menu-trade").events("click")
-        .map((e: Event) => { e.preventDefault(); return "/"; });
-    const settingClick$ = sources.DOM.select(".menu-setting").events("click")
-        .map((e: Event) => { e.preventDefault(); return "/setting"; });
-    const menuNav$ = Stream.merge(tradeClick$, settingClick$);
-
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>
                 div("#wrapper", [
                     header(".header", [
                         div(".header-wrapper", [
                             h1(".header-title", "cycle-flyer"),
-                            a(".menu-trade", { attrs: { href: "#" } }, "Trade"),
-                            a(".menu-setting", { attrs: { href: "#" } }, "Setting"),
+                            a(".menu-trade", { props: { href: "/" } }, "Trade"),
+                            a(".menu-setting", { props: { href: "/setting" } }, "Setting"),
                         ]),
                     ]),
                     div(".content", [contentDOM]),
                 ]),
             );
 
-    const childRouter$ = routes$.map((sinks: Sinks) => sinks.router).flatten();
-
     return {
         DOM: view$,
         HTTP: routes$.map((sinks: Sinks) => sinks.HTTP).flatten(),
-        router: Stream.merge(menuNav$, childRouter$),
+        router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
         state: routes$.map((sinks: Sinks) => sinks.state).flatten(),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
     };
