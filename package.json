@@ -1,6 +1,6 @@
 {
   "name": "cycle-flyer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "client webapp for bitFlyer by cycle.js",
   "main": "srcElectron/index.js",
   "scripts": {
