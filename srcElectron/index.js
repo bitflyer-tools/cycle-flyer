@@ -1,4 +1,17 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, net, protocol } = require('electron');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true
+    }
+  }
+]);
 
 const createWindow = () => {
   const win = new BrowserWindow({
@@ -9,10 +22,23 @@ const createWindow = () => {
     }
   });
 
-  win.loadFile('./public/index.html');
-}
+  win.loadURL('app://./index.html');
+};
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  const publicDir = path.join(__dirname, '..', 'public');
+
+  protocol.handle('app', (request) => {
+    let pathname = new URL(request.url).pathname;
+    if (pathname === '/') {
+      pathname = '/index.html';
+    }
+    const filePath = path.join(publicDir, pathname);
+    return net.fetch(pathToFileURL(filePath).toString());
+  });
+
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
