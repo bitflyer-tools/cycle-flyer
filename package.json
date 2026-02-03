@@ -51,7 +51,8 @@
     "forge": {
       "packagerConfig": {
         "icon": "public/appIcon",
-        "name": "Cycle Flyer"
+        "name": "Cycle Flyer",
+        "executableName": "cycle-flyer"
       },
       "makers": [
         {
