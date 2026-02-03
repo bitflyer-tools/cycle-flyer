@@ -226,14 +226,14 @@
   border-radius: 4px;
 }
 .order .order-buttons button:hover {
-  opacity: 0.8;
+  opacity: .8;
 }
 .order .order-buttons button:disabled {
   cursor: not-allowed;
-  opacity: 0.3;
+  opacity: .3;
 }
 .order .order-buttons button:disabled:hover {
-  opacity: 0.3;
+  opacity: .3;
 }
 .order .order-buttons .sell-button {
   margin-right: 20px;
@@ -344,7 +344,7 @@ body {
     "Helvetica Neue",
     "Segoe UI",
     sans-serif;
-  letter-spacing: 0.08em;
+  letter-spacing: .08em;
 }
 body ::-webkit-scrollbar {
   display: none;
