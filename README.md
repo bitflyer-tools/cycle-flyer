@@ -9,6 +9,3 @@
 Download the latest release from [GitHub Releases](https://github.com/bitflyer-tools/cycle-flyer/releases).
 
 ![](./images/looking.png)
-
-### Warning
-To use this application, you must disable cors option by [StackOverflow](https://stackoverflow.com/questions/3102819/disable-same-origin-policy-in-chrome) because bitFlyer API is not support CORS. 
