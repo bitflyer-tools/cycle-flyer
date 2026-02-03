@@ -8,7 +8,6 @@
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
     "start": "node fuse.dev",
     "start:electron": "electron-forge start --inspect-electron",
-    "deploy": "now --public --token=$NOW_TOKEN --prod -c && now-pipeline-prune",
     "package": "electron-forge package",
     "make": "electron-forge make"
   },
@@ -41,8 +40,6 @@
     "electron-squirrel-startup": "^1.0.1",
     "esbuild": "^0.27.2",
     "http-proxy-middleware": "^3.0.5",
-    "now": "latest",
-    "now-pipeline": "latest",
     "serve": "latest",
     "tslint": "^6.1.3",
     "typescript": "^5.9.3"
