@@ -36,7 +36,7 @@
     "@electron-forge/maker-rpm": "^7.11.1",
     "@electron-forge/maker-squirrel": "^7.11.1",
     "@electron-forge/maker-zip": "^7.11.1",
-    "electron": "^40.4.1",
+    "electron": "^40.6.0",
     "electron-squirrel-startup": "^1.0.1",
     "esbuild": "^0.27.3",
     "http-proxy-middleware": "^3.0.5",
