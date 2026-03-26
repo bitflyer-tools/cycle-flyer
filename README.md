@@ -9,3 +9,7 @@
 Download the latest release from [GitHub Releases](https://github.com/bitflyer-tools/cycle-flyer/releases).
 
 ![](./images/looking.png)
+
+## Author
+
+[@unhappychoice](https://unhappychoice.com)
