@@ -39,7 +39,7 @@
     "electron": "^42.4.0",
     "electron-squirrel-startup": "^1.0.1",
     "esbuild": "^0.28.1",
-    "http-proxy-middleware": "^4.1.0",
+    "http-proxy-middleware": "^4.1.1",
     "serve": "latest",
     "tslint": "^6.1.3",
     "typescript": "^6.0.3"
