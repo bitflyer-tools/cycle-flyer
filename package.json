@@ -48,7 +48,7 @@
     "form-data": "^2.5.6",
     "tar": "^7.5.19",
     "tmp": "^0.2.6",
-    "js-yaml": "^4.3.0",
+    "js-yaml": "^4.3.2",
     "brace-expansion@1.x": "^1.1.16",
     "brace-expansion@2.x": "^2.1.2",
     "minimatch@>=5.0.0 <5.1.8": "5.1.9",
