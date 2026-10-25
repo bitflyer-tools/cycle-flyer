@@ -4,6 +4,7 @@ import sampleCombine from "xstream/extra/sampleCombine";
 import {cancelOrders, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
+import {twapRequest} from "./twapRequest";
 
 export const request = (actions: Actions, state$: Stream<State>): Stream<string | RequestInput | null> => {
     const withState = (click$: Stream<null>, toRequest: (state: State) => RequestInput) =>
@@ -20,6 +21,7 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<string 
         withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder),
         withState(actions.onClickClearButton$, clearPositionOrder),
         actions.onClickClearOrderButton$.map((_) => cancelOrders()),
+        twapRequest(actions, state$),
     ) as Stream<string | RequestInput | null>;
 };
 

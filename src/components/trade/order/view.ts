@@ -6,6 +6,7 @@ import {State} from "./index";
 import {numberInput} from "./numberInput";
 import {sizeSection} from "./sizeView";
 import {stopSection} from "./stopView";
+import {twapSection} from "./twapView";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
     state$.map((state) =>
@@ -17,6 +18,8 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
             limitSection(state),
             hr(),
             stopSection(state),
+            hr(),
+            twapSection(state),
             hr(),
             clearSection(state),
             hr(),

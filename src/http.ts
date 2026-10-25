@@ -1,4 +1,4 @@
-import {RequestInput} from "@cycle/http";
+import {RequestInput, RequestOptions} from "@cycle/http";
 import * as hash from "hash.js";
 
 export const getBoard = (): RequestInput =>
@@ -31,6 +31,9 @@ export const marketOrder = (size: number, side: string): RequestInput => {
     };
     return requestInput("market-order", "/v1/me/sendchildorder", "POST", json);
 };
+
+export const twapSliceOrder = (size: number, side: string): RequestInput =>
+    ({ ...(marketOrder(size, side) as RequestOptions), category: "twap-order" });
 
 export const limitOrder = (price: number, size: number, side: string): RequestInput => {
     const json = {

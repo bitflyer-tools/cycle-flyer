@@ -4,6 +4,7 @@ import {Order} from "../../../models/order";
 import {OrderHistory} from "../../../models/orderHistory";
 import {Position} from "../../../models/position";
 import {StopOrder} from "../../../models/stopOrder";
+import {TwapOrder} from "../../../models/twapOrder";
 import {Sinks, Sources} from "../index";
 import "./index.styl";
 import {intent} from "./intent";
@@ -23,6 +24,7 @@ export interface State {
     size: number;
     stopOrders: StopOrder[];
     triggerPrice: number;
+    twap: TwapOrder;
 }
 
 export const OrderComponent = (sources: Sources): Sinks => {

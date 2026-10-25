@@ -1,11 +1,12 @@
-import {DOMSource} from "@cycle/dom";
 import {Stream} from "xstream";
 import {OrderHistory} from "../../../models/orderHistory";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
+import {clicks, numberInputs, sizePresetClicks} from "./events";
 import {createHistoryStream, createParentOrderHistoryStream} from "./history";
+import {TwapActions, twapIntent} from "./twapIntent";
 
-export interface Actions {
+export interface Actions extends TwapActions {
     onCancelOrders$: Stream<null>;
     onClickClearButton$: Stream<null>;
     onClickClearOrderButton$: Stream<null>;
@@ -49,6 +50,7 @@ export const intent = (sources: Sources): Actions => {
     );
 
     return {
+        ...twapIntent(sources),
         onCancelOrders$,
         onClickClearButton$: clicks(sources.DOM, ".order-buttons", ".clear-button"),
         onClickClearOrderButton$: clicks(sources.DOM, ".order-buttons", ".clear-order-button"),
@@ -72,20 +74,3 @@ export const intent = (sources: Sources): Actions => {
         onTriggerPriceChanged$: numberInputs(sources.DOM, "#trigger-price-input"),
     };
 };
-
-const clicks = (dom: DOMSource, container: string, selector: string): Stream<null> =>
-    dom.select(container).select(selector)
-        .events("click", { preventDefault: true })
-        .mapTo(null);
-
-const sizePresetClicks = (dom: DOMSource): Stream<number> =>
-    dom.select(".size-presets").select(".size-preset")
-        .events("click", { preventDefault: true })
-        .map((event: Event) => event.currentTarget as HTMLElement)
-        .map((element: HTMLElement) => +(element.dataset.size || 0));
-
-const numberInputs = (dom: DOMSource, selector: string): Stream<number> =>
-    dom.select(selector)
-        .events("keyup")
-        .map((event: Event) => event.target as HTMLInputElement)
-        .map((element: HTMLInputElement) => +element.value);
