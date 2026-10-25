@@ -79,6 +79,6 @@ const sizePresetClicks = (dom: DOMSource): Stream<number> =>
 
 const numberInputs = (dom: DOMSource, selector: string): Stream<number> =>
     dom.select(selector)
-        .events("keyup")
+        .events("input")
         .map((event: Event) => event.target as HTMLInputElement)
         .map((element: HTMLInputElement) => +element.value);
