@@ -3,6 +3,7 @@ import Stream from "xstream";
 import {sideButtons} from "./buttons";
 import {ifdocoSection} from "./ifdocoView";
 import {State} from "./index";
+import {sizeSection} from "./sizeView";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
     state$.map((state) =>
@@ -18,14 +19,6 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
             ifdocoSection(state),
         ]),
     );
-
-const sizeSection = (state: State): VNode =>
-    div([
-        h4(".sub-title", "Size"),
-        div(".size", [
-            input("#size-input", { attrs: { value: state.size }}),
-        ]),
-    ]);
 
 const marketSection = (state: State): VNode =>
     div([

@@ -97,3 +97,26 @@
     .clear-order-button
       color: rgba(44, 57, 64, 1)
       background: rgba(232, 232, 232, 1)
+
+  .size-presets
+    display: flex
+    justify-content: space-between
+    width: 316px
+    margin: -8px 0 20px
+
+    .size-preset
+      height: 28px
+      min-width: 44px
+      padding: 0 8px
+      font-size: 13px
+      color: rgba(233, 233, 233, 1)
+      background: rgba(27, 31, 39, .4)
+      border: 1px solid transparent
+      border-radius: 4px
+      &:hover
+        opacity: 0.8
+      &.selected
+        border-color: rgba(237, 169, 9, 1)
+      &:disabled
+        cursor: not-allowed
+        opacity: 0.3
