@@ -1,0 +1,99 @@
+
+.order
+  height: calc(100vh - 60px - 64px)
+  grid-column: 3
+  grid-row: 1
+  padding: 32px
+  overflow: scroll
+  will-change: transform
+
+  .sub-title
+    margin-top: 0
+    font-size: 14px
+    font-weight: 400
+
+  .label
+    font-size: 13px
+    font-weight: 400
+    &.buy, &.sell
+      width: 40px
+      display: inline-block
+
+  .line-number
+    .buy, .sell
+      font-family: 'Fira Code', 'Courier New', Courier, monospace, sans-serif
+      font-size: 13px
+    .right
+      display: inline-block
+      width: 276px
+      text-align: right
+
+  .profit, .profit-line
+    color: green
+
+  .loss, .loss-line
+    color: red
+
+  #size-input, #price-input
+    display: block
+    width: 316px
+    height: 32px
+    margin: 20px 0
+    text-align: center
+    background: rgba(27, 31, 39, .4)
+    color: rgba(233, 233, 233, 1)
+    font-size: 16px
+    border: none
+    border-radius: 4px
+
+  #ratio-input, #price-width-input
+    display: inline-block
+    width: 148px
+    height: 32px
+    margin: 0 0 20px
+    text-align: center
+    background: rgba(27, 31, 39, .4)
+    color: rgba(233, 233, 233, 1)
+    font-size: 16px
+    border: none
+    border-radius: 4px
+
+  .ratio, .price-width
+    label
+      display: inline-block
+      width: 164px
+
+  .order-buttons
+    width: 316px
+    margin: 0
+
+    button
+      height: 32px
+      width: 148px
+      font-size: 14px
+      color: rgba(232, 232, 232, 1)
+      border: none
+      border-radius: 4px
+      &:hover
+        opacity: 0.8
+      &:disabled
+        cursor: not-allowed
+        opacity: 0.3
+        &:hover
+          opacity: 0.3
+
+    .sell-button
+      margin-right: 20px
+      background: rgba(247, 105, 77, 1)
+
+    .buy-button
+      background: rgba(237, 169, 9, 1)
+
+    .clear-button
+      margin-right: 20px
+      color: rgba(44, 57, 64, 1)
+      background: rgba(232, 232, 232, 1)
+
+    .clear-order-button
+      color: rgba(44, 57, 64, 1)
+      background: rgba(232, 232, 232, 1)

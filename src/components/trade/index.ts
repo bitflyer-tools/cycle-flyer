@@ -6,7 +6,6 @@ import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
 import {SocketIOSource} from "../../drivers/socketIODriver";
-import {IFDOCOrder} from "../../models/ifdocoOrder";
 import {Order} from "../../models/order";
 import {OrderHistory} from "../../models/orderHistory";
 import {Position} from "../../models/position";
@@ -15,6 +14,7 @@ import {BoardComponent, State as BoardComponentState} from "./board/index";
 import "./index.styl";
 import {intent} from "./intent";
 import {model} from "./model";
+import {OrderComponent, State as OrderComponentState} from "./order";
 import {request} from "./request";
 import {State as SummaryComponentState} from "./summary";
 import {SummaryComponent} from "./summary";
@@ -40,14 +40,12 @@ export interface Sinks {
 export interface State {
     currentPrice: number;
     histories: OrderHistory[];
-    ifdocoOrder: IFDOCOrder;
-    isOrdering: boolean;
     orders: Order[];
     position: Position;
     price: number;
-    size: number;
     stopOrders: StopOrder[];
     boardComponentState?: BoardComponentState;
+    orderComponentState?: OrderComponentState;
     summaryComponentState?: SummaryComponentState;
 }
 
@@ -86,16 +84,43 @@ export const Trade = (sources: Sources): Sinks => {
         },
     })(sources);
 
+    const orderComponent = isolate(OrderComponent, {
+        state: {
+            get: (state: State) => state.orderComponentState && {
+                ...state.orderComponentState,
+                currentPrice: state.currentPrice,
+                histories: state.histories,
+                orders: state.orders,
+                position: state.position,
+                price: state.price,
+                stopOrders: state.stopOrders,
+            },
+            set: (state: State, orderComponentState: OrderComponentState) => ({
+                ...state,
+                histories: orderComponentState.histories,
+                orderComponentState,
+                orders: orderComponentState.orders,
+                price: orderComponentState.price,
+                stopOrders: orderComponentState.stopOrders,
+            }),
+        },
+    })(sources);
+
     const actions = intent(sources);
     const reducer$ = model(actions);
-    const view$ = view(sources.state.stream, boardComponent.DOM, summaryComponent.DOM);
-    const request$ = request(actions, sources.state.stream);
+    const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM);
+    const request$ = request(actions);
 
     return {
         DOM: view$,
-        HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP),
+        HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP),
         router: Stream.never(),
-        state: Stream.merge(reducer$, boardComponent.state, summaryComponent.state) as Stream<Reducer<State>>,
+        state: Stream.merge(
+            reducer$,
+            boardComponent.state,
+            summaryComponent.state,
+            orderComponent.state,
+        ) as Stream<Reducer<State>>,
         storage: Stream.never(),
     };
 };
