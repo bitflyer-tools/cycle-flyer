@@ -46,7 +46,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const ratioReducer$ = actions.onRatioChanged$
         .map((ratio) => (state: State) => ({ ...state, ifdocoOrder: new IFDOCOrder(state.ifdocoOrder.width, ratio) }));
 
-    const sizeReducer$ = actions.onSizeChanged$
+    const sizeReducer$ = Stream.merge(actions.onSizeChanged$, actions.onClickSizePresetButton$)
         .map((size) => (state: State) => ({ ...state, size }));
 
     return Stream.merge(

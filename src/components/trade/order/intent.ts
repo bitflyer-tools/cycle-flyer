@@ -14,6 +14,7 @@ export interface Actions {
     onClickLimitSellButton$: Stream<null>;
     onClickMarketBuyButton$: Stream<null>;
     onClickMarketSellButton$: Stream<null>;
+    onClickSizePresetButton$: Stream<number>;
     onHistoryCreated$: Stream<OrderHistory>;
     onPriceChanged$: Stream<number>;
     onPriceWidthChanged$: Stream<number>;
@@ -43,6 +44,7 @@ export const intent = (sources: Sources): Actions => {
         onClickLimitSellButton$: clicks(sources.DOM, ".limit-order-buttons", ".sell-button"),
         onClickMarketBuyButton$: clicks(sources.DOM, ".market-order-buttons", ".buy-button"),
         onClickMarketSellButton$: clicks(sources.DOM, ".market-order-buttons", ".sell-button"),
+        onClickSizePresetButton$: sizePresetClicks(sources.DOM),
         onHistoryCreated$,
         onPriceChanged$: numberInputs(sources.DOM, "#price-input"),
         onPriceWidthChanged$: numberInputs(sources.DOM, "#price-width-input"),
@@ -55,6 +57,12 @@ const clicks = (dom: DOMSource, container: string, selector: string): Stream<nul
     dom.select(container).select(selector)
         .events("click", { preventDefault: true })
         .mapTo(null);
+
+const sizePresetClicks = (dom: DOMSource): Stream<number> =>
+    dom.select(".size-presets").select(".size-preset")
+        .events("click", { preventDefault: true })
+        .map((event: Event) => event.currentTarget as HTMLElement)
+        .map((element: HTMLElement) => +(element.dataset.size || 0));
 
 const numberInputs = (dom: DOMSource, selector: string): Stream<number> =>
     dom.select(selector)
