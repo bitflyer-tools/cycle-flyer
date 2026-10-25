@@ -4,8 +4,9 @@ import {Board} from "../../../models/board";
 import {Order} from "../../../models/order";
 import {Position} from "../../../models/position";
 import {StopOrder} from "../../../models/stopOrder";
+import {saveValue} from "../../../storage";
 import "./index.styl";
-import {intent} from "./intent";
+import {groupSizeStorageKey, intent} from "./intent";
 import {model} from "./model";
 import {request} from "./request";
 import {view} from "./view";
@@ -31,6 +32,6 @@ export const BoardComponent = (sources: Sources): Sinks => {
         HTTP: request$,
         router: Stream.never(),
         state: reducer$ as any,
-        storage: Stream.never(),
+        storage: saveValue(sources.state.stream as any as Stream<State>, groupSizeStorageKey, (state) => state.groupedSize),
     };
 };

@@ -1,5 +1,6 @@
 import {Stream} from "xstream";
 import {Board} from "../../../models/board";
+import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
 
 export interface Actions {
@@ -9,7 +10,10 @@ export interface Actions {
     onClickBid$: Stream<number>;
     onClickGroupSizePlusButton$: Stream<null>;
     onClickGroupSizeMinusButton$: Stream<null>;
+    onGroupSizeLoaded$: Stream<number>;
 }
+
+export const groupSizeStorageKey = "board-group-size";
 
 export const intent = (sources: Sources): Actions => {
     const onBoardLoaded$ = sources.socket.board$
@@ -46,5 +50,6 @@ export const intent = (sources: Sources): Actions => {
         onClickBid$,
         onClickGroupSizeMinusButton$,
         onClickGroupSizePlusButton$,
+        onGroupSizeLoaded$: loadNumber(sources.storage, groupSizeStorageKey),
     };
 };

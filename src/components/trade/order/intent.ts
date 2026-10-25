@@ -1,6 +1,7 @@
 import {DOMSource} from "@cycle/dom";
 import {Stream} from "xstream";
 import {OrderHistory} from "../../../models/orderHistory";
+import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
 import {createHistoryStream, createParentOrderHistoryStream} from "./history";
 
@@ -18,9 +19,18 @@ export interface Actions {
     onHistoryCreated$: Stream<OrderHistory>;
     onPriceChanged$: Stream<number>;
     onPriceWidthChanged$: Stream<number>;
+    onPriceWidthLoaded$: Stream<number>;
     onRatioChanged$: Stream<number>;
+    onRatioLoaded$: Stream<number>;
     onSizeChanged$: Stream<number>;
+    onSizeLoaded$: Stream<number>;
 }
+
+export const storageKeys = {
+    priceWidth: "ifdoco-price-width",
+    ratio: "ifdoco-ratio",
+    size: "order-size",
+};
 
 export const intent = (sources: Sources): Actions => {
     const onCancelOrders$ = sources.HTTP.select("cancel-orders")
@@ -48,8 +58,11 @@ export const intent = (sources: Sources): Actions => {
         onHistoryCreated$,
         onPriceChanged$: numberInputs(sources.DOM, "#price-input"),
         onPriceWidthChanged$: numberInputs(sources.DOM, "#price-width-input"),
+        onPriceWidthLoaded$: loadNumber(sources.storage, storageKeys.priceWidth),
         onRatioChanged$: numberInputs(sources.DOM, "#ratio-input"),
+        onRatioLoaded$: loadNumber(sources.storage, storageKeys.ratio),
         onSizeChanged$: numberInputs(sources.DOM, "#size-input"),
+        onSizeLoaded$: loadNumber(sources.storage, storageKeys.size),
     };
 };
 

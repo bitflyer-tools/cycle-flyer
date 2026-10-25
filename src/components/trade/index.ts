@@ -121,6 +121,6 @@ export const Trade = (sources: Sources): Sinks => {
             summaryComponent.state,
             orderComponent.state,
         ) as Stream<Reducer<State>>,
-        storage: Stream.never(),
+        storage: Stream.merge(boardComponent.storage, orderComponent.storage),
     };
 };
