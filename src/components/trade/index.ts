@@ -8,6 +8,7 @@ import Stream from "xstream";
 import {SocketIOSource} from "../../drivers/socketIODriver";
 import {Order} from "../../models/order";
 import {OrderHistory} from "../../models/orderHistory";
+import {ParentStopOrders} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
 import {StopOrder} from "../../models/stopOrder";
 import {BoardComponent, State as BoardComponentState} from "./board/index";
@@ -41,6 +42,7 @@ export interface State {
     currentPrice: number;
     histories: OrderHistory[];
     orders: Order[];
+    parentStopOrders: ParentStopOrders;
     position: Position;
     price: number;
     stopOrders: StopOrder[];

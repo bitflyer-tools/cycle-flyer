@@ -17,6 +17,7 @@ const defaultState: State = {
     price: 0,
     size: 0,
     stopOrders: [],
+    triggerPrice: 0,
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
@@ -33,6 +34,8 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         actions.onClickMarketSellButton$.mapTo(true),
         actions.onClickLimitBuyButton$.mapTo(true),
         actions.onClickLimitSellButton$.mapTo(true),
+        actions.onClickStopBuyButton$.mapTo(true),
+        actions.onClickStopSellButton$.mapTo(true),
         actions.onClickClearButton$.mapTo(true),
         actions.onHistoryCreated$.mapTo(false),
     ).map((isOrdering) => (state: State) => ({ ...state, isOrdering }));
@@ -49,6 +52,9 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const sizeReducer$ = Stream.merge(actions.onSizeChanged$, actions.onSizeLoaded$, actions.onClickSizePresetButton$)
         .map((size) => (state: State) => ({ ...state, size }));
 
+    const triggerPriceReducer$ = actions.onTriggerPriceChanged$
+        .map((triggerPrice) => (state: State) => ({ ...state, triggerPrice }));
+
     return Stream.merge(
         defaultReducer$,
         cancelOrdersReducer$,
@@ -58,5 +64,6 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         priceWidthReducer$,
         ratioReducer$,
         sizeReducer$,
+        triggerPriceReducer$,
     ) as Stream<Reducer<State>>;
 };

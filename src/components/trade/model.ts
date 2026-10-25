@@ -1,6 +1,7 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {Order} from "../../models/order";
+import {flattenStopOrders, ParentStopOrders, putParentOrder, retainActive} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
 import {State} from "./index";
 import {Actions} from "./intent";
@@ -9,6 +10,7 @@ const defaultState: State = {
     currentPrice: 0,
     histories: [],
     orders: [],
+    parentStopOrders: {},
     position: new Position([]),
     price: 0,
     stopOrders: [],
@@ -30,8 +32,11 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const positionReducer$ = actions.onPositionsLoaded$
         .map((position) => (state: State) => ({ ...state, position }));
 
-    const stopOrdersReducer$ = actions.onStopOrdersLoaded$
-        .map((stopOrders) => (state: State) => ({ ...state, stopOrders }));
+    const parentOrdersReducer$ = actions.onParentOrdersLoaded$
+        .map((parentOrders) => (state: State) => withStopOrders(state, retainActive(state.parentStopOrders, parentOrders)));
+
+    const parentOrderReducer$ = actions.onParentOrderLoaded$
+        .map((parentOrder) => (state: State) => withStopOrders(state, putParentOrder(state.parentStopOrders, parentOrder)));
 
     const stopOrdersDeleteReducer$ = actions.onExecutionCreated$
         .map((execution: any) => (state: State) => {
@@ -44,7 +49,11 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         currentPriceReducer$,
         ordersReducer$,
         positionReducer$,
-        stopOrdersReducer$,
+        parentOrderReducer$,
+        parentOrdersReducer$,
         stopOrdersDeleteReducer$,
     ) as Stream<Reducer<State>>;
 };
+
+const withStopOrders = (state: State, parentStopOrders: ParentStopOrders): State =>
+    ({ ...state, parentStopOrders, stopOrders: flattenStopOrders(parentStopOrders) });
