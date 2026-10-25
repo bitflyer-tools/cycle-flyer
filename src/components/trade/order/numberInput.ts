@@ -7,5 +7,5 @@ export const numberInput = (selector: string, value: number): VNode =>
     });
 
 const syncValue = (element: HTMLInputElement, value: number) => {
-    if (+element.value !== value) { element.value = value.toString(); }
+    if (element !== document.activeElement && +element.value !== value) { element.value = value.toString(); }
 };
