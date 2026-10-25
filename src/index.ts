@@ -9,6 +9,7 @@ import Stream from "xstream";
 import switchPath from "switch-path";
 import {Root} from "./components";
 import {makeSocketIODriver} from "./drivers/socketIODriver";
+import {makeSoundDriver} from "./drivers/soundDriver";
 import "./index.styl";
 
 /**
@@ -65,5 +66,6 @@ run(routerify(withState(Root), switchPath), {
     HTTP: makeHTTPDriver(),
     history: captureClicks(wrapHistoryDriver(makeHistoryDriver())),
     socket: makeSocketIODriver(),
+    sound: makeSoundDriver(),
     storage: storageDriver,
 });

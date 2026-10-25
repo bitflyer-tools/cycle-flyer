@@ -14,5 +14,9 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
                 label({ attrs: { for: "api-secret-input" } }, "API Secret"),
                 input("#api-secret-input", { props: { type: "text" }, attrs: { value: state.apiSecret } }),
             ]),
+            div(".sound-enabled", [
+                label({ attrs: { for: "sound-enabled-input" } }, "Sound"),
+                input("#sound-enabled-input", { props: { type: "checkbox", checked: state.soundEnabled } }),
+            ]),
         ]),
     );
