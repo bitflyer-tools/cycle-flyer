@@ -1,9 +1,13 @@
 import {Stream} from "xstream";
+import debounce from "xstream/extra/debounce";
+import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
 import {Sources} from "./index";
 
 export interface Actions {
     onExecutionCreated$: Stream<object>;
+    onMyExecutionCreated$: Stream<ChildOrderEvent>;
+    onMyOrderChanged$: Stream<null>;
     onOrdersLoaded$: Stream<object[]>;
     onParentOrderLoaded$: Stream<object>;
     onParentOrdersLoaded$: Stream<object[]>;
@@ -12,6 +16,13 @@ export interface Actions {
 
 export const intent = (sources: Sources): Actions => {
     const onExecutionCreated$ = sources.socket.execution$;
+
+    const onMyExecutionCreated$ = sources.socket.childOrderEvent$.filter(isExecution);
+
+    const onMyOrderChanged$ = Stream.merge(
+        sources.socket.childOrderEvent$.mapTo(null),
+        sources.socket.parentOrderEvent$.mapTo(null),
+    ).compose(debounce(500));
 
     const onOrdersLoaded$ = sources.HTTP.select("orders")
         .map((response$) => response$.replaceError(() => Stream.never()))
@@ -36,6 +47,8 @@ export const intent = (sources: Sources): Actions => {
 
     return {
         onExecutionCreated$,
+        onMyExecutionCreated$,
+        onMyOrderChanged$,
         onOrdersLoaded$,
         onParentOrderLoaded$,
         onParentOrdersLoaded$,

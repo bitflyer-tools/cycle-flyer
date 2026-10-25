@@ -8,6 +8,10 @@ export const request = (actions: Actions): Stream<string | RequestInput | null> 
     const parentOrders = Stream.periodic(10000).mapTo(getParentOrders()).startWith(getParentOrders());
     const positions = Stream.periodic(10000).mapTo(getPositions()).startWith(getPositions());
 
+    const refreshes = actions.onMyOrderChanged$
+        .map((_) => Stream.fromArray([getOrders(), getParentOrders(), getPositions()]))
+        .flatten();
+
     const parentOrderDetails = actions.onParentOrdersLoaded$
         .map((os) => Stream.fromArray(os.map((order: any) => getParentOrder(order.parent_order_id))))
         .flatten();
@@ -16,6 +20,7 @@ export const request = (actions: Actions): Stream<string | RequestInput | null> 
         orders,
         parentOrders,
         positions,
+        refreshes,
         parentOrderDetails,
     ) as Stream<string | RequestInput | null>;
 };
