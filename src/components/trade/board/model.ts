@@ -37,12 +37,16 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const groupedSizeMinusReducer$ = actions.onClickGroupSizeMinusButton$
         .map((_) => (state: State) => ({ ...state, groupedSize: minusGroupedSizeFor(state.groupedSize) }));
 
+    const groupedSizeLoadedReducer$ = actions.onGroupSizeLoaded$
+        .map((groupedSize) => (state: State) => ({ ...state, groupedSize }));
+
     return Stream.merge(
         defaultReducer$,
         askPriceReducer$,
         bidPriceReducer$,
         boardReducer$,
         boardSnapshotReducer$,
+        groupedSizeLoadedReducer$,
         groupedSizeMinusReducer$,
         groupedSizePlusReducer$,
     ) as Stream<Reducer<State>>;

@@ -40,13 +40,13 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const priceReducer$ = actions.onPriceChanged$
         .map((price) => (state: State) => ({ ...state, price }));
 
-    const priceWidthReducer$ = actions.onPriceWidthChanged$
+    const priceWidthReducer$ = Stream.merge(actions.onPriceWidthChanged$, actions.onPriceWidthLoaded$)
         .map((price) => (state: State) => ({ ...state, ifdocoOrder: new IFDOCOrder(price, state.ifdocoOrder.ratio) }));
 
-    const ratioReducer$ = actions.onRatioChanged$
+    const ratioReducer$ = Stream.merge(actions.onRatioChanged$, actions.onRatioLoaded$)
         .map((ratio) => (state: State) => ({ ...state, ifdocoOrder: new IFDOCOrder(state.ifdocoOrder.width, ratio) }));
 
-    const sizeReducer$ = Stream.merge(actions.onSizeChanged$, actions.onClickSizePresetButton$)
+    const sizeReducer$ = Stream.merge(actions.onSizeChanged$, actions.onSizeLoaded$, actions.onClickSizePresetButton$)
         .map((size) => (state: State) => ({ ...state, size }));
 
     return Stream.merge(

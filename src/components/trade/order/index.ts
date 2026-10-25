@@ -9,6 +9,7 @@ import "./index.styl";
 import {intent} from "./intent";
 import {model} from "./model";
 import {request} from "./request";
+import {storage} from "./storage";
 import {view} from "./view";
 
 export interface State {
@@ -35,6 +36,6 @@ export const OrderComponent = (sources: Sources): Sinks => {
         HTTP: request$,
         router: Stream.never(),
         state: reducer$ as any,
-        storage: Stream.never(),
+        storage: storage(state$),
     };
 };
