@@ -16,6 +16,8 @@ export interface Actions {
     onClickMarketBuyButton$: Stream<null>;
     onClickMarketSellButton$: Stream<null>;
     onClickSizePresetButton$: Stream<number>;
+    onClickStopBuyButton$: Stream<null>;
+    onClickStopSellButton$: Stream<null>;
     onHistoryCreated$: Stream<OrderHistory>;
     onPriceChanged$: Stream<number>;
     onPriceWidthChanged$: Stream<number>;
@@ -24,6 +26,7 @@ export interface Actions {
     onRatioLoaded$: Stream<number>;
     onSizeChanged$: Stream<number>;
     onSizeLoaded$: Stream<number>;
+    onTriggerPriceChanged$: Stream<number>;
 }
 
 export const storageKeys = {
@@ -42,6 +45,7 @@ export const intent = (sources: Sources): Actions => {
         sources.HTTP.select("market-order").map((stream) => createHistoryStream("Market", stream)).flatten(),
         sources.HTTP.select("limit-order").map((stream) => createHistoryStream("Limit", stream)).flatten(),
         sources.HTTP.select("ifdoco-order").map((stream) => createParentOrderHistoryStream(stream)).flatten(),
+        sources.HTTP.select("stop-order").map((stream) => createParentOrderHistoryStream(stream)).flatten(),
     );
 
     return {
@@ -55,6 +59,8 @@ export const intent = (sources: Sources): Actions => {
         onClickMarketBuyButton$: clicks(sources.DOM, ".market-order-buttons", ".buy-button"),
         onClickMarketSellButton$: clicks(sources.DOM, ".market-order-buttons", ".sell-button"),
         onClickSizePresetButton$: sizePresetClicks(sources.DOM),
+        onClickStopBuyButton$: clicks(sources.DOM, ".stop-order-buttons", ".buy-button"),
+        onClickStopSellButton$: clicks(sources.DOM, ".stop-order-buttons", ".sell-button"),
         onHistoryCreated$,
         onPriceChanged$: numberInputs(sources.DOM, "#price-input"),
         onPriceWidthChanged$: numberInputs(sources.DOM, "#price-width-input"),
@@ -63,6 +69,7 @@ export const intent = (sources: Sources): Actions => {
         onRatioLoaded$: loadNumber(sources.storage, storageKeys.ratio),
         onSizeChanged$: numberInputs(sources.DOM, "#size-input"),
         onSizeLoaded$: loadNumber(sources.storage, storageKeys.size),
+        onTriggerPriceChanged$: numberInputs(sources.DOM, "#trigger-price-input"),
     };
 };
 

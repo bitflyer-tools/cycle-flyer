@@ -74,6 +74,24 @@ export const ifdocoOrder = (profitLine: number, lossLine: number, size: number, 
     return requestInput("ifdoco-order", "/v1/me/sendparentorder", "POST", json);
 };
 
+export const stopOrder = (triggerPrice: number, size: number, side: string): RequestInput => {
+    const json = {
+        order_method: "SIMPLE",
+        parameters: [
+            {
+                condition_type: "STOP",
+                product_code: "FX_BTC_JPY",
+                side,
+                size: Math.abs(size),
+                trigger_price: triggerPrice,
+            },
+        ],
+        time_in_force: "GTC",
+    };
+
+    return requestInput("stop-order", "/v1/me/sendparentorder", "POST", json);
+};
+
 export const cancelOrders = (): RequestInput =>
     requestInput("cancel-orders", "/v1/me/cancelallchildorders", "POST", { product_code: "FX_BTC_JPY" });
 

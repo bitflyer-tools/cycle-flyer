@@ -1,9 +1,11 @@
-import {button, div, h4, hr, input, VNode} from "@cycle/dom";
+import {button, div, h4, hr, VNode} from "@cycle/dom";
 import Stream from "xstream";
 import {sideButtons} from "./buttons";
 import {ifdocoSection} from "./ifdocoView";
 import {State} from "./index";
+import {numberInput} from "./numberInput";
 import {sizeSection} from "./sizeView";
+import {stopSection} from "./stopView";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
     state$.map((state) =>
@@ -13,6 +15,8 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
             marketSection(state),
             hr(),
             limitSection(state),
+            hr(),
+            stopSection(state),
             hr(),
             clearSection(state),
             hr(),
@@ -30,7 +34,7 @@ const limitSection = (state: State): VNode =>
     div([
         h4(".sub-title", "Limit"),
         div(".limit-order-buttons.order-buttons", [
-            input("#price-input", { attrs: { value: state.price }}),
+            numberInput("#price-input", state.price),
             ...sideButtons(orderButtonDisabled(state)),
         ]),
     ]);

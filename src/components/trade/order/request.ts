@@ -1,7 +1,7 @@
 import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
 import sampleCombine from "xstream/extra/sampleCombine";
-import {cancelOrders, ifdocoOrder, limitOrder, marketOrder} from "../../../http";
+import {cancelOrders, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
 
@@ -14,6 +14,8 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<string 
         withState(actions.onClickMarketSellButton$, (state) => marketOrder(state.size, "SELL")),
         withState(actions.onClickLimitBuyButton$, (state) => limitOrder(state.price, state.size, "BUY")),
         withState(actions.onClickLimitSellButton$, (state) => limitOrder(state.price, state.size, "SELL")),
+        withState(actions.onClickStopBuyButton$, (state) => stopOrder(state.triggerPrice, state.size, "BUY")),
+        withState(actions.onClickStopSellButton$, (state) => stopOrder(state.triggerPrice, state.size, "SELL")),
         withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),
         withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder),
         withState(actions.onClickClearButton$, clearPositionOrder),

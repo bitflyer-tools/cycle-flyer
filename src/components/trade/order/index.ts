@@ -22,6 +22,7 @@ export interface State {
     price: number;
     size: number;
     stopOrders: StopOrder[];
+    triggerPrice: number;
 }
 
 export const OrderComponent = (sources: Sources): Sinks => {
