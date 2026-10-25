@@ -6,6 +6,7 @@ import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
 import {SocketIOSource} from "../drivers/socketIODriver";
+import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
 import {Trade} from "./trade";
 
@@ -24,6 +25,7 @@ export interface Sinks {
     state: Stream<Reducer<any>>;
     router: Stream<any>;
     storage: Stream<StorageRequest>;
+    sound?: Stream<Sound>;
 }
 
 export const Root = (sources: Sources): Sinks => {
@@ -52,6 +54,7 @@ export const Root = (sources: Sources): Sinks => {
         DOM: view$,
         HTTP: routes$.map((sinks: Sinks) => sinks.HTTP).flatten(),
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
+        sound: routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
         state: routes$.map((sinks: Sinks) => sinks.state).flatten(),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
     };

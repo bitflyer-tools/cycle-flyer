@@ -5,11 +5,13 @@ import {Actions} from "./intent";
 export interface State {
     apiKey: string;
     apiSecret: string;
+    soundEnabled: boolean;
 }
 
 const defaultState: State = {
     apiKey: "",
     apiSecret: "",
+    soundEnabled: true,
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
@@ -21,9 +23,13 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const apiSecretReducer$ = Stream.merge(actions.onApiSecretLoaded$, actions.onApiSecretInputChanged$)
         .map((apiSecret) => (state: State) => ({ ...state, apiSecret }));
 
+    const soundEnabledReducer$ = Stream.merge(actions.onSoundEnabledLoaded$, actions.onSoundToggled$)
+        .map((soundEnabled) => (state: State) => ({ ...state, soundEnabled }));
+
     return Stream.merge(
         defaultReducer$,
         apiKeyReducer$,
         apiSecretReducer$,
+        soundEnabledReducer$,
     ) as Stream<Reducer<State>>;
 };

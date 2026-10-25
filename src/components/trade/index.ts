@@ -6,6 +6,7 @@ import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
 import {SocketIOSource} from "../../drivers/socketIODriver";
+import {Sound} from "../../drivers/soundDriver";
 import {Order} from "../../models/order";
 import {OrderHistory} from "../../models/orderHistory";
 import {ParentStopOrders} from "../../models/parentStopOrders";
@@ -17,6 +18,7 @@ import {intent} from "./intent";
 import {model} from "./model";
 import {OrderComponent, State as OrderComponentState} from "./order";
 import {request} from "./request";
+import {sound} from "./sound";
 import {State as SummaryComponentState} from "./summary";
 import {SummaryComponent} from "./summary";
 import {view} from "./view";
@@ -36,6 +38,7 @@ export interface Sinks {
     state: Stream<Reducer<State>>;
     router: Stream<void>;
     storage: Stream<StorageRequest>;
+    sound?: Stream<Sound>;
 }
 
 export interface State {
@@ -117,6 +120,7 @@ export const Trade = (sources: Sources): Sinks => {
         DOM: view$,
         HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP),
         router: Stream.never(),
+        sound: sound(sources.state.stream),
         state: Stream.merge(
             reducer$,
             boardComponent.state,

@@ -4,6 +4,7 @@ import {Reducer, StateSource} from "@cycle/state";
 import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
+import {soundEnabledStorageKey} from "../../drivers/soundDriver";
 import "./index.styl";
 import {intent} from "./intent";
 import {model, State} from "./model";
@@ -34,6 +35,8 @@ export const Setting = (sources: Sources): Sinks => {
             .map((state) => ({ key: "api-key", value: state.apiKey }) as StorageRequest),
         sources.state.stream
             .map((state) => ({ key: "api-secret", value: state.apiSecret }) as StorageRequest),
+        actions.onSoundToggled$
+            .map((enabled) => ({ key: soundEnabledStorageKey, value: enabled.toString() }) as StorageRequest),
     );
 
     return {
