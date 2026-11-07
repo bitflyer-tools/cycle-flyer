@@ -7,3 +7,7 @@ updates:
       time: "12:00"
       timezone: Asia/Tokyo
     open-pull-requests-limit: 20
+    ignore:
+      # TypeScript 7 (native) has no classic compiler API yet; toolchain is incompatible
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
