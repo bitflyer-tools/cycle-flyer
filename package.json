@@ -7,7 +7,8 @@
     "build": "node fuse",
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
     "start": "node fuse.dev",
-    "start:electron": "electron-forge start --inspect-electron",
+    "start:electron": "npm run build && electron-forge start --inspect-electron",
+    "test": "node --test \"test/*.test.js\"",
     "package": "electron-forge package",
     "make": "electron-forge make"
   },
