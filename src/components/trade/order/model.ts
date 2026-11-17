@@ -3,7 +3,6 @@ import Stream from "xstream";
 import {IFDOCOrder} from "../../../models/ifdocoOrder";
 import {Order} from "../../../models/order";
 import {Position} from "../../../models/position";
-import {StopOrder} from "../../../models/stopOrder";
 import {defaultTwapOrder} from "../../../models/twapOrder";
 import {State} from "./index";
 import {Actions} from "./intent";
@@ -15,6 +14,7 @@ const defaultState: State = {
     ifdocoOrder: new IFDOCOrder(10000, 50),
     isOrdering: false,
     orders: [],
+    parentStopOrders: {},
     position: new Position([]),
     price: 0,
     size: 0,
@@ -27,7 +27,14 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
     const cancelOrdersReducer$ = actions.onCancelOrders$
-        .map((_) => (state: State) => ({ ...state, orders: [] as Order[], stopOrders: [] as StopOrder[] }));
+        .map((_) => (state: State) => ({ ...state, orders: [] as Order[] }));
+
+    const cancelParentOrderReducer$ = actions.onCancelParentOrder$
+        .map((id) => (state: State) => {
+            const { [id]: canceledStops = [], ...parentStopOrders } = state.parentStopOrders;
+            const stopOrders = state.stopOrders.filter((order) => canceledStops.indexOf(order) === -1);
+            return { ...state, parentStopOrders, stopOrders };
+        });
 
     const historyReducer$ = Stream.merge(actions.onHistoryCreated$, actions.onTwapSliceCreated$)
         .map((history) => (state: State) => ({ ...state, histories: [history].concat(state.histories)}));
@@ -60,7 +67,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
     return Stream.merge(
         defaultReducer$,
-        cancelOrdersReducer$,
+        Stream.merge(cancelOrdersReducer$, cancelParentOrderReducer$),
         historyReducer$,
         isOrderingReducer$,
         priceReducer$,

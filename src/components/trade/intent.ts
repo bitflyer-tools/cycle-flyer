@@ -9,8 +9,8 @@ export interface Actions {
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
     onMyOrderChanged$: Stream<null>;
     onOrdersLoaded$: Stream<object[]>;
-    onParentOrderLoaded$: Stream<object>;
-    onParentOrdersLoaded$: Stream<object[]>;
+    onParentOrderLoaded$: Stream<{ parent_order_id: string }>;
+    onParentOrdersLoaded$: Stream<{ parent_order_id: string }[]>;
     onPositionsLoaded$: Stream<Position>;
 }
 

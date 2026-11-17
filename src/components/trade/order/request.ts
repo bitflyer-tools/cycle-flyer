@@ -1,7 +1,7 @@
 import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
 import sampleCombine from "xstream/extra/sampleCombine";
-import {cancelOrders, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
+import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
 import {twapRequest} from "./twapRequest";
@@ -20,7 +20,12 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<string 
         withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),
         withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder),
         withState(actions.onClickClearButton$, clearPositionOrder),
-        actions.onClickClearOrderButton$.map((_) => cancelOrders()),
+        actions.onClickClearOrderButton$.compose(sampleCombine(state$))
+            .map(([_, state]) => Stream.fromArray([
+                cancelOrders(),
+                ...Object.keys(state.parentStopOrders).map(cancelParentOrder),
+            ]))
+            .flatten(),
         twapRequest(actions, state$),
     ) as Stream<string | RequestInput | null>;
 };

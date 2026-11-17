@@ -41,7 +41,9 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map((parentOrders) => (state: State) => withStopOrders(state, retainActive(state.parentStopOrders, parentOrders)));
 
     const parentOrderReducer$ = actions.onParentOrderLoaded$
-        .map((parentOrder) => (state: State) => withStopOrders(state, putParentOrder(state.parentStopOrders, parentOrder)));
+        .map((parentOrder) => (state: State) => state.parentStopOrders[parentOrder.parent_order_id]
+            ? withStopOrders(state, putParentOrder(state.parentStopOrders, parentOrder))
+            : state);
 
     const stopOrdersDeleteReducer$ = actions.onExecutionCreated$
         .map((execution: any) => (state: State) => {

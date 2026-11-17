@@ -59,4 +59,4 @@ const orderButtonDisabled = (state: State): boolean =>
     state.isOrdering || state.size === 0;
 
 const clearOrderButtonDisabled = (state: State): boolean =>
-    state.isOrdering || (state.orders.length + state.stopOrders.length) === 0;
+    state.isOrdering || (state.orders.length + Object.keys(state.parentStopOrders).length) === 0;

@@ -12,11 +12,10 @@ export const stopOrdersOf = (parentOrder: any): StopOrder[] =>
 export const putParentOrder = (parentStopOrders: ParentStopOrders, parentOrder: any): ParentStopOrders =>
     ({ ...parentStopOrders, [parentOrder.parent_order_id]: stopOrdersOf(parentOrder) });
 
-export const retainActive = (parentStopOrders: ParentStopOrders, activeParentOrders: any[]): ParentStopOrders =>
+export const retainActive = (parentStopOrders: ParentStopOrders, activeParentOrders: { parent_order_id: string }[]): ParentStopOrders =>
     activeParentOrders
         .map((order) => order.parent_order_id)
-        .filter((id: string) => !!parentStopOrders[id])
-        .reduce((acc: ParentStopOrders, id: string) => ({ ...acc, [id]: parentStopOrders[id] }), {});
+        .reduce((acc: ParentStopOrders, id: string) => ({ ...acc, [id]: parentStopOrders[id] || [] }), {});
 
 export const flattenStopOrders = (parentStopOrders: ParentStopOrders): StopOrder[] =>
     Object.keys(parentStopOrders).reduce((acc: StopOrder[], id) => acc.concat(parentStopOrders[id]), []);

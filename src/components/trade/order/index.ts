@@ -2,6 +2,7 @@ import Stream from "xstream";
 import {IFDOCOrder} from "../../../models/ifdocoOrder";
 import {Order} from "../../../models/order";
 import {OrderHistory} from "../../../models/orderHistory";
+import {ParentStopOrders} from "../../../models/parentStopOrders";
 import {Position} from "../../../models/position";
 import {StopOrder} from "../../../models/stopOrder";
 import {TwapOrder} from "../../../models/twapOrder";
@@ -19,6 +20,7 @@ export interface State {
     ifdocoOrder: IFDOCOrder;
     isOrdering: boolean;
     orders: Order[];
+    parentStopOrders: ParentStopOrders;
     position: Position;
     price: number;
     size: number;
