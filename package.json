@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node fuse",
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
+    "test": "esbuild test/account-polling.test.ts --bundle --platform=node --outfile=node_modules/.cache/account-polling.test.cjs && node node_modules/.cache/account-polling.test.cjs",
     "start": "node fuse.dev",
     "start:electron": "electron-forge start --inspect-electron",
     "package": "electron-forge package",

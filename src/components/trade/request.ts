@@ -4,9 +4,9 @@ import {getOrders, getParentOrder, getParentOrders, getPositions} from "../../ht
 import {Actions} from "./intent";
 
 export const request = (actions: Actions): Stream<string | RequestInput | null> => {
-    const orders = Stream.periodic(10000).mapTo(getOrders()).startWith(getOrders());
-    const parentOrders = Stream.periodic(10000).mapTo(getParentOrders()).startWith(getParentOrders());
-    const positions = Stream.periodic(10000).mapTo(getPositions()).startWith(getPositions());
+    const orders = Stream.periodic(10000).startWith(0).map(getOrders);
+    const parentOrders = Stream.periodic(10000).startWith(0).map(getParentOrders);
+    const positions = Stream.periodic(10000).startWith(0).map(getPositions);
 
     const refreshes = actions.onMyOrderChanged$
         .map((_) => Stream.fromArray([getOrders(), getParentOrders(), getPositions()]))
