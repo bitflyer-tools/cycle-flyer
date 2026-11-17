@@ -1,7 +1,7 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {Order} from "../../models/order";
-import {createOrderHistory} from "../../models/orderHistory";
+import {createOrderHistory, prependOrderHistory} from "../../models/orderHistory";
 import {flattenStopOrders, ParentStopOrders, putParentOrder, retainActive} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
 import {State} from "./index";
@@ -28,7 +28,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
     const myExecutionReducer$ = actions.onMyExecutionCreated$
         .map((event) => createOrderHistory("Executed", event.side || "", event.size || 0, event.price || 0, "success"))
-        .map((history) => (state: State) => ({ ...state, histories: [history].concat(state.histories) }));
+        .map((history) => (state: State) => ({ ...state, histories: prependOrderHistory(state.histories, history) }));
 
     const ordersReducer$ = actions.onOrdersLoaded$
         .map((orders: object[]) => orders.map((order) => new Order(order)))

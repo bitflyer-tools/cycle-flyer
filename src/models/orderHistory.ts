@@ -5,6 +5,11 @@ export interface OrderHistory {
     status: string;
 }
 
+export const HISTORY_LIMIT = 100;
+
+export const prependOrderHistory = (histories: readonly OrderHistory[], history: OrderHistory): OrderHistory[] =>
+    [history, ...histories.slice(0, HISTORY_LIMIT - 1)];
+
 export const createOrderHistory = (
     name: string,
     side: string,

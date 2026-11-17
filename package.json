@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node fuse",
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
+    "test": "esbuild test/tradeHistory.ts --bundle --platform=node --banner:js=\"globalThis.window = {};\" --outfile=out/test/tradeHistory.cjs && node --test out/test/tradeHistory.cjs",
     "start": "node fuse.dev",
     "start:electron": "electron-forge start --inspect-electron",
     "package": "electron-forge package",

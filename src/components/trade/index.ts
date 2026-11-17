@@ -43,7 +43,7 @@ export interface Sinks {
 
 export interface State {
     currentPrice: number;
-    histories: OrderHistory[];
+    histories: readonly OrderHistory[];
     orders: Order[];
     parentStopOrders: ParentStopOrders;
     position: Position;

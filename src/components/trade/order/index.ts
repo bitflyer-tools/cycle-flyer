@@ -15,7 +15,7 @@ import {view} from "./view";
 
 export interface State {
     currentPrice: number;
-    histories: OrderHistory[];
+    histories: readonly OrderHistory[];
     ifdocoOrder: IFDOCOrder;
     isOrdering: boolean;
     orders: Order[];
