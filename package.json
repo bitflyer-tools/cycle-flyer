@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node fuse",
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
+    "test": "esbuild test/boardSynchronization.ts --bundle --platform=node --outfile=out/boardSynchronization.test.cjs && node --test out/boardSynchronization.test.cjs",
     "start": "node fuse.dev",
     "start:electron": "electron-forge start --inspect-electron",
     "package": "electron-forge package",
