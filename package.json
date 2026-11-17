@@ -7,6 +7,7 @@
     "build": "node fuse",
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
     "start": "node fuse.dev",
+    "test": "node --test",
     "start:electron": "electron-forge start --inspect-electron",
     "package": "electron-forge package",
     "make": "electron-forge make"
