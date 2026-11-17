@@ -12,7 +12,7 @@ export const twapModel = (actions: TwapActions): Stream<Reducer<State>> => {
         .map((slices) => updateTwap((twap) => ({ ...twap, slices })));
 
     const startReducer$ = Stream.merge(actions.onClickTwapBuyButton$, actions.onClickTwapSellButton$)
-        .map((_) => updateTwap((twap) => ({ ...twap, remaining: twap.slices })));
+        .map((_) => updateTwap((twap) => ({ ...twap, remaining: twap.slices, totalSlices: twap.slices })));
 
     const sliceReducer$ = actions.onTwapSliceCreated$
         .map((_) => updateTwap((twap) => ({ ...twap, remaining: Math.max(twap.remaining - 1, 0) })));

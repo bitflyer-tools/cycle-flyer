@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node fuse",
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
+    "test": "esbuild test/twap.test.ts --bundle --platform=node --define:window=undefined --outfile=node_modules/.cache/twap.test.cjs && node node_modules/.cache/twap.test.cjs",
     "start": "node fuse.dev",
     "start:electron": "electron-forge start --inspect-electron",
     "package": "electron-forge package",

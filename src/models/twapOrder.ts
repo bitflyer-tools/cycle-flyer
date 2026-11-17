@@ -2,11 +2,12 @@ export interface TwapOrder {
     interval: number;
     remaining: number;
     slices: number;
+    totalSlices: number;
 }
 
 export const minimumOrderSize = 0.01;
 
-export const defaultTwapOrder: TwapOrder = { interval: 60, remaining: 0, slices: 5 };
+export const defaultTwapOrder: TwapOrder = { interval: 60, remaining: 0, slices: 5, totalSlices: 0 };
 
 export const sliceSize = (size: number, slices: number): number =>
     slices > 0 ? Math.floor(size / slices * 100000000) / 100000000 : 0;
