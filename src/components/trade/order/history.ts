@@ -6,13 +6,15 @@ type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 
 export const createHistoryStream = (name: string, stream$: HTTPResponse$): Stream<OrderHistory> =>
     stream$
-        .map((response: any) => childOrderHistory(name, response.request.send, "success"))
-        .replaceError((error) => Stream.of(childOrderHistory(name, error.response.request.send, "failed")));
+        .mapTo("success")
+        .replaceError((error) => Stream.of(error.response ? "failed" : "unconfirmed"))
+        .map((status) => childOrderHistory(name, stream$.request.send as string, status));
 
 export const createParentOrderHistoryStream = (stream$: HTTPResponse$): Stream<OrderHistory> =>
     stream$
-        .map((response: any) => parentOrderHistories(response.request.send, "success"))
-        .replaceError((error: any) => Stream.of(parentOrderHistories(error.response.request.send, "failed")))
+        .mapTo("success")
+        .replaceError((error) => Stream.of(error.response ? "failed" : "unconfirmed"))
+        .map((status) => parentOrderHistories(stream$.request.send as string, status))
         .flatten();
 
 const childOrderHistory = (name: string, body: string, status: string): OrderHistory => {

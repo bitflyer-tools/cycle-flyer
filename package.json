@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node fuse",
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
+    "test": "esbuild test/*.test.ts --bundle --platform=node --packages=external --outdir=out/cycle-flyer-tests && node --test out/cycle-flyer-tests/*.test.js",
     "start": "node fuse.dev",
     "start:electron": "electron-forge start --inspect-electron",
     "package": "electron-forge package",

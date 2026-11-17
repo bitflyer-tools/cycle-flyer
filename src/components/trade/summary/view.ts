@@ -47,10 +47,7 @@ export const view = (state$: Stream<State>) =>
             hr(),
             ul(".histories", state.histories.map((history) =>
                     li(".history", [
-                        span(
-                            history.status === "success" ? ".success" : ".failed",
-                            history.status === "success" ? "○" : "✗",
-                        ),
+                        historyStatus(history.status),
                         span(".name", history.name),
                         span(".description", history.description),
                         span(".created-at", history.createdAt.toLocaleTimeString()),
@@ -58,6 +55,11 @@ export const view = (state$: Stream<State>) =>
                 ),
             ),
         ]));
+
+const historyStatus = (status: string) => {
+    if (status === "unconfirmed") { return span(".unconfirmed", "Unconfirmed"); }
+    return status === "success" ? span(".success", "○") : span(".failed", "✗");
+};
 
 const collateralString = (state: State): string => {
     if (!state.position.price) { return state.collateral.toLocaleString(); }
