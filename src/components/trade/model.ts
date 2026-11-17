@@ -37,8 +37,19 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const positionReducer$ = actions.onPositionsLoaded$
         .map((position) => (state: State) => ({ ...state, position }));
 
+    const cancelParentOrderReducer$ = actions.onCancelParentOrder$
+        .map((id) => (state: State) => {
+            const { [id]: canceledStops = [], ...parentStopOrders } = state.parentStopOrders;
+            const stopOrders = state.stopOrders.filter((order) => canceledStops.indexOf(order) === -1);
+            const canceledParentOrderIds = new Set(state.canceledParentOrderIds).add(id);
+            return { ...state, canceledParentOrderIds, parentStopOrders, stopOrders };
+        });
+
     const parentOrdersReducer$ = actions.onParentOrdersLoaded$
-        .map((parentOrders) => (state: State) => withStopOrders(state, retainActive(state.parentStopOrders, parentOrders)));
+        .map((parentOrders) => (state: State) => {
+            const activeOrders = parentOrders.filter(({ parent_order_id }) => !state.canceledParentOrderIds?.has(parent_order_id));
+            return withStopOrders(state, retainActive(state.parentStopOrders, activeOrders));
+        });
 
     const parentOrderReducer$ = actions.onParentOrderLoaded$
         .map((parentOrder) => (state: State) => state.parentStopOrders[parentOrder.parent_order_id]
@@ -53,6 +64,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
     return Stream.merge(
         defaultReducer$,
+        cancelParentOrderReducer$,
         currentPriceReducer$,
         myExecutionReducer$,
         ordersReducer$,

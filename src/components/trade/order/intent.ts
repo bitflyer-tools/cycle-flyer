@@ -1,5 +1,4 @@
 import {Stream} from "xstream";
-import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {OrderHistory} from "../../../models/orderHistory";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
@@ -9,7 +8,6 @@ import {TwapActions, twapIntent} from "./twapIntent";
 
 export interface Actions extends TwapActions {
     onCancelOrders$: Stream<null>;
-    onCancelParentOrder$: Stream<string>;
     onClickClearButton$: Stream<null>;
     onClickClearOrderButton$: Stream<null>;
     onClickIFDOCOBuyButton$: Stream<null>;
@@ -44,11 +42,6 @@ export const intent = (sources: Sources): Actions => {
         .flatten()
         .mapTo(null);
 
-    const onCancelParentOrder$ = sources.HTTP.select("cancel-parent-order")
-        .map((response$) => response$.replaceError(() => Stream.empty()))
-        .compose(flattenConcurrently)
-        .map((response) => JSON.parse(response.request.send as string).parent_order_id);
-
     const onHistoryCreated$ = Stream.merge(
         sources.HTTP.select("market-order").map((stream) => createHistoryStream("Market", stream)).flatten(),
         sources.HTTP.select("limit-order").map((stream) => createHistoryStream("Limit", stream)).flatten(),
@@ -59,7 +52,6 @@ export const intent = (sources: Sources): Actions => {
     return {
         ...twapIntent(sources),
         onCancelOrders$,
-        onCancelParentOrder$,
         onClickClearButton$: clicks(sources.DOM, ".order-buttons", ".clear-button"),
         onClickClearOrderButton$: clicks(sources.DOM, ".order-buttons", ".clear-order-button"),
         onClickIFDOCOBuyButton$: clicks(sources.DOM, ".ranged-ifdoco-order-buttons", ".buy-button"),

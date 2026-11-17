@@ -18,7 +18,6 @@ const defaultState: State = {
     position: new Position([]),
     price: 0,
     size: 0,
-    stopOrders: [],
     triggerPrice: 0,
     twap: defaultTwapOrder,
 };
@@ -28,13 +27,6 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
     const cancelOrdersReducer$ = actions.onCancelOrders$
         .map((_) => (state: State) => ({ ...state, orders: [] as Order[] }));
-
-    const cancelParentOrderReducer$ = actions.onCancelParentOrder$
-        .map((id) => (state: State) => {
-            const { [id]: canceledStops = [], ...parentStopOrders } = state.parentStopOrders;
-            const stopOrders = state.stopOrders.filter((order) => canceledStops.indexOf(order) === -1);
-            return { ...state, parentStopOrders, stopOrders };
-        });
 
     const historyReducer$ = Stream.merge(actions.onHistoryCreated$, actions.onTwapSliceCreated$)
         .map((history) => (state: State) => ({ ...state, histories: [history].concat(state.histories)}));
@@ -67,7 +59,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
     return Stream.merge(
         defaultReducer$,
-        Stream.merge(cancelOrdersReducer$, cancelParentOrderReducer$),
+        cancelOrdersReducer$,
         historyReducer$,
         isOrderingReducer$,
         priceReducer$,

@@ -1,8 +1,8 @@
-import {Reducer} from "@cycle/state";
 import {deepStrictEqual, strictEqual} from "node:assert/strict";
 import {test} from "node:test";
 import Stream from "xstream";
 import {State as TradeState} from "../src/components/trade";
+import {intent as tradeIntent} from "../src/components/trade/intent";
 import {model as tradeModel} from "../src/components/trade/model";
 import {State} from "../src/components/trade/order";
 import {intent} from "../src/components/trade/order/intent";
@@ -52,35 +52,46 @@ test("Concurrent parent cancellations leave failed orders visible", () => {
 });
 
 test("A late parent detail response cannot restore a canceled stop", () => {
-    const details$ = Stream.create<{ parent_order_id: string; parameters: object[] }>();
-    const inactive$ = Stream.never();
-    const actions = {
-        onExecutionCreated$: inactive$,
-        onMyExecutionCreated$: inactive$,
-        onOrdersLoaded$: inactive$,
-        onParentOrderLoaded$: details$,
-        onParentOrdersLoaded$: inactive$,
-        onPositionsLoaded$: inactive$,
-    } as unknown as Parameters<typeof tradeModel>[0];
-    const reducers: Array<Reducer<TradeState>> = [];
-    tradeModel(actions).addListener({ next: (reducer) => reducers.push(reducer) });
-    const cancellation = clearOrders(["JCO-canceled"]);
-    cancellation.parentResponses.shamefullySendNext(Stream.of<unknown>({ request: cancellation.requests[1] }));
-    const { parentStopOrders, stopOrders } = cancellation.state();
-    const state = { ...reducers[0](undefined)!, parentStopOrders, stopOrders };
+    const {details, parentResponses, requests, state} = clearOrders(["JCO-canceled"]);
+    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: requests[1] }));
+    const canceledState = state();
 
-    details$.shamefullySendNext({
-        parameters: [{ condition_type: "STOP", trigger_price: 100 }],
-        parent_order_id: "JCO-canceled",
-    });
+    sendParentDetail(details, "JCO-canceled", 100);
 
-    strictEqual(reducers[1](state), state);
+    strictEqual(state(), canceledState);
 });
+
+test("A late active list and its details cannot restore a canceled stop", () => {
+    const {details, lists, parentResponses, requests, state} = clearOrders(["JCO-canceled", "JCO-active"]);
+    const pendingList$ = Stream.create<unknown>();
+    lists.shamefullySendNext(pendingList$);
+    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: requests[1] }));
+
+    pendingList$.shamefullySendNext({ text: JSON.stringify([
+        { parent_order_id: "JCO-canceled" },
+        { parent_order_id: "JCO-active" },
+        { parent_order_id: "JCO-new" },
+    ]) });
+    sendParentDetail(details, "JCO-canceled", 100);
+    sendParentDetail(details, "JCO-new", 300);
+
+    deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-active", "JCO-new"]);
+    deepStrictEqual(state().stopOrders.map(({price}) => price), [200, 300]);
+});
+
+function sendParentDetail(responses: Stream<Stream<unknown>>, id: string, price: number) {
+    responses.shamefullySendNext(Stream.of<unknown>({ text: JSON.stringify({
+        parameters: [{ condition_type: "STOP", trigger_price: price }],
+        parent_order_id: id,
+    }) }));
+}
 
 function clearOrders(ids: string[], lastDetailPending = false) {
     const clicks$ = Stream.create();
     const childResponses = Stream.create<Stream<unknown>>();
     const parentResponses = Stream.create<Stream<unknown>>();
+    const details = Stream.create<Stream<unknown>>();
+    const lists = Stream.create<Stream<unknown>>();
     const sources = {
         DOM: {
             select(selector: string) {
@@ -93,17 +104,31 @@ function clearOrders(ids: string[], lastDetailPending = false) {
                 return {
                     "cancel-orders": childResponses,
                     "cancel-parent-order": parentResponses,
+                    "parent-order": details,
+                    "parent-orders": lists,
                 }[category] || Stream.never();
             },
+        },
+        socket: {
+            childOrderEvent$: Stream.never(),
+            execution$: Stream.never(),
+            parentOrderEvent$: Stream.never(),
         },
         storage: { local: { getItem: () => Stream.never() } },
     } as unknown as Parameters<typeof intent>[0];
     const actions = intent(sources);
     const state$ = Stream.createWithMemory<State>();
-    let currentState: State;
+    let currentState: State & TradeState;
     model(actions).addListener({
         next: (reducer) => {
-            currentState = reducer(currentState)!;
+            currentState = reducer(currentState)! as State & TradeState;
+            state$.shamefullySendNext(currentState);
+        },
+    });
+
+    tradeModel(tradeIntent(sources)).addListener({
+        next: (reducer) => {
+            currentState = reducer(currentState)! as State & TradeState;
             state$.shamefullySendNext(currentState);
         },
     });
@@ -123,5 +148,5 @@ function clearOrders(ids: string[], lastDetailPending = false) {
     request(actions, state$).addListener({ next: (input) => requests.push(input as typeof requests[number]) });
     clicks$.shamefullySendNext(null);
 
-    return { childResponses, parentResponses, requests, state: () => currentState };
+    return { childResponses, details, lists, parentResponses, requests, state: () => currentState };
 }

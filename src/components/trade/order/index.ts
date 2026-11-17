@@ -4,7 +4,6 @@ import {Order} from "../../../models/order";
 import {OrderHistory} from "../../../models/orderHistory";
 import {ParentStopOrders} from "../../../models/parentStopOrders";
 import {Position} from "../../../models/position";
-import {StopOrder} from "../../../models/stopOrder";
 import {TwapOrder} from "../../../models/twapOrder";
 import {Sinks, Sources} from "../index";
 import "./index.styl";
@@ -24,7 +23,6 @@ export interface State {
     position: Position;
     price: number;
     size: number;
-    stopOrders: StopOrder[];
     triggerPrice: number;
     twap: TwapOrder;
 }

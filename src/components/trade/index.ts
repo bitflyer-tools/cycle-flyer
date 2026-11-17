@@ -42,6 +42,7 @@ export interface Sinks {
 }
 
 export interface State {
+    canceledParentOrderIds?: ReadonlySet<string>;
     currentPrice: number;
     histories: OrderHistory[];
     orders: Order[];
@@ -99,16 +100,13 @@ export const Trade = (sources: Sources): Sinks => {
                 parentStopOrders: state.parentStopOrders,
                 position: state.position,
                 price: state.price,
-                stopOrders: state.stopOrders,
             },
             set: (state: State, orderComponentState: OrderComponentState) => ({
                 ...state,
                 histories: orderComponentState.histories,
                 orderComponentState,
                 orders: orderComponentState.orders,
-                parentStopOrders: orderComponentState.parentStopOrders,
                 price: orderComponentState.price,
-                stopOrders: orderComponentState.stopOrders,
             }),
         },
     })(sources);
