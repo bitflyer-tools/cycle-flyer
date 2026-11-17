@@ -1,5 +1,6 @@
 import {Stream} from "xstream";
 import debounce from "xstream/extra/debounce";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
 import {Sources} from "./index";
@@ -35,8 +36,8 @@ export const intent = (sources: Sources): Actions => {
         .map((response) => JSON.parse(response.text));
 
     const onParentOrderLoaded$ = sources.HTTP.select("parent-order")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
+        .map((response$) => response$.replaceError(() => Stream.empty()))
+        .compose(flattenConcurrently)
         .map((response) => JSON.parse(response.text));
 
     const onPositionsLoaded$ = sources.HTTP.select("positions")
