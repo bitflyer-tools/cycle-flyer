@@ -25,18 +25,18 @@ export class Board {
     }
 
     public merge(asks: BoardOrder[], bids: BoardOrder[]): Board {
-        const asksToRemove = asks.map((ask) => ask.price);
+        const asksToRemove = new Set(asks.map((ask) => ask.price));
         const asksToAppend = asks.filter((ask) => ask.size !== 0.0).map((ask) => new BoardOrder(ask));
-        const bidsToRemove = bids.map((bid) => bid.price);
+        const bidsToRemove = new Set(bids.map((bid) => bid.price));
         const bidsToAppend = bids.filter((bid) => bid.size !== 0.0).map((bid) => new BoardOrder(bid));
 
         this.asks = this.asks
-            .filter((ask) => !asksToRemove.reduce((previous, price) => previous || price === ask.price, false))
+            .filter((ask) => !asksToRemove.has(ask.price))
             .concat(asksToAppend)
             .sort((a, b) => a.price < b.price ? -1 : 1);
 
         this.bids = this.bids
-            .filter((bid) => !bidsToRemove.reduce((previous, price) => previous || price === bid.price, false))
+            .filter((bid) => !bidsToRemove.has(bid.price))
             .concat(bidsToAppend)
             .sort((a, b) => a.price > b.price ? -1 : 1);
 
