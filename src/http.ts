@@ -19,7 +19,7 @@ export const getOrders = (): RequestInput =>
 export const getParentOrders = (): RequestInput =>
     requestInput("parent-orders", "/v1/me/getparentorders", "GET", undefined, { parent_order_state: "ACTIVE" });
 
-export const getParentOrder = (parentOrderId: number): RequestInput =>
+export const getParentOrder = (parentOrderId: string): RequestOptions =>
     requestInput("parent-order", "/v1/me/getparentorder", "GET", undefined, { parent_order_id: parentOrderId });
 
 export const marketOrder = (size: number, side: string): RequestInput => {
