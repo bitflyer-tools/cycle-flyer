@@ -10,6 +10,14 @@ Download the latest release from [GitHub Releases](https://github.com/bitflyer-t
 
 ![](./images/looking.png)
 
+## Quick start
+
+1. Download the installer or archive for your platform from [GitHub Releases](https://github.com/bitflyer-tools/cycle-flyer/releases/latest).
+2. On Windows, run the Setup executable. On macOS, extract the ZIP. On Linux, install the `.deb` or `.rpm` package for your distribution.
+3. Open Cycle Flyer. On the **Trade** screen, check the bid and ask prices and the spread in the order book. Use **−** and **+** next to **Group** to adjust the price grouping.
+
+You can view the order book without an API key.
+
 ## Author
 
 [@unhappychoice](https://unhappychoice.com)
