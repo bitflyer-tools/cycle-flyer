@@ -3,7 +3,6 @@ import Stream from "xstream";
 import {IFDOCOrder} from "../../../models/ifdocoOrder";
 import {Order} from "../../../models/order";
 import {Position} from "../../../models/position";
-import {StopOrder} from "../../../models/stopOrder";
 import {defaultTwapOrder} from "../../../models/twapOrder";
 import {State} from "./index";
 import {Actions} from "./intent";
@@ -27,7 +26,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
     const cancelOrdersReducer$ = actions.onCancelOrders$
-        .map((_) => (state: State) => ({ ...state, orders: [] as Order[], stopOrders: [] as StopOrder[] }));
+        .map((_) => (state: State) => ({ ...state, orders: [] as Order[] }));
 
     const historyReducer$ = Stream.merge(actions.onHistoryCreated$, actions.onTwapSliceCreated$)
         .map((history) => (state: State) => ({ ...state, histories: [history].concat(state.histories)}));
