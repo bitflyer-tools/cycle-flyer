@@ -41,6 +41,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Test
+        run: npm test
+
   build-electron:
     runs-on: ubuntu-24.04
     steps:
