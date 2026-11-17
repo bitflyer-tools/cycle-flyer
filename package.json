@@ -9,7 +9,8 @@
     "start": "node fuse.dev",
     "start:electron": "electron-forge start --inspect-electron",
     "package": "electron-forge package",
-    "make": "electron-forge make"
+    "make": "electron-forge make",
+    "test": "esbuild test/twap.test.ts --bundle --platform=node --outfile=node_modules/.cache/twap.test.cjs && node node_modules/.cache/twap.test.cjs"
   },
   "author": "unhappychoice",
   "license": "MIT",

@@ -7,7 +7,7 @@ type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 export const createHistoryStream = (name: string, stream$: HTTPResponse$): Stream<OrderHistory> =>
     stream$
         .map((response: any) => childOrderHistory(name, response.request.send, "success"))
-        .replaceError((error) => Stream.of(childOrderHistory(name, error.response.request.send, "failed")));
+        .replaceError(() => Stream.of(childOrderHistory(name, stream$.request.send as string, "failed")));
 
 export const createParentOrderHistoryStream = (stream$: HTTPResponse$): Stream<OrderHistory> =>
     stream$

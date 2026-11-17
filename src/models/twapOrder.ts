@@ -1,6 +1,7 @@
 export interface TwapOrder {
     interval: number;
     remaining: number;
+    scheduleId?: symbol;
     slices: number;
 }
 

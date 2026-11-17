@@ -11,14 +11,20 @@ export const twapModel = (actions: TwapActions): Stream<Reducer<State>> => {
     const slicesReducer$ = Stream.merge(actions.onTwapSlicesChanged$, actions.onTwapSlicesLoaded$)
         .map((slices) => updateTwap((twap) => ({ ...twap, slices })));
 
-    const startReducer$ = Stream.merge(actions.onClickTwapBuyButton$, actions.onClickTwapSellButton$)
-        .map((_) => updateTwap((twap) => ({ ...twap, remaining: twap.slices })));
+    const startReducer$ = actions.onTwapStarted$
+        .map(({id}) => updateTwap((twap) => ({ ...twap, remaining: twap.slices, scheduleId: id })));
 
     const sliceReducer$ = actions.onTwapSliceCreated$
-        .map((_) => updateTwap((twap) => ({ ...twap, remaining: Math.max(twap.remaining - 1, 0) })));
+        .map<Reducer<State>>(({history, scheduleId}) => (state) => state && ({
+            ...state,
+            histories: [history].concat(state.histories),
+            twap: state.twap.scheduleId === scheduleId
+                ? { ...state.twap, remaining: Math.max(state.twap.remaining - 1, 0) }
+                : state.twap,
+        }));
 
     const cancelReducer$ = actions.onClickTwapCancelButton$
-        .map((_) => updateTwap((twap) => ({ ...twap, remaining: 0 })));
+        .map((_) => updateTwap((twap) => ({ ...twap, remaining: 0, scheduleId: undefined })));
 
     return Stream.merge(intervalReducer$, slicesReducer$, startReducer$, sliceReducer$, cancelReducer$);
 };

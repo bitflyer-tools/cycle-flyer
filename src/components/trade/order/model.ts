@@ -29,7 +29,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const cancelOrdersReducer$ = actions.onCancelOrders$
         .map((_) => (state: State) => ({ ...state, orders: [] as Order[], stopOrders: [] as StopOrder[] }));
 
-    const historyReducer$ = Stream.merge(actions.onHistoryCreated$, actions.onTwapSliceCreated$)
+    const historyReducer$ = actions.onHistoryCreated$
         .map((history) => (state: State) => ({ ...state, histories: [history].concat(state.histories)}));
 
     const isOrderingReducer$ = Stream.merge(
