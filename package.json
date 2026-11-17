@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node fuse",
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
+    "test": "esbuild test/ifdocoOrder.test.ts --bundle --platform=node --outdir=out/tests && node --test out/tests/ifdocoOrder.test.js",
     "start": "node fuse.dev",
     "start:electron": "electron-forge start --inspect-electron",
     "package": "electron-forge package",
