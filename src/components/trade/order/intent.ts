@@ -1,4 +1,5 @@
 import {Stream} from "xstream";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {OrderHistory} from "../../../models/orderHistory";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
@@ -43,11 +44,11 @@ export const intent = (sources: Sources): Actions => {
         .mapTo(null);
 
     const onHistoryCreated$ = Stream.merge(
-        sources.HTTP.select("market-order").map((stream) => createHistoryStream("Market", stream)).flatten(),
-        sources.HTTP.select("limit-order").map((stream) => createHistoryStream("Limit", stream)).flatten(),
-        sources.HTTP.select("ifdoco-order").map((stream) => createParentOrderHistoryStream(stream)).flatten(),
-        sources.HTTP.select("stop-order").map((stream) => createParentOrderHistoryStream(stream)).flatten(),
-    );
+        sources.HTTP.select("market-order").map((response$) => createHistoryStream("Market", response$)),
+        sources.HTTP.select("limit-order").map((response$) => createHistoryStream("Limit", response$)),
+        sources.HTTP.select("ifdoco-order").map(createParentOrderHistoryStream),
+        sources.HTTP.select("stop-order").map(createParentOrderHistoryStream),
+    ).compose(flattenConcurrently);
 
     return {
         ...twapIntent(sources),
