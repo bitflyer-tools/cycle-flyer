@@ -1,49 +1,54 @@
+import {MainDOMSource} from "@cycle/dom";
 import Stream from "xstream";
+import {initializeCredentials, saveCredentials} from "../../credentials";
 import {soundEnabledStorageKey} from "../../drivers/soundDriver";
 import {Sources} from "./index";
 
 export interface Actions {
-    onApiKeyLoaded$: Stream<string>;
-    onApiSecretLoaded$: Stream<string>;
-    onApiKeyInputChanged$: Stream<string>;
-    onApiSecretInputChanged$: Stream<string>;
+    credentialsMessage$: Stream<string>;
     onSoundEnabledLoaded$: Stream<boolean>;
     onSoundToggled$: Stream<boolean>;
 }
 
 export const intent = (sources: Sources): Actions => {
-    const onApiKeyLoaded$ = (sources.storage as any).local.getItem("api-key")
-        .filter((apiKey: string) => apiKey && apiKey !== "")
-        .take(1);
+    const dom = sources.DOM as MainDOMSource;
+    const migrationMessage$ = Stream.fromPromise(initializeCredentials())
+        .filter((success) => !success)
+        .mapTo("Could not migrate legacy credentials. Enter your API key and secret to save them again.");
 
-    const onApiSecretLoaded$ = (sources.storage as any).local.getItem("api-secret")
-        .filter((apiSecret: string) => apiSecret && apiSecret !== "")
-        .take(1);
+    const saveMessage$ = dom.select("#credentials-form").events("submit")
+        .map((event) => {
+            event.preventDefault();
+            const form = event.target as HTMLFormElement;
+            const key = (form.elements.namedItem("key") as HTMLInputElement).value.trim();
+            const secret = (form.elements.namedItem("secret") as HTMLInputElement).value.trim();
+            form.reset();
+            return key && secret
+                ? updateCredentials({ key, secret }, "Credentials saved.")
+                : Promise.resolve("Enter both an API key and an API secret.");
+        });
 
-    const onApiKeyInputChanged$ = sources.DOM.select("#api-key-input")
-        .events("keyup")
-        .map((event) => event.target as HTMLInputElement)
-        .map((element) => element.value);
-
-    const onApiSecretInputChanged$ = sources.DOM.select("#api-secret-input")
-        .events("keyup")
-        .map((event) => event.target as HTMLInputElement)
-        .map((element) => element.value);
+    const clearMessage$ = dom.select("#clear-credentials").events("click")
+        .map(() => updateCredentials(null, "Credentials cleared."));
 
     const onSoundEnabledLoaded$ = (sources.storage as any).local.getItem(soundEnabledStorageKey)
         .take(1)
         .map((value: string | null) => value !== "false");
 
-    const onSoundToggled$ = sources.DOM.select("#sound-enabled-input")
+    const onSoundToggled$ = dom.select("#sound-enabled-input")
         .events("change")
         .map((event) => (event.target as HTMLInputElement).checked);
 
     return {
-        onApiKeyInputChanged$,
-        onApiKeyLoaded$,
-        onApiSecretInputChanged$,
-        onApiSecretLoaded$,
+        credentialsMessage$: Stream.merge(migrationMessage$, Stream.merge(saveMessage$, clearMessage$)
+            .map((message) => Stream.fromPromise(message)).flatten()),
         onSoundEnabledLoaded$,
         onSoundToggled$,
     };
 };
+
+const updateCredentials = (pair: { key: string; secret: string } | null, message: string): Promise<string> =>
+    saveCredentials(pair).then(
+        () => message,
+        () => "Could not update credentials. Check that OS credential storage is available and try again.",
+    );

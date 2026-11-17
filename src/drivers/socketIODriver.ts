@@ -1,5 +1,6 @@
 import { io, Socket } from "socket.io-client";
 import Stream from "xstream";
+import {credentialsChanged$} from "../credentials";
 import {ChildOrderEvent, ParentOrderEvent} from "../models/orderEvent";
 import {authenticate, privateChannelNames} from "./privateChannel";
 
@@ -33,6 +34,10 @@ export class SocketIOSource {
         client.on("connect", () => {
             publicChannelNames.forEach((channelName) => client.emit("subscribe", channelName));
             authenticate(client, () => privateChannelNames.forEach((channelName) => client.emit("subscribe", channelName)));
+        });
+
+        credentialsChanged$.addListener({
+            next: () => { client.disconnect().connect(); },
         });
 
         Object.keys(this.channels).forEach((channelName) => client.on(channelName, this.channels[channelName]));

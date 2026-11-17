@@ -1,5 +1,4 @@
 import {RequestInput, RequestOptions} from "@cycle/http";
-import * as hash from "hash.js";
 
 export const getBoard = (): RequestInput =>
     requestInput("board", "/v1/getboard", "GET");
@@ -99,37 +98,12 @@ export const cancelOrders = (): RequestInput =>
     requestInput("cancel-orders", "/v1/me/cancelallchildorders", "POST", { product_code: "FX_BTC_JPY" });
 
 const requestInput = (category: string, path: string, method: string, json?: object, q?: object) => {
-    const [key, secret] = getApiKeys();
-
-    const url = `https://api.bitflyer.jp${path}`;
-    const query: any = { product_code: "FX_BTC_JPY", ...q };
-    const queryString = "?" + Object.keys(query).reduce((acc, k) => acc + `&${k}=${query[k]}`, "").slice(1);
-
+    const query = { product_code: "FX_BTC_JPY", ...q } as Record<string, string | number>;
+    const queryString = Object.keys(query)
+        .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(query[key])}`)
+        .join("&");
+    const url = `https://api.bitflyer.jp${path}?${queryString}`;
     const send = json ? JSON.stringify(json) : "";
-    const timestamp = Date.now().toString();
-
-    const headers = {
-        "ACCESS-KEY": key,
-        "ACCESS-SIGN": signature(method, path, queryString, secret, send, timestamp),
-        "ACCESS-TIMESTAMP": timestamp,
-        "Content-Type": "application/json",
-    };
-
-    return { category, url, method, headers, send, query };
-};
-
-const getApiKeys = (): string[] => {
-    return [localStorage["api-key"], localStorage["api-secret"]];
-};
-
-const signature = (
-    method: string,
-    path: string,
-    query: string,
-    secret: string,
-    send: string,
-    timestamp: string,
-): string => {
-    const text = timestamp + method + path + query + send;
-    return hash.hmac((hash as any).sha256, secret).update(text).digest("hex");
+    const headers = { "Content-Type": "application/json" };
+    return { category, url, method, headers, send };
 };
