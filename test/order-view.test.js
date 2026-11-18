@@ -49,7 +49,7 @@ test('board deltas reuse the order form while order inputs still update it', (t)
   let orderNode;
   let orderRenders = 0;
   const requests = [];
-  const orderRequestsListener = { next: (batch) => requests.push(...batch.requests) };
+  const orderRequestListener = { next: (batch) => requests.push(...batch.requests) };
   const stateListener = { next: (reduce) => state$.shamefullySendNext(state = reduce(state)) };
   const domListener = {
     next: (node) => {
@@ -63,9 +63,9 @@ test('board deltas reuse the order form while order inputs still update it', (t)
   };
   sinks.state.addListener(stateListener);
   sinks.DOM.addListener(domListener);
-  sinks.orderRequests.addListener(orderRequestsListener);
+  sinks.orderRequests.addListener(orderRequestListener);
   t.after(() => {
-    sinks.orderRequests.removeListener(orderRequestsListener);
+    sinks.orderRequests.removeListener(orderRequestListener);
     sinks.DOM.removeListener(domListener);
     sinks.state.removeListener(stateListener);
   });
@@ -75,6 +75,7 @@ test('board deltas reuse the order form while order inputs still update it', (t)
   const initialTrade = tradeNode;
   assert.ok(initialRenders > 0);
 
+  t.mock.timers.tick(100);
   for (let index = 0; index < 100; index++) {
     board$.shamefullySendNext({ asks: [{ price: 100001, size: index + 1 }], bids: [] });
   }
