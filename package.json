@@ -10,7 +10,7 @@
     "start:electron": "electron-forge start --inspect-electron",
     "package": "electron-forge package",
     "make": "electron-forge make",
-    "test": "esbuild test/clearOrders.test.ts test/orderSubmission.test.ts test/trade-stop-orders.test.cjs --bundle --platform=node --define:window=undefined --loader:.styl=empty --outdir=out/tests --out-extension:.js=.cjs && esbuild test/board.test.ts --bundle --platform=node --banner:js=\"globalThis.window = {};\" --outfile=out/tests/board.test.cjs && node --test out/tests/*.test.cjs test/*.test.js"
+    "test": "esbuild test/clearOrders.test.ts test/orderSubmission.test.ts test/parentOrderDetails.test.ts test/trade-stop-orders.test.cjs --bundle --platform=node --define:window=undefined --loader:.styl=empty --outdir=out/tests --out-extension:.js=.cjs && esbuild test/board.test.ts --bundle --platform=node --banner:js=\"globalThis.window = {};\" --outfile=out/tests/board.test.cjs && node --test out/tests/*.test.cjs test/*.test.js"
   },
   "author": "unhappychoice",
   "license": "MIT",
