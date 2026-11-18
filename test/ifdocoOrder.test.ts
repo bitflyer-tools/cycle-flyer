@@ -21,7 +21,7 @@ const state: State = {
     position: new Position([]),
     price: 0,
     size: 0.01,
-    stopOrders: [],
+    parentStopOrders: {},
     triggerPrice: 0,
     twap: defaultTwapOrder,
 };
