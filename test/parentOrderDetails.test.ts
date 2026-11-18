@@ -1,66 +1,213 @@
-import {deepStrictEqual, ok} from "node:assert";
+import {RequestOptions, Response} from "@cycle/http";
+import {isolateSink} from "@cycle/http/lib/cjs/isolate";
+import {deepStrictEqual, strictEqual} from "node:assert";
 import {test} from "node:test";
 import Stream from "xstream";
-import type {Sources, State} from "../src/components/trade";
+import type {State} from "../src/components/trade";
 import {intent} from "../src/components/trade/intent";
 import {model} from "../src/components/trade/model";
+import {ActiveParentOrder} from "../src/components/trade/parentOrderDetails";
+import {request} from "../src/components/trade/request";
+import {credentialsChanging$} from "../src/credentials";
+import {unsignedRequests$} from "../src/drivers/httpDriver";
+import {ParentOrderEvent} from "../src/models/orderEvent";
 import {flattenStopOrders} from "../src/models/parentStopOrders";
 
-const response = (body: object, credentialVersion = 0) => ({
-    request: { credentialVersion },
-    text: JSON.stringify(body),
+test("reuses 20 loaded details and coalesces duplicate IDs while they are pending", (t) => {
+    const trade = setup(t);
+    const ids = Array.from({ length: 20 }, (_, index) => `parent-${index}`);
+    trade.list([...ids, ids[0]]);
+    trade.list(ids);
+    deepStrictEqual(trade.requestedIds(), ids);
+
+    [...trade.requests].reverse().forEach((input) => trade.complete(input));
+    trade.list(ids);
+    deepStrictEqual(trade.requestedIds(), ids);
+    strictEqual(trade.loaded.length, 20);
 });
-const stopDetail = (id: number, price: number, credentialVersion?: number) => response({
-    parent_order_id: id,
-    parameters: [{ condition_type: "STOP", side: "SELL", size: 0.1, trigger_price: price }],
-}, credentialVersion);
+
+test("retries only failed and new details after a list refresh", (t) => {
+    const trade = setup(t);
+    trade.list(["a", "b"]);
+    trade.fail(trade.requests[0]);
+    trade.complete(trade.requests[1]);
+    trade.list(["a", "b", "c"]);
+    deepStrictEqual(trade.requestedIds(), ["a", "b", "a", "c"]);
+    trade.complete(trade.requests[0]);
+    deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["b"]);
+    trade.complete(trade.requests[2]);
+    deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["b", "a"]);
+});
+
+test("ignores stale account responses and resets the detail cache when credentials change", (t) => {
+    const trade = setup(t);
+    trade.list(["stale"], [], -1);
+    deepStrictEqual(trade.requestedIds(), []);
+
+    trade.list(["a", "b"]);
+    trade.complete(trade.requests[0]);
+    trade.complete(trade.requests[1], -1);
+    deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["a"]);
+
+    trade.list(["a", "b"]);
+    deepStrictEqual(trade.requestedIds(), ["a", "b", "b"]);
+    credentialsChanging$.shamefullySendNext(undefined);
+    trade.list(["a", "b"]);
+    trade.complete(trade.requests[2]);
+    deepStrictEqual(trade.requestedIds(), ["a", "b", "b", "a", "b"]);
+    deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["a"]);
+    trade.complete(trade.requests[4]);
+    deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["a", "b"]);
+});
+
+test("retries a parent detail whose request could not be signed", (t) => {
+    const trade = setup(t);
+    trade.list(["a"]);
+    unsignedRequests$.shamefullySendNext(trade.requests[0]);
+    trade.list(["a"]);
+    deepStrictEqual(trade.requestedIds(), ["a", "a"]);
+    trade.complete(trade.requests[1]);
+    deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["a"]);
+});
 
 [false, true].forEach((reverse) => {
-    test(`keeps both stop markers when details resolve ${reverse ? "in reverse order" : "in request order"}`, () => {
-        const activeOrders$ = Stream.create<ReturnType<typeof response>>();
-        const details$ = Stream.create<Stream<ReturnType<typeof response>>>();
-        const first$ = Stream.create<ReturnType<typeof response>>();
-        const second$ = Stream.create<ReturnType<typeof response>>();
-        const sources = {
-            HTTP: {
-                select: (category: string) => {
-                    if (category === "parent-orders") { return Stream.of(activeOrders$); }
-                    if (category === "parent-order") { return details$; }
-                    return Stream.never();
-                },
-            },
-            socket: {
-                childOrderEvent$: Stream.never(),
-                execution$: Stream.never(),
-                parentOrderEvent$: Stream.never(),
-            },
-        } as unknown as Sources;
+    test(`keeps both stop markers when details resolve ${reverse ? "in reverse order" : "in request order"}`, (t) => {
+        const trade = setup(t);
         let state: State | undefined;
-        const subscription = model(intent(sources)).subscribe({
+        const subscription = model(trade.actions).subscribe({
             next: (reducer) => { state = reducer(state); },
         });
+        t.after(() => subscription.unsubscribe());
 
-        try {
-            activeOrders$.shamefullySendNext(response([{ parent_order_id: 1 }, { parent_order_id: 2 }]));
-            ok(state);
-            deepStrictEqual(state.parentStopOrders, { 1: [], 2: [] });
-            deepStrictEqual(flattenStopOrders(state.parentStopOrders), []);
-            details$.shamefullySendNext(first$);
-            details$.shamefullySendNext(second$);
+        trade.list(["a", "b"]);
+        deepStrictEqual(state!.parentStopOrders, { a: [], b: [] });
+        const resolve = trade.requests.map((input, index) => {
+            const response$ = Stream.create<Response>();
+            trade.send(input, response$);
+            return () => response$.shamefullySendNext({
+                text: JSON.stringify({
+                    parent_order_id: trade.requestedIds()[index],
+                    parameters: [{
+                        condition_type: "STOP", side: "SELL", size: 0.1, trigger_price: 100 * (index + 1),
+                    }],
+                }),
+            } as Response);
+        });
+        (reverse ? resolve.reverse() : resolve).forEach((complete) => complete());
 
-            const resolveFirst = () => first$.shamefullySendNext(stopDetail(1, 100));
-            const resolveSecond = () => second$.shamefullySendNext(stopDetail(2, 200));
-            (reverse ? [resolveSecond, resolveFirst] : [resolveFirst, resolveSecond]).forEach((resolve) => resolve());
-
-            deepStrictEqual(state.parentStopOrders[1]?.map((order) => order.price), [100]);
-            deepStrictEqual(state.parentStopOrders[2]?.map((order) => order.price), [200]);
-            first$.shamefullySendNext(stopDetail(1, 300, -1));
-            deepStrictEqual(state.parentStopOrders[1]?.map((order) => order.price), [100]);
-
-            const prices = flattenStopOrders(state.parentStopOrders).map((order) => order.price);
-            deepStrictEqual(prices.sort((a, b) => a - b), [100, 200]);
-        } finally {
-            subscription.unsubscribe();
-        }
+        deepStrictEqual(state!.parentStopOrders.a?.map((order) => order.price), [100]);
+        deepStrictEqual(state!.parentStopOrders.b?.map((order) => order.price), [200]);
+        const prices = flattenStopOrders(state!.parentStopOrders).map((order) => order.price);
+        deepStrictEqual(prices.sort((a, b) => a - b), [100, 200]);
     });
 });
+
+test("invalidates the affected parent and discards its pending response", (t) => {
+    const trade = setup(t);
+    trade.list(["a", "b"]);
+    trade.complete(trade.requests[1]);
+    trade.events.shamefullySendNext({ parent_order_acceptance_id: "acceptance-a" } as ParentOrderEvent);
+    trade.list(["a", "b"]);
+    deepStrictEqual(trade.requestedIds(), ["a", "b"]);
+
+    trade.complete(trade.requests[0]);
+    deepStrictEqual(trade.requestedIds(), ["a", "b", "a"]);
+    deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["b"]);
+
+    trade.complete(trade.requests[2]);
+    trade.events.shamefullySendNext({ parent_order_id: "a" } as ParentOrderEvent);
+    trade.list(["a", "b"]);
+    deepStrictEqual(trade.requestedIds(), ["a", "b", "a", "a"]);
+});
+
+test("uses a late acceptance ID to invalidate only the affected cached detail", (t) => {
+    const trade = setup(t);
+    trade.list(["a", "b"], ["a"]);
+    trade.requests.forEach((input) => trade.complete(input));
+    trade.list(["a", "b"]);
+    trade.list(["a", "b"], ["a"]);
+    deepStrictEqual(trade.requestedIds(), ["a", "b"]);
+
+    trade.events.shamefullySendNext({ parent_order_acceptance_id: "acceptance-a" } as ParentOrderEvent);
+    trade.list(["a", "b"]);
+    deepStrictEqual(trade.requestedIds(), ["a", "b", "a"]);
+});
+
+test("reconciles on reconnect and ignores responses for removed parents", async (t) => {
+    const trade = setup(t);
+    trade.list(["a", "b"]);
+    trade.complete(trade.requests[0]);
+    const listRequestCount = trade.listRequests.length;
+    trade.reconnect.shamefullySendNext(null);
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    strictEqual(trade.listRequests.length, listRequestCount + 1);
+
+    trade.list(["a"]);
+    trade.complete(trade.requests[1]);
+    deepStrictEqual(trade.requestedIds(), ["a", "b", "a"]);
+    deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["a"]);
+
+    trade.list(["a", "b"]);
+    deepStrictEqual(trade.requestedIds(), ["a", "b", "a", "b"]);
+});
+
+const setup = (t: { after: (cleanup: () => void) => void }) => {
+    const events = Stream.create<ParentOrderEvent>();
+    const reconnect = Stream.create<null>();
+    const channels = new Map<string, Stream<Stream<Response>>>();
+    const sources = {
+        HTTP: {
+            select: (category: string) => {
+                const channel = Stream.create<Stream<Response>>();
+                channels.set(category, channel);
+                return channel;
+            },
+        },
+        socket: { childOrderEvent$: Stream.never(), execution$: Stream.never(), parentOrderEvent$: events,
+            reconnect$: reconnect },
+    };
+    const actions = intent(sources as unknown as Parameters<typeof intent>[0]);
+    const requests: RequestOptions[] = [];
+    const listRequests: RequestOptions[] = [];
+    const loaded: ActiveParentOrder[] = [];
+    const request$ = request(actions).filter((input): input is string | RequestOptions => input !== null);
+    const sink = isolateSink(request$, "trade").subscribe({ next: (input) => {
+        if (typeof input !== "object") { return; }
+        if (input.category === "parent-order") { requests.push(input); }
+        if (input.category === "parent-orders") { listRequests.push(input); }
+    } });
+    const details = actions.onParentOrderLoaded$.subscribe({ next: (detail) => loaded.push(detail) });
+    t.after(() => {
+        sink.unsubscribe();
+        details.unsubscribe();
+    });
+
+    const requestedId = (input: RequestOptions) => new URL(input.url).searchParams.get("parent_order_id")!;
+    const send = (input: RequestOptions, response$: Stream<Response>, credentialVersion = 0) => {
+        const signedRequest = { ...input, credentialVersion };
+        const response = Object.assign(response$.map((value) => ({ ...value, request: signedRequest })),
+            { request: signedRequest });
+        channels.get(input.category!)!.shamefullySendNext(response);
+    };
+    const respond = (input: RequestOptions, body: object, credentialVersion?: number) =>
+        send(input, Stream.of({ text: JSON.stringify(body) } as Response), credentialVersion);
+
+    return {
+        actions,
+        complete: (input: RequestOptions, credentialVersion?: number) =>
+            respond(input, { parent_order_id: requestedId(input), parameters: [] }, credentialVersion),
+        events,
+        fail: (input: RequestOptions) => send(input, Stream.throw(new Error("Request failed"))),
+        list: (ids: string[], withoutAcceptanceId: string[] = [], credentialVersion?: number) => respond({ category: "parent-orders", url: "" },
+            ids.map((id) => ({
+                parent_order_acceptance_id: withoutAcceptanceId.includes(id) ? undefined : `acceptance-${id}`,
+                parent_order_id: id,
+            })), credentialVersion),
+        listRequests,
+        loaded,
+        reconnect,
+        requestedIds: () => requests.map(requestedId),
+        requests,
+        send,
+    };
+};

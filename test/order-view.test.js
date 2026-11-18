@@ -40,7 +40,7 @@ test('board deltas reuse the order form while order inputs still update it', (t)
     DOM: dom,
     HTTP: { select: (category) => category === 'orders' ? orders$ : never() },
     orderRequests: { select: never },
-    socket: { board$, execution$, childOrderEvent$: never(), parentOrderEvent$: never() },
+    socket: { board$, execution$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
   }, Stream.of(false));

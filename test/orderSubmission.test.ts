@@ -324,6 +324,7 @@ function setup(t: TestContext) {
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
             parentOrderEvent$: Stream.never(),
+            reconnect$: Stream.never(),
         },
         state: new StateSource(state$, "state"),
         storage: { local: { getItem: (key: string) =>

@@ -1,20 +1,16 @@
 import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
 import {credentialsChanged$} from "../../credentials";
-import {getOrders, getParentOrder, getParentOrders, getPositions} from "../../http";
+import {getOrders, getParentOrders, getPositions} from "../../http";
 import {Actions} from "./intent";
 
 export const request = (actions: Actions): Stream<string | RequestInput | null> => {
     const orders = Stream.periodic(10000).mapTo(getOrders()).startWith(getOrders());
-    const parentOrders = Stream.periodic(10000).mapTo(getParentOrders()).startWith(getParentOrders());
+    const parentOrders = Stream.periodic(10000).map(getParentOrders).startWith(getParentOrders());
     const positions = Stream.periodic(10000).mapTo(getPositions()).startWith(getPositions());
 
     const refreshes = actions.onMyOrderChanged$
         .map((_) => Stream.fromArray([getOrders(), getParentOrders(), getPositions()]))
-        .flatten();
-
-    const parentOrderDetails = actions.onParentOrdersLoaded$
-        .map((os) => Stream.fromArray(os.map((order) => getParentOrder(order.parent_order_id))))
         .flatten();
 
     return Stream.merge(
@@ -23,6 +19,6 @@ export const request = (actions: Actions): Stream<string | RequestInput | null> 
         positions,
         credentialsChanged$.map(getPositions),
         refreshes,
-        parentOrderDetails,
+        actions.parentOrderRequests$,
     ) as Stream<string | RequestInput | null>;
 };

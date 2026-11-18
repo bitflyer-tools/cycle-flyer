@@ -17,6 +17,7 @@ export class SocketIOSource {
     public ticker$: Stream<object> = Stream.create();
     public execution$: Stream<object> = Stream.create();
     public childOrderEvent$: Stream<ChildOrderEvent> = Stream.create();
+    public reconnect$: Stream<null> = Stream.create();
     public parentOrderEvent$: Stream<ParentOrderEvent> = Stream.create();
 
     private channels: { [channelName: string]: (message: any) => void } = {
@@ -30,6 +31,7 @@ export class SocketIOSource {
         const publicChannelNames = Object.keys(this.channels).filter((name) => privateChannelNames.indexOf(name) < 0);
 
         let authenticatedVersion: number | null = null;
+        let connectedOnce = false;
         client.on("connect", () => {
             authenticatedVersion = null;
             publicChannelNames.forEach((channelName) => client.emit("subscribe", channelName));
@@ -39,6 +41,8 @@ export class SocketIOSource {
                 authenticatedVersion = version;
                 privateChannelNames.forEach((channelName) => client.emit("subscribe", channelName));
             });
+            if (connectedOnce) { this.reconnect$.shamefullySendNext(null); }
+            connectedOnce = true;
         });
 
         credentialsChanged$.addListener({

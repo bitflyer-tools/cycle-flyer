@@ -1,3 +1,4 @@
+import {RequestOptions} from "@cycle/http";
 import {Stream} from "xstream";
 import debounce from "xstream/extra/debounce";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
@@ -5,6 +6,7 @@ import {AccountRequest, isCurrentAccountRequest} from "../../drivers/httpDriver"
 import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
 import {Sources} from "./index";
+import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
 
 export interface Actions {
     onCancelParentOrder$: Stream<string>;
@@ -12,8 +14,9 @@ export interface Actions {
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
     onMyOrderChanged$: Stream<null>;
     onOrdersLoaded$: Stream<object[]>;
-    onParentOrderLoaded$: Stream<{ parent_order_id: string }>;
-    onParentOrdersLoaded$: Stream<{ parent_order_id: string }[]>;
+    onParentOrderLoaded$: Stream<ActiveParentOrder>;
+    onParentOrdersLoaded$: Stream<ActiveParentOrder[]>;
+    parentOrderRequests$: Stream<RequestOptions>;
     onPositionsLoaded$: Stream<{ position: Position; positionCredentialVersion: number }>;
 }
 
@@ -33,6 +36,7 @@ export const intent = (sources: Sources): Actions => {
     const onMyOrderChanged$ = Stream.merge(
         sources.socket.childOrderEvent$.mapTo(null),
         sources.socket.parentOrderEvent$.mapTo(null),
+        sources.socket.reconnect$,
     ).compose(debounce(500));
 
     const onOrdersLoaded$ = sources.HTTP.select("orders")
@@ -47,11 +51,9 @@ export const intent = (sources: Sources): Actions => {
         .filter(isCurrent)
         .map((response) => JSON.parse(response.text));
 
-    const onParentOrderLoaded$ = sources.HTTP.select("parent-order")
-        .map((response$) => response$.replaceError(() => Stream.empty()))
-        .compose(flattenConcurrently)
-        .filter(isCurrent)
-        .map((response) => JSON.parse(response.text));
+    const details = parentOrderDetails(
+        sources.HTTP, onParentOrdersLoaded$, sources.socket.parentOrderEvent$, sources.socket.reconnect$,
+    );
 
     const onPositionsLoaded$ = sources.HTTP.select("positions")
         .map((response$) => response$.replaceError(() => Stream.never()))
@@ -73,8 +75,9 @@ export const intent = (sources: Sources): Actions => {
         onMyExecutionCreated$,
         onMyOrderChanged$,
         onOrdersLoaded$,
-        onParentOrderLoaded$,
+        onParentOrderLoaded$: details.loaded$,
         onParentOrdersLoaded$,
         onPositionsLoaded$,
+        parentOrderRequests$: details.requests$,
     };
 };
