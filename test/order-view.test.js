@@ -18,7 +18,7 @@ const tradeModule = { exports: {} };
 new Function('require', 'module', bundle.outputFiles[0].text)(require, tradeModule);
 const { Trade } = tradeModule.exports;
 
-test('board deltas reuse the order form while order inputs still update it', (t) => {
+test('board deltas reuse the order form and refreshed markers show open quantities', (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] });
   const board$ = Stream.create();
   const execution$ = Stream.create();
@@ -77,7 +77,10 @@ test('board deltas reuse the order form while order inputs still update it', (t)
 
   t.mock.timers.tick(100);
   for (let index = 0; index < 100; index++) {
-    board$.shamefullySendNext({ asks: [{ price: 100001, size: index + 1 }], bids: [] });
+    board$.shamefullySendNext({
+      asks: [{ price: 100001, size: index + 1 }],
+      bids: [{ price: 99999, size: 1 }, { price: 99998, size: 1 }],
+    });
   }
   assert.equal(state.boardComponentState.board.asks[0].size, 100);
   assert.notEqual(tradeNode, initialTrade);
@@ -89,8 +92,20 @@ test('board deltas reuse the order form while order inputs still update it', (t)
   execution$.shamefullySendNext({ side: 'BUY', price: 100001 });
   assert.equal(orderRenders, initialRenders + 2);
 
-  orders$.shamefullySendNext(Stream.of({ text: JSON.stringify([{ side: 'BUY', price: 99999, size: 0.1 }]) }));
+  t.mock.timers.tick(100);
+  orders$.shamefullySendNext(Stream.of({
+    text: JSON.stringify([
+      { side: 'BUY', price: 99999, size: 0.1, executed_size: 0.06, outstanding_size: 0.04 },
+      { side: 'BUY', price: 99998, size: 0.2, executed_size: 0, outstanding_size: 0.2 },
+    ]),
+  }));
   assert.equal(orderRenders, initialRenders + 3);
+  const bids = tradeNode.children[1].children.find(({ sel }) => sel === 'div.bids');
+  const markers = bids.children.map((bid) => [
+    bid.data.dataset.price,
+    bid.children.find((node) => node?.sel === 'span.my-order')?.text,
+  ]);
+  assert.deepEqual(markers, [[99999, '0.04'], [99998, '0.2']]);
 
   marketBuy$.shamefullySendNext({});
   const orderRequest = requests.find(({ category }) => category === 'market-order');
