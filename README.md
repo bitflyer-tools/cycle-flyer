@@ -21,6 +21,10 @@ Download the latest release from [GitHub Releases](https://github.com/bitflyer-t
 
 You can view the order book without an API key.
 
+## Releases
+
+Prepare a release from an up-to-date `master`. Run `npm version patch -m 'chore: release v%s'` to update both manifests and create the version commit and tag. Use `minor` or `major` for the corresponding version bump. Push the version commit to `master`, then push the matching `vMAJOR.MINOR.PATCH` tag. The tag starts the desktop builds and publishes their artifacts and generated notes to GitHub Releases.
+
 ## Author
 
 [@unhappychoice](https://unhappychoice.com)

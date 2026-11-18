@@ -6,31 +6,43 @@ const { test } = require('node:test');
 const { load } = require('js-yaml');
 
 const workflowPath = path.join(__dirname, '../.github/workflows/release.yml');
-const { jobs } = load(readFileSync(workflowPath, 'utf8'));
-const [firstStep] = jobs['bump-version'].steps;
+const release = load(readFileSync(workflowPath, 'utf8'));
+const { jobs } = release;
+const { version } = require('../package.json');
+const validation = jobs.validate.steps.find(({ name }) => name === 'Validate release tag');
 
-function runFirstStep(ref) {
-  assert.equal(firstStep.name, 'Require the master branch');
-  const result = spawnSync('bash', ['-e', '-c', firstStep.run], {
+function validateTag(tag) {
+  const result = spawnSync('bash', ['-e', '-c', validation.run], {
+    cwd: path.join(__dirname, '..'),
     encoding: 'utf8',
-    env: { ...process.env, GITHUB_REF: ref },
+    env: { ...process.env, GITHUB_REF_NAME: tag },
   });
   assert.ifError(result.error);
   return result;
 }
 
-test('allows a master branch dispatch and builds from the new version tag', () => {
-  assert.equal(runFirstStep('refs/heads/master').status, 0);
-  assert.equal(jobs.build.needs, 'bump-version');
+test('builds the tagged revision and publishes its artifacts with release notes', () => {
+  assert.deepEqual(release.on, { push: { tags: ['v*.*.*'] } });
+  assert.equal(jobs.build.needs, 'validate');
   const checkout = jobs.build.steps.find(({ uses }) => uses?.startsWith('actions/checkout@'));
-  assert.equal(checkout.with.ref, 'v${{ needs.bump-version.outputs.version }}');
+  assert.ok(checkout);
+  assert.equal(checkout.with?.ref, undefined);
+  assert.equal(jobs.publish.needs, 'build');
+  const publish = jobs.publish.steps.find(({ uses }) => uses?.startsWith('softprops/action-gh-release@'));
+  assert.equal(publish.with.tag_name, '${{ github.ref_name }}');
+  assert.equal(publish.with.generate_release_notes, true);
 });
 
-test('rejects other branches and tags before checkout with a branch error', () => {
-  ['refs/heads/feature', 'refs/tags/master'].forEach((ref) => {
-    const result = runFirstStep(ref);
-    assert.equal(result.status, 1, ref);
-    assert.match(result.stdout, /::error::Dispatch the release workflow from the master branch\./);
+test('accepts the version tag that matches both manifests', () => {
+  const result = validateTag(`v${version}`);
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('rejects a mismatched release tag or a prerelease tag', () => {
+  [`v${version}.1`, `v${version}-rc.1`].forEach((tag) => {
+    const result = validateTag(tag);
+    assert.equal(result.status, 1, tag);
+    assert.match(result.stderr, /::error::The release tag must match/);
   });
 });
 
@@ -42,11 +54,10 @@ test('limits CI jobs to repository read access', () => {
   });
 });
 
-test('grants release write access only for version bumps and publishing', () => {
-  const release = load(readFileSync(workflowPath, 'utf8'));
+test('grants release write access only for publishing', () => {
   assert.deepEqual(release.permissions, { contents: 'read' });
   assert.deepEqual(
     Object.fromEntries(Object.entries(jobs).map(([name, job]) => [name, job.permissions ?? release.permissions])),
-    { 'bump-version': { contents: 'write' }, build: { contents: 'read' }, publish: { contents: 'write' } },
+    { validate: { contents: 'read' }, build: { contents: 'read' }, publish: { contents: 'write' } },
   );
 });
