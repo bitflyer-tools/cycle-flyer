@@ -1,11 +1,14 @@
 import {mockDOMSource} from "@cycle/dom";
-import {RequestOptions, Response} from "@cycle/http";
-import {Reducer} from "@cycle/state";
+import {RequestOptions, Response, ResponseStream} from "@cycle/http";
+import {MainHTTPSource} from "@cycle/http/lib/cjs/MainHTTPSource";
+import {StateSource} from "@cycle/state";
+import {routerify} from "cyclic-router";
 import {deepEqual, equal} from "node:assert/strict";
 import {test, TestContext} from "node:test";
-import Stream from "xstream";
-import {Sources} from "../src/components/trade";
-import {OrderComponent, State} from "../src/components/trade/order";
+import switchPath from "switch-path";
+import Stream, {MemoryStream} from "xstream";
+import {Root, Sinks, Sources} from "../src/components";
+import {State as TradeState} from "../src/components/trade";
 
 test("accepts a single IFDOCO submission until its delayed success", (t) => {
     const order = setup(t);
@@ -58,6 +61,37 @@ test("releases a failed IFDOCO and keeps a later market order locked through sta
     equal(order.requests.length, 3);
 });
 
+for (const outcome of ["succeed", "fail"] as const) {
+    test(`keeps IFDOCO pending after returning from settings until the original request settles (${outcome})`, (t) => {
+        const order = setup(t);
+        order.buyIFDOCO();
+        const response = order.respondTo(order.requests[0]);
+
+        order.navigate("/setting");
+        order.navigate("/");
+        equal(order.state.isOrdering, true);
+        order.sellIFDOCO();
+        equal(order.requests.length, 1);
+
+        response[outcome]();
+        equal(order.state.isOrdering, false);
+        order.sellIFDOCO();
+        equal(order.requests.length, 2);
+    });
+
+    test(`unlocks IFDOCO when the original request settles in settings (${outcome})`, (t) => {
+        const order = setup(t);
+        order.buyIFDOCO();
+
+        order.navigate("/setting");
+        order.respondTo(order.requests[0])[outcome]();
+        order.navigate("/");
+        equal(order.state.isOrdering, false);
+        order.sellIFDOCO();
+        equal(order.requests.length, 2);
+    });
+}
+
 function setup(t: TestContext) {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
@@ -72,24 +106,35 @@ function setup(t: TestContext) {
     const buyIFDOCO$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
-    const responses$ = Stream.create<Stream<Response> & { request: RequestOptions }>();
-    const state$ = Stream.createWithMemory<State>();
-    const sinks = OrderComponent({
-        DOM: mockDOMSource({
-            ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
-            ".ranged-ifdoco-order-buttons": {
-                ".buy-button": { click: buyIFDOCO$ },
-                ".sell-button": { click: sellIFDOCO$ },
-            },
-        }),
-        HTTP: { select: (category?: string) => responses$.filter(({ request }) =>
-            !category || request.category === category) },
-        state: { stream: state$ },
+    const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
+    const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
+    const history$ = Stream.createWithMemory<{ pathname: string }>();
+    history$.shamefullySendNext({ pathname: "/" });
+    const orderEvents = {
+        ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
+        ".ranged-ifdoco-order-buttons": {
+            ".buy-button": { click: buyIFDOCO$ },
+            ".sell-button": { click: sellIFDOCO$ },
+        },
+    };
+    const main: Sinks = routerify(Root, switchPath)({
+        DOM: mockDOMSource({ ".___trade": new Proxy({}, { get: (_, selector) =>
+            typeof selector === "string" && selector.startsWith(".___cycle") ? orderEvents : undefined,
+        }) }),
+        HTTP: new MainHTTPSource(responses$, "HTTP"),
+        history: history$,
+        socket: {
+            board$: Stream.never(),
+            childOrderEvent$: Stream.never(),
+            execution$: Stream.never(),
+            parentOrderEvent$: Stream.never(),
+        },
+        state: new StateSource(state$, "state"),
         storage: { local: { getItem: () => Stream.of("0.01") } },
-    } as unknown as Sources);
+    } as unknown as Omit<Sources, "router"> & { history: typeof history$ });
 
-    let state: State | undefined;
-    const reducers = (sinks.state as unknown as Stream<Reducer<State>>).subscribe({
+    let state: { trade?: TradeState } | undefined;
+    const reducers = main.state.subscribe({
         next: (reduce) => {
             state = reduce(state);
             if (state) {
@@ -98,7 +143,12 @@ function setup(t: TestContext) {
         },
     });
     const requests: RequestOptions[] = [];
-    const http = sinks.HTTP.subscribe({ next: (request) => requests.push(request as RequestOptions) });
+    const http = main.HTTP.subscribe({ next: (request) => {
+        const options = request as RequestOptions;
+        if (options.category === "ifdoco-order" || options.category === "market-order") {
+            requests.push(options);
+        }
+    } });
     t.after(() => {
         http.unsubscribe();
         reducers.unsubscribe();
@@ -107,9 +157,10 @@ function setup(t: TestContext) {
     return {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
+        navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         requests,
         respondTo(request: RequestOptions) {
-            const response$ = Object.assign(Stream.create<Response>(), { request: { ...request } });
+            const response$ = Object.assign(Stream.createWithMemory<Response>(), { request: { ...request } });
             responses$.shamefullySendNext(response$);
             return {
                 fail: () => response$.shamefullySendError(new Error("Network failure")),
@@ -120,6 +171,6 @@ function setup(t: TestContext) {
             };
         },
         sellIFDOCO: () => sellIFDOCO$.shamefullySendNext(null),
-        get state() { return state!; },
+        get state() { return state!.trade!.orderComponentState!; },
     };
 }

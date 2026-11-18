@@ -26,6 +26,7 @@ import {view} from "./view";
 export interface Sources {
     DOM: DOMSource;
     HTTP: HTTPSource;
+    orderRequests: HTTPSource;
     state: StateSource<State>;
     router: RouterSource;
     socket: SocketIOSource;
@@ -54,7 +55,9 @@ export interface State {
     summaryComponentState?: SummaryComponentState;
 }
 
-export const Trade = (sources: Sources): Sinks => {
+export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
+    orderRequests: Stream<RequestInput>;
+} => {
     const summaryComponent = isolate(SummaryComponent, {
         state: {
             get: (state: State) => state.summaryComponentState && {
@@ -109,7 +112,7 @@ export const Trade = (sources: Sources): Sinks => {
                 stopOrders: orderComponentState.stopOrders,
             }),
         },
-    })(sources);
+    })(sources, isOrdering$);
 
     const actions = intent(sources);
     const reducer$ = model(actions);
@@ -119,6 +122,7 @@ export const Trade = (sources: Sources): Sinks => {
     return {
         DOM: view$,
         HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP),
+        orderRequests: orderComponent.orderRequests,
         router: Stream.never(),
         sound: sound(sources.state.stream),
         state: Stream.merge(

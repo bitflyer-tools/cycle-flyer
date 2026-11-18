@@ -11,8 +11,8 @@ interface Submission extends RequestOptions {
     submissionId: symbol;
 }
 
-export const submissions = (actions: Actions, state$: Stream<State>, http: HTTPSource): Stream<Submission | null> => {
-    const requested$ = orderRequests(actions, state$)
+export const submissions = (requests$: Stream<RequestInput>, http: HTTPSource): Stream<Submission | null> => {
+    const requested$ = requests$
         .map((request) => ({ ...request as RequestOptions, submissionId: Symbol() }));
 
     const completed$ = http.select()
@@ -29,10 +29,11 @@ export const submissions = (actions: Actions, state$: Stream<State>, http: HTTPS
             }
             return pending || event;
         }, null)
-        .compose(dropRepeats());
+        .compose(dropRepeats())
+        .remember();
 };
 
-const orderRequests = (actions: Actions, state$: Stream<State>): Stream<RequestInput> => {
+export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<RequestInput> => {
     const withState = (click$: Stream<null>, toRequest: (state: State) => RequestInput) =>
         click$.compose(sampleCombine(state$)).map(([_, state]) => toRequest(state));
 

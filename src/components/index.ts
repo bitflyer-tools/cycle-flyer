@@ -9,6 +9,7 @@ import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
 import {Trade} from "./trade";
+import {submissions} from "./trade/order/request";
 
 export interface Sources {
     DOM: DOMSource;
@@ -29,12 +30,22 @@ export interface Sinks {
 }
 
 export const Root = (sources: Sources): Sinks => {
-    const routes$ = sources.router
+    const routes$: Stream<Sinks & { orderRequests?: Stream<RequestInput> }> = sources.router
         .define({
             "/": isolate(Trade, { "*": "trade" }),
             "/setting": isolate(Setting, { "*": "setting" }),
         })
-        .map((route: any) => route.value({...sources, router: sources.router.path(route.path)}));
+        .map((route: any) => route.value({
+            ...sources,
+            // Apply the same HTTP isolation to both request sinks.
+            orderRequests: sources.HTTP,
+            router: sources.router.path(route.path),
+        }, isOrdering$))
+        .remember();
+
+    const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<RequestInput>()).flatten();
+    const pending$ = submissions(orderRequests$, sources.HTTP);
+    const isOrdering$ = pending$.map((pending) => pending !== null);
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>
@@ -52,7 +63,10 @@ export const Root = (sources: Sources): Sinks => {
 
     return {
         DOM: view$,
-        HTTP: routes$.map((sinks: Sinks) => sinks.HTTP).flatten(),
+        HTTP: Stream.merge(
+            routes$.map((sinks) => sinks.HTTP).flatten(),
+            pending$.filter((pending) => pending !== null).map<RequestInput | null>((pending) => pending),
+        ),
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
         sound: routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
         state: routes$.map((sinks: Sinks) => sinks.state).flatten(),
