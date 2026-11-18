@@ -35,6 +35,7 @@ const createOutcome = (
     createHistories: (body: string, status: OrderStatus) => OrderHistory[],
 ): Stream<OrderOutcome> =>
     stream$
+        .last()
         .mapTo<OrderStatus>("success")
         .replaceError(() => Stream.of<OrderStatus>("failed"))
         .map((status) => ({ status, histories: createHistories(stream$.request.send as string, status) }));

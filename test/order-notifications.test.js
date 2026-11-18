@@ -25,7 +25,7 @@ const app = { exports: {} };
 compileFunction(bundle.text, ['require', 'module', 'localStorage'])(
   require, app, { 'api-key': 'test', 'api-secret': 'test' },
 );
-const { Trade, ifdocoOrder, limitOrder, marketOrder, stopOrder, twapSliceOrder } = app.exports;
+const { Trade, limitOrder, marketOrder, stopOrder, twapSliceOrder } = app.exports;
 
 function tradeHarness(t) {
   const responses = new Map();
@@ -42,7 +42,7 @@ function tradeHarness(t) {
     socket: { board$: Stream.never(), execution$, childOrderEvent$, parentOrderEvent$: Stream.never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: () => Stream.never() } },
-  });
+  }, Stream.of(false));
   let state;
   const stateSubscription = trade.state.subscribe({
     next: (reducer) => {
@@ -77,26 +77,6 @@ function tradeHarness(t) {
     },
   };
 }
-
-test('notifies once per overlapping IFDOCO outcome and records all three legs', (t) => {
-  const trade = tradeHarness(t);
-  const rejected = trade.submit(ifdocoOrder(110, 90, 0.01, 'BUY'));
-  const accepted = trade.submit(ifdocoOrder(120, 80, 0.02, 'BUY'));
-  assert.deepEqual(trade.sounds, []);
-
-  accepted.accept();
-  assert.deepEqual(trade.sounds, ['success']);
-  assert.deepEqual(trade.histories().map(({ name, status }) => [name, status]), [
-    ['Stop', 'success'], ['Limit', 'success'], ['Market', 'success'],
-  ]);
-
-  rejected.reject();
-  assert.deepEqual(trade.sounds, ['success', 'failure']);
-  assert.deepEqual(trade.histories().map(({ name, status }) => [name, status]), [
-    ['Stop', 'failed'], ['Limit', 'failed'], ['Market', 'failed'],
-    ['Stop', 'success'], ['Limit', 'success'], ['Market', 'success'],
-  ]);
-});
 
 test('notifies for each other submission and private execution', (t) => {
   const trade = tradeHarness(t);

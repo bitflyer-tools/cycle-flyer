@@ -3,7 +3,6 @@ import Stream from "xstream";
 import {IFDOCOrder} from "../../../models/ifdocoOrder";
 import {Order} from "../../../models/order";
 import {Position} from "../../../models/position";
-import {StopOrder} from "../../../models/stopOrder";
 import {defaultTwapOrder} from "../../../models/twapOrder";
 import {State} from "./index";
 import {Actions} from "./intent";
@@ -23,11 +22,11 @@ const defaultState: State = {
     twap: defaultTwapOrder,
 };
 
-export const model = (actions: Actions): Stream<Reducer<State>> => {
+export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
     const cancelOrdersReducer$ = actions.onCancelOrders$
-        .map((_) => (state: State) => ({ ...state, orders: [] as Order[], stopOrders: [] as StopOrder[] }));
+        .map((_) => (state: State) => ({ ...state, orders: [] as Order[] }));
 
     const historyReducer$ = Stream.merge(actions.onOrderOutcome$, actions.onTwapSliceOutcome$)
         .map(({ histories }) => (state: State) => ({
@@ -35,16 +34,8 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
             histories: histories.slice().reverse().concat(state.histories),
         }));
 
-    const isOrderingReducer$ = Stream.merge(
-        actions.onClickMarketBuyButton$.mapTo(true),
-        actions.onClickMarketSellButton$.mapTo(true),
-        actions.onClickLimitBuyButton$.mapTo(true),
-        actions.onClickLimitSellButton$.mapTo(true),
-        actions.onClickStopBuyButton$.mapTo(true),
-        actions.onClickStopSellButton$.mapTo(true),
-        actions.onClickClearButton$.mapTo(true),
-        actions.onOrderOutcome$.mapTo(false),
-    ).map((isOrdering) => (state: State) => ({ ...state, isOrdering }));
+    const isOrderingReducer$ = isOrdering$
+        .map((isOrdering) => (state: State) => ({ ...state, isOrdering }));
 
     const priceReducer$ = actions.onPriceChanged$
         .map((price) => (state: State) => ({ ...state, price }));

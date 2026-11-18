@@ -5,6 +5,7 @@
   "main": "srcElectron/index.js",
   "scripts": {
     "build": "node fuse",
+    "test": "node --test test/dev-server.test.js test/order-notifications.test.js test/release-workflow.test.js && esbuild test/orderSubmission.test.ts test/trade-stop-orders.test.js --bundle --platform=node --define:window=undefined --loader:.styl=empty --outdir=out --out-extension:.js=.cjs && node --test out/orderSubmission.test.cjs out/trade-stop-orders.test.cjs",
     "lint": "eslint 'src/**/*.ts'",
     "start": "node fuse.dev",
     "start:electron": "electron-forge start --inspect-electron",

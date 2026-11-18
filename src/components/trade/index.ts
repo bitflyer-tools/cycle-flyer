@@ -9,9 +9,8 @@ import {SocketIOSource} from "../../drivers/socketIODriver";
 import {Sound} from "../../drivers/soundDriver";
 import {Order} from "../../models/order";
 import {OrderHistory} from "../../models/orderHistory";
-import {ParentStopOrders} from "../../models/parentStopOrders";
+import {flattenStopOrders, ParentStopOrders} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
-import {StopOrder} from "../../models/stopOrder";
 import {BoardComponent, State as BoardComponentState} from "./board/index";
 import "./index.styl";
 import {intent} from "./intent";
@@ -25,6 +24,7 @@ import {view} from "./view";
 export interface Sources {
     DOM: DOMSource;
     HTTP: HTTPSource;
+    orderRequests: HTTPSource;
     state: StateSource<State>;
     router: RouterSource;
     socket: SocketIOSource;
@@ -47,13 +47,14 @@ export interface State {
     parentStopOrders: ParentStopOrders;
     position: Position;
     price: number;
-    stopOrders: StopOrder[];
     boardComponentState?: BoardComponentState;
     orderComponentState?: OrderComponentState;
     summaryComponentState?: SummaryComponentState;
 }
 
-export const Trade = (sources: Sources): Sinks => {
+export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
+    orderRequests: Stream<RequestInput>;
+} => {
     const summaryComponent = isolate(SummaryComponent, {
         state: {
             get: (state: State) => state.summaryComponentState && {
@@ -78,7 +79,7 @@ export const Trade = (sources: Sources): Sinks => {
                 orders: state.orders,
                 position: state.position,
                 price: state.price,
-                stopOrders: state.stopOrders,
+                stopOrders: flattenStopOrders(state.parentStopOrders),
             },
             set: (state: State, boardComponentState: BoardComponentState) => ({
                 ...state,
@@ -97,7 +98,7 @@ export const Trade = (sources: Sources): Sinks => {
                 orders: state.orders,
                 position: state.position,
                 price: state.price,
-                stopOrders: state.stopOrders,
+                stopOrders: flattenStopOrders(state.parentStopOrders),
             },
             set: (state: State, orderComponentState: OrderComponentState) => ({
                 ...state,
@@ -105,10 +106,9 @@ export const Trade = (sources: Sources): Sinks => {
                 orderComponentState,
                 orders: orderComponentState.orders,
                 price: orderComponentState.price,
-                stopOrders: orderComponentState.stopOrders,
             }),
         },
-    })(sources);
+    })(sources, isOrdering$);
 
     const actions = intent(sources);
     const reducer$ = model(actions);
@@ -118,6 +118,7 @@ export const Trade = (sources: Sources): Sinks => {
     return {
         DOM: view$,
         HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP),
+        orderRequests: orderComponent.orderRequests,
         router: Stream.never(),
         sound: Stream.merge(orderComponent.sound, actions.onMyExecutionCreated$.mapTo<Sound>("execution")),
         state: Stream.merge(

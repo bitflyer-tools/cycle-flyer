@@ -45,7 +45,6 @@ export const intent = (sources: Sources): Actions => {
     const onOrderOutcome$ = Stream.merge(
         sources.HTTP.select("market-order").map((stream) => createChildOrderOutcome("Market", stream)),
         sources.HTTP.select("limit-order").map((stream) => createChildOrderOutcome("Limit", stream)),
-        sources.HTTP.select("ifdoco-order").map(createParentOrderOutcome),
         sources.HTTP.select("stop-order").map(createParentOrderOutcome),
     ).compose(flattenConcurrently);
 
