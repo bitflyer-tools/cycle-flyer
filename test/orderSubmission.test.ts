@@ -131,6 +131,34 @@ for (const [submit, entries] of disconnectedOrders) {
     });
 }
 
+test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
+    const order = setup(t);
+    order.respondTo({ category: "parent-orders", _namespace: ["trade"] }).succeed([
+        { parent_order_id: "JCO-success" },
+        { parent_order_id: "JCO-failure" },
+    ]);
+
+    order.clearOrders();
+    order.clearOrders();
+    deepEqual(order.requests.map(({ category }) => category), [
+        "cancel-orders", "cancel-parent-order", "cancel-parent-order",
+    ]);
+    equal(order.state.isOrdering, true);
+
+    order.respondTo(order.requests[0]).succeed();
+    order.respondTo(order.requests[1]).succeed();
+    order.buyMarket();
+    equal(order.requests.length, 3);
+    equal(order.state.isOrdering, true);
+    deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-failure"]);
+
+    order.respondTo(order.requests[2]).disconnect();
+    equal(order.state.isOrdering, false);
+    order.clearOrders();
+    deepEqual(order.requests.slice(3).map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
+    equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
+});
+
 function setup(t: TestContext) {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
@@ -146,6 +174,7 @@ function setup(t: TestContext) {
     const sellIFDOCO$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
     const buyStop$ = Stream.create<null>();
+    const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
@@ -153,6 +182,7 @@ function setup(t: TestContext) {
     const orderEvents = {
         "#trigger-price-input": { input: Stream.of({ target: { value: "800" } }) },
         ".stop-order-buttons": { ".buy-button": { click: buyStop$ } },
+        ".order-buttons": { ".clear-order-button": { click: clearOrders$ } },
         ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buyIFDOCO$ },
@@ -170,6 +200,7 @@ function setup(t: TestContext) {
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
             parentOrderEvent$: Stream.never(),
+            reconnect$: Stream.never(),
         },
         state: new StateSource(state$, "state"),
         storage: { local: { getItem: () => Stream.of("0.01") } },
@@ -187,7 +218,7 @@ function setup(t: TestContext) {
     const requests: RequestOptions[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
-        if (options.category === "ifdoco-order" || options.category === "market-order" || options.category === "stop-order") {
+        if (["ifdoco-order", "market-order", "stop-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
             requests.push(options);
         }
     } });
@@ -200,6 +231,7 @@ function setup(t: TestContext) {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
         buyStop: () => buyStop$.shamefullySendNext(null),
+        clearOrders: () => clearOrders$.shamefullySendNext(null),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         requests,
@@ -211,13 +243,14 @@ function setup(t: TestContext) {
                 fail: () => response$.shamefullySendError(Object.assign(new Error("Rejected"), {
                     response: { status: 400 },
                 })),
-                succeed: () => {
-                    response$.shamefullySendNext({ request } as Response);
+                succeed: (body?: unknown) => {
+                    response$.shamefullySendNext({ request, text: JSON.stringify(body) } as Response);
                     response$.shamefullySendComplete();
                 },
             };
         },
         sellIFDOCO: () => sellIFDOCO$.shamefullySendNext(null),
         get state() { return state!.trade!.orderComponentState!; },
+        get tradeState() { return state!.trade!; },
     };
 }
