@@ -60,3 +60,9 @@ jobs:
 
       - name: Make
         run: npm run make
+
+      - name: Test packaged renderer
+        run: |
+          sudo chown root:root "out/Cycle Flyer-linux-x64/chrome-sandbox"
+          sudo chmod 4755 "out/Cycle Flyer-linux-x64/chrome-sandbox"
+          xvfb-run -a node test/packaged-renderer.js "out/Cycle Flyer-linux-x64/cycle-flyer"
