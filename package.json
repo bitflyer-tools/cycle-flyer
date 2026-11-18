@@ -5,6 +5,7 @@
   "main": "srcElectron/index.js",
   "scripts": {
     "build": "node fuse",
+    "test": "esbuild test/orderSubmission.test.ts --bundle --platform=node --define:window=undefined --loader:.styl=empty --outfile=out/orderSubmission.test.cjs && node --test out/orderSubmission.test.cjs",
     "lint": "eslint 'src/**/*.ts'",
     "start": "node fuse.dev",
     "test": "node --test",
