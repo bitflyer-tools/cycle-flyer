@@ -1,9 +1,26 @@
 const assert = require("node:assert/strict");
+const path = require("node:path");
 const {test} = require("node:test");
+const {buildSync} = require("esbuild");
 const Stream = require("xstream").default;
-const {model} = require("../src/components/trade/model");
-const {Board} = require("../src/models/board");
-const {flattenStopOrders} = require("../src/models/parentStopOrders");
+
+const {outputFiles} = buildSync({
+    stdin: {
+        contents: [
+            'export { model } from "./src/components/trade/model";',
+            'export { Board } from "./src/models/board";',
+            'export { flattenStopOrders } from "./src/models/parentStopOrders";',
+        ].join("\n"),
+        resolveDir: path.join(__dirname, ".."),
+    },
+    bundle: true,
+    packages: "external",
+    platform: "node",
+    write: false,
+});
+const testModule = { exports: {} };
+new Function("require", "module", outputFiles[0].text)(require, testModule);
+const {model, Board, flattenStopOrders} = testModule.exports;
 
 const parentOrder = {
     parent_order_id: "stop-parent",

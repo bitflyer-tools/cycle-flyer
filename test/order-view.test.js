@@ -42,7 +42,7 @@ test('board deltas reuse the order form while order inputs still update it', (t)
     socket: { board$, execution$, childOrderEvent$: never(), parentOrderEvent$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
-  });
+  }, Stream.of(false));
   let state;
   let tradeNode;
   let orderNode;
@@ -62,9 +62,9 @@ test('board deltas reuse the order form while order inputs still update it', (t)
   };
   sinks.state.addListener(stateListener);
   sinks.DOM.addListener(domListener);
-  sinks.HTTP.addListener(httpListener);
+  sinks.orderRequests.addListener(httpListener);
   t.after(() => {
-    sinks.HTTP.removeListener(httpListener);
+    sinks.orderRequests.removeListener(httpListener);
     sinks.DOM.removeListener(domListener);
     sinks.state.removeListener(stateListener);
   });
@@ -91,7 +91,8 @@ test('board deltas reuse the order form while order inputs still update it', (t)
   assert.equal(orderRenders, initialRenders + 3);
 
   marketBuy$.shamefullySendNext({});
-  const orderRequest = requests.find(({ category }) => category === 'market-order');
+  const orderRequest = requests.flatMap((batch) => batch.requests)
+    .find(({ category }) => category === 'market-order');
   const { side, size } = JSON.parse(orderRequest.send);
   assert.deepEqual({ side, size }, { side: 'BUY', size: 0.1 });
 });
