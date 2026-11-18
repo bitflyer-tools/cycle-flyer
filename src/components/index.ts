@@ -8,7 +8,11 @@ import Stream from "xstream";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
-import {Trade} from "./trade";
+import {State as TradeState, Trade} from "./trade";
+
+interface RootState {
+    trade?: TradeState;
+}
 
 export interface Sources {
     DOM: DOMSource;
@@ -29,12 +33,19 @@ export interface Sinks {
 }
 
 export const Root = (sources: Sources): Sinks => {
+    const trade = isolate(Trade, { "*": "trade" });
     const routes$ = sources.router
         .define({
-            "/": isolate(Trade, { "*": "trade" }),
+            "/": trade,
             "/setting": isolate(Setting, { "*": "setting" }),
         })
-        .map((route: any) => route.value({...sources, router: sources.router.path(route.path)}));
+        .map((route: any): Sinks => {
+            const sinks = route.value({...sources, router: sources.router.path(route.path)});
+            return route.value === trade ? sinks : {
+                ...sinks,
+                state: sinks.state.startWith(clearTwapProgress),
+            };
+        });
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>
@@ -57,5 +68,19 @@ export const Root = (sources: Sources): Sinks => {
         sound: routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
         state: routes$.map((sinks: Sinks) => sinks.state).flatten(),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
+    };
+};
+
+const clearTwapProgress: Reducer<RootState> = (state) => {
+    const trade = state?.trade;
+    const order = trade?.orderComponentState;
+    if (!trade || !order?.twap.remaining) return state;
+
+    return {
+        ...state,
+        trade: {
+            ...trade,
+            orderComponentState: { ...order, twap: { ...order.twap, remaining: 0 } },
+        },
     };
 };
