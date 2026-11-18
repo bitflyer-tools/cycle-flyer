@@ -34,7 +34,7 @@ test("Order results and TWAP slices retain only the newest history entries", () 
     const state = collectState(orderModel(withIdleActions<OrderActions>({
         onHistoryCreated$: orders$,
         onTwapSliceCreated$: slices$,
-    })));
+    }), Stream.of(false)));
 
     const entries = Array.from({ length: HISTORY_LIMIT * 2 + 2 }, (_, index) =>
         createOrderHistory("Order", "BUY", index, 0, "success"),
