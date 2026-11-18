@@ -18,6 +18,7 @@ function setup(t) {
     let state;
     const snapshots = [];
     const subscription = model({
+        onCancelParentOrder$: Stream.never(),
         onExecutionCreated$: execution$,
         onMyExecutionCreated$: Stream.never(),
         onOrdersLoaded$: Stream.never(),
