@@ -48,7 +48,7 @@ test('board deltas reuse the order form while order inputs still update it', (t)
   let orderNode;
   let orderRenders = 0;
   const requests = [];
-  const httpListener = { next: (request) => requests.push(request) };
+  const httpListener = { next: (batch) => requests.push(...batch.requests) };
   const stateListener = { next: (reduce) => state$.shamefullySendNext(state = reduce(state)) };
   const domListener = {
     next: (node) => {
