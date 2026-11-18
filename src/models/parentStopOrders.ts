@@ -14,7 +14,7 @@ export const putParentOrder = (parentStopOrders: ParentStopOrders, parentOrder: 
         ? { ...parentStopOrders, [parentOrder.parent_order_id]: stopOrdersOf(parentOrder) }
         : parentStopOrders;
 
-export const retainActive = (parentStopOrders: ParentStopOrders, activeParentOrders: any[]): ParentStopOrders =>
+export const retainActive = (parentStopOrders: ParentStopOrders, activeParentOrders: { parent_order_id: string }[]): ParentStopOrders =>
     activeParentOrders
         .map((order) => order.parent_order_id)
         .reduce((acc: ParentStopOrders, id: string) => ({ ...acc, [id]: parentStopOrders[id] || [] }), {});
