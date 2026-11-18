@@ -27,6 +27,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Test trade orders
+        run: npm test
+
       - name: Test release workflow
         run: node --test test/release-workflow.test.js
 

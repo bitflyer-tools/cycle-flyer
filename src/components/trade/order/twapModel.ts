@@ -1,6 +1,6 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
-import {TwapOrder} from "../../../models/twapOrder";
+import {canStart, TwapOrder} from "../../../models/twapOrder";
 import {State} from "./index";
 import {TwapActions} from "./twapIntent";
 
@@ -12,7 +12,9 @@ export const twapModel = (actions: TwapActions): Stream<Reducer<State>> => {
         .map((slices) => updateTwap((twap) => ({ ...twap, slices })));
 
     const startReducer$ = Stream.merge(actions.onClickTwapBuyButton$, actions.onClickTwapSellButton$)
-        .map((_) => updateTwap((twap) => ({ ...twap, remaining: twap.slices })));
+        .map(() => (state: State) => canStart(state.twap, state.size)
+            ? { ...state, twap: { ...state.twap, remaining: state.twap.slices } }
+            : state);
 
     const sliceReducer$ = actions.onTwapSliceCreated$
         .map((_) => updateTwap((twap) => ({ ...twap, remaining: Math.max(twap.remaining - 1, 0) })));

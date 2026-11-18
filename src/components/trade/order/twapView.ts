@@ -1,5 +1,5 @@
 import {button, div, h4, label, p, VNode} from "@cycle/dom";
-import {canStart, isRunning, sliceSize} from "../../../models/twapOrder";
+import {canStart, isRunning, maximumTwapInterval, sliceSize} from "../../../models/twapOrder";
 import {State} from "./index";
 import {numberInput} from "./numberInput";
 
@@ -14,6 +14,7 @@ export const twapSection = (state: State): VNode =>
             label(".label", "Interval (sec)"),
             numberInput("#twap-interval-input", state.twap.interval),
         ]),
+        p(".twap-status", `Enter an interval greater than 0 and up to ${maximumTwapInterval} seconds.`),
         p(".twap-status", twapStatus(state)),
         div(".twap-order-buttons.order-buttons", twapButtons(state)),
     ]);
