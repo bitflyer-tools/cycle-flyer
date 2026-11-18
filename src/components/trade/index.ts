@@ -50,6 +50,7 @@ export interface State {
     orderSigningError?: string;
     parentStopOrders: ParentStopOrders;
     position: Position;
+    positionCredentialVersion?: number;
     price: number;
     boardComponentState?: BoardComponentState;
     orderComponentState?: OrderComponentState;
@@ -69,7 +70,6 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
             },
             set: (state: State, summaryComponentState: SummaryComponentState) => ({
                 ...state,
-                position: summaryComponentState.position,
                 summaryComponentState,
             }),
         },
@@ -101,6 +101,7 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
                 histories: state.histories,
                 orders: state.orders,
                 orderSigningError: state.orderSigningError,
+                positionCredentialVersion: state.positionCredentialVersion,
                 parentStopOrders: state.parentStopOrders,
                 position: state.position,
                 price: state.price,

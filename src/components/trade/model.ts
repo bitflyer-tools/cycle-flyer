@@ -34,7 +34,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map((orders: Order[]) => (state: State) => ({ ...state, orders }));
 
     const positionReducer$ = actions.onPositionsLoaded$
-        .map((position) => (state: State) => ({ ...state, position }));
+        .map((positionState) => (state: State) => ({ ...state, ...positionState }));
 
     const cancelParentOrderReducer$ = actions.onCancelParentOrder$
         .map((id) => (state: State) => {

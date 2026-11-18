@@ -9,8 +9,8 @@ import switchPath from "switch-path";
 import Stream, {MemoryStream} from "xstream";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
-import {saveCredentials} from "../src/credentials";
-import {authorizeRequest, makeSignedHTTPDriver, unsignedRequests$} from "../src/drivers/httpDriver";
+import {currentCredentialVersion, saveCredentials} from "../src/credentials";
+import {AccountRequest, authorizeRequest, makeSignedHTTPDriver, unsignedRequests$} from "../src/drivers/httpDriver";
 
 test("shows a signing error for a market order without credentials and clears it on retry", async (t) => {
     const order = setup(t);
@@ -133,7 +133,7 @@ for (const outcome of ["succeed", "fail"] as const) {
 
 test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
     const order = setup(t);
-    order.respondTo({ category: "parent-orders", _namespace: ["trade"] }).succeed([
+    order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getparentorders", category: "parent-orders", _namespace: ["trade"] }).succeed([
         { parent_order_id: "JCO-success" },
         { parent_order_id: "JCO-failure" },
     ]);
@@ -162,7 +162,7 @@ test("dispatches every Clear Orders request and stays locked until they all sett
 test("settles an unsigned parent cancellation while waiting for the rest of Clear Orders", async (t) => {
     const order = setup(t);
     await saveCredentials(null);
-    order.respondTo({ category: "parent-orders", _namespace: ["trade"] }).succeed([
+    order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getparentorders", category: "parent-orders", _namespace: ["trade"] }).succeed([
         { parent_order_id: "JCO-unsigned" },
     ]);
 
@@ -224,6 +224,47 @@ test("stops TWAP on signing failure and ignores old slices after a restart", asy
     equal(order.histories[0].name, "TWAP");
 });
 
+test("clears the previous account position and only closes a position from the current account", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "first-key", secret: "first-secret" });
+    t.after(() => saveCredentials(null));
+
+    const positions = { url: "https://api.bitflyer.jp/v1/me/getpositions", category: "positions", _namespace: ["trade"] };
+    const oldVersion = currentCredentialVersion()!;
+    const oldPosition = [{ side: "BUY", size: 0.3, price: 100 }];
+    order.respondTo(positions).succeed(oldPosition);
+    equal(order.clearPositionDisabled, false);
+    order.clearPosition();
+    const queuedClose = order.requests[0];
+    order.respondTo(queuedClose).succeed();
+
+    order.navigate("/setting");
+    const saving = saveCredentials({ key: "second-key", secret: "second-secret" });
+    equal(order.tradeState.position.size, 0);
+    order.navigate("/");
+    equal(order.clearPositionDisabled, true);
+    order.clearPosition();
+    await saving;
+
+    order.respondTo({ ...positions, credentialVersion: oldVersion }).succeed(oldPosition);
+    equal(order.tradeState.position.size, 0);
+    equal(order.clearPositionDisabled, true);
+    order.clearPosition();
+    equal(order.requests.length, 1);
+    equal(await authorizeRequest(queuedClose), null);
+
+    order.respondTo(positions).succeed([]);
+    equal(order.clearPositionDisabled, true);
+    order.respondTo(positions).succeed([{ side: "SELL", size: 0.1, price: 200 }]);
+    equal(order.clearPositionDisabled, false);
+    order.clearPosition();
+    equal(order.requests.length, 2);
+    const close = JSON.parse(order.requests[1].send as string);
+    deepEqual({ side: close.side, size: close.size }, { side: "BUY", size: 0.1 });
+    const signed = await authorizeRequest(order.requests[1]) as RequestOptions;
+    equal((signed.headers as Record<string, string>)["ACCESS-KEY"], "second-key");
+});
+
 function rejectUnsigned(request: RequestOptions) {
     return new Promise<void>((resolve, reject) => {
         unsignedRequests$.filter((unsigned) => unsigned === request).take(1).addListener({ next: () => resolve() });
@@ -233,9 +274,9 @@ function rejectUnsigned(request: RequestOptions) {
     });
 }
 
-function findSigningAlert(node: VNode): VNode | undefined {
-    if (node.sel === "div.order-signing-error") { return node; }
-    return node.children?.map((child) => typeof child === "string" ? undefined : findSigningAlert(child)).find(Boolean);
+function findNode(node: VNode, selector: string): VNode | undefined {
+    if (node.sel === selector) { return node; }
+    return node.children?.map((child) => typeof child === "string" ? undefined : findNode(child, selector)).find(Boolean);
 }
 
 function setup(t: TestContext) {
@@ -254,6 +295,7 @@ function setup(t: TestContext) {
     const sellIFDOCO$ = Stream.create<null>();
     const buyTWAP$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
+    const clearPosition$ = Stream.create<null>();
     const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
@@ -262,7 +304,10 @@ function setup(t: TestContext) {
     const orderEvents = {
         ".twap-order-buttons": { ".buy-button": { click: buyTWAP$ } },
         ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
-        ".order-buttons": { ".clear-order-button": { click: clearOrders$ } },
+        ".order-buttons": {
+            ".clear-order-button": { click: clearOrders$ },
+            ".clear-button": { click: clearPosition$ },
+        },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buyIFDOCO$ },
             ".sell-button": { click: sellIFDOCO$ },
@@ -314,23 +359,26 @@ function setup(t: TestContext) {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
         buyTWAP: () => buyTWAP$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
+        clearPosition: () => clearPosition$.shamefullySendNext(null),
+        get clearPositionDisabled() { return findNode(vNode, "button.clear-button")?.data?.attrs?.disabled; },
         clearOrders: () => clearOrders$.shamefullySendNext(null),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         requests,
-        respondTo(request: RequestOptions) {
-            const response$ = Object.assign(Stream.createWithMemory<Response>(), { request: { ...request } });
+        respondTo(input: AccountRequest) {
+            const request = { credentialVersion: currentCredentialVersion() ?? undefined, ...input };
+            const response$ = Object.assign(Stream.createWithMemory<Response>(), { request });
             responses$.shamefullySendNext(response$);
             return {
                 fail: () => response$.shamefullySendError(new Error("Network failure")),
                 succeed: (body?: unknown) => {
-                    response$.shamefullySendNext({ request, text: JSON.stringify(body) } as Response);
+                    response$.shamefullySendNext({ request, text: JSON.stringify(body) } as unknown as Response);
                     response$.shamefullySendComplete();
                 },
             };
         },
         sellIFDOCO: () => sellIFDOCO$.shamefullySendNext(null),
-        get signingAlert() { return findSigningAlert(vNode); },
+        get signingAlert() { return findNode(vNode, "div.order-signing-error"); },
         get state() { return state!.trade!.orderComponentState!; },
         get tradeState() { return state!.trade!; },
     };

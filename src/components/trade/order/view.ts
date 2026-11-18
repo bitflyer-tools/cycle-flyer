@@ -6,6 +6,7 @@ import {sideButtons} from "./buttons";
 import {ifdocoSection} from "./ifdocoView";
 import {State} from "./index";
 import {numberInput} from "./numberInput";
+import {canClearPosition} from "./request";
 import {sizeSection} from "./sizeView";
 import {stopSection} from "./stopView";
 import {twapSection} from "./twapView";
@@ -36,6 +37,7 @@ const sameViewInputs = (previous: State, next: State): boolean =>
     Object.is(previous.currentPrice, next.currentPrice)
     && previous.isOrdering === next.isOrdering
     && previous.orderSigningError === next.orderSigningError
+    && previous.positionCredentialVersion === next.positionCredentialVersion
     && Object.is(previous.position.size, next.position.size)
     && Object.is(previous.price, next.price)
     && Object.is(previous.size, next.size)
@@ -69,7 +71,7 @@ const clearSection = (state: State): VNode =>
         div(".order-buttons", [
             button(
                 ".clear-button",
-                { attrs: { disabled: state.isOrdering || state.position.size === 0 } },
+                { attrs: { disabled: !canClearPosition(state) } },
                 "Clear Position",
             ),
             button(".clear-order-button", { attrs: { disabled: clearOrderButtonDisabled(state) } }, "Clear Orders"),

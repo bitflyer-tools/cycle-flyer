@@ -1,5 +1,6 @@
 import {Stream} from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
+import {isCurrentAccountRequest} from "../../../drivers/httpDriver";
 import {OrderHistory} from "../../../models/orderHistory";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
@@ -41,6 +42,7 @@ export const intent = (sources: Sources): Actions => {
     const onCancelOrders$ = sources.HTTP.select("cancel-orders")
         .map((response$) => response$.replaceError(() => Stream.never()))
         .flatten()
+        .filter((response) => isCurrentAccountRequest(response.request))
         .mapTo(null);
 
     const onHistoryCreated$ = Stream.merge(

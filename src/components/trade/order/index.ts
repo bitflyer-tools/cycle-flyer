@@ -24,6 +24,7 @@ export interface State {
     orderSigningError?: string;
     parentStopOrders: ParentStopOrders;
     position: Position;
+    positionCredentialVersion?: number;
     price: number;
     size: number;
     triggerPrice: number;

@@ -1,6 +1,6 @@
 import { io, Socket } from "socket.io-client";
 import Stream from "xstream";
-import {credentialsChanged$} from "../credentials";
+import {credentialsChanged$, currentCredentialVersion} from "../credentials";
 import {ChildOrderEvent, ParentOrderEvent} from "../models/orderEvent";
 import {authenticate, privateChannelNames} from "./privateChannel";
 
@@ -29,16 +29,31 @@ export class SocketIOSource {
     constructor(client: Socket) {
         const publicChannelNames = Object.keys(this.channels).filter((name) => privateChannelNames.indexOf(name) < 0);
 
+        let authenticatedVersion: number | null = null;
         client.on("connect", () => {
+            authenticatedVersion = null;
             publicChannelNames.forEach((channelName) => client.emit("subscribe", channelName));
-            authenticate(client, () => privateChannelNames.forEach((channelName) => client.emit("subscribe", channelName)));
+            const version = currentCredentialVersion();
+            authenticate(client, () => {
+                if (version === null || version !== currentCredentialVersion()) { return; }
+                authenticatedVersion = version;
+                privateChannelNames.forEach((channelName) => client.emit("subscribe", channelName));
+            });
         });
 
         credentialsChanged$.addListener({
             next: () => { client.disconnect().connect(); },
         });
 
-        Object.keys(this.channels).forEach((channelName) => client.on(channelName, this.channels[channelName]));
+        Object.keys(this.channels).forEach((channelName) => {
+            const receive = this.channels[channelName];
+            client.on(channelName, (message) => {
+                if (publicChannelNames.includes(channelName)
+                    || (authenticatedVersion !== null && authenticatedVersion === currentCredentialVersion())) {
+                    receive(message);
+                }
+            });
+        });
     }
 }
 

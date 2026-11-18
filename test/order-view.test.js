@@ -88,7 +88,7 @@ test('board deltas reuse the order form while order inputs still update it', (t)
   execution$.shamefullySendNext({ side: 'BUY', price: 100001 });
   assert.equal(orderRenders, initialRenders + 2);
 
-  orders$.shamefullySendNext(Stream.of({ text: JSON.stringify([{ side: 'BUY', price: 99999, size: 0.1 }]) }));
+  orders$.shamefullySendNext(Stream.of({ request: { credentialVersion: 0 }, text: JSON.stringify([{ side: 'BUY', price: 99999, size: 0.1 }]) }));
   assert.equal(orderRenders, initialRenders + 3);
 
   marketBuy$.shamefullySendNext({});

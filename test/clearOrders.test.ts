@@ -28,10 +28,10 @@ test("Clear Orders cancels a standalone stop by parent order ID", () => {
 test("A standalone stop stays visible until its parent cancellation succeeds", () => {
     const {childResponses, parentResponses, requests, state} = clearOrders(["JCO-stop"]);
 
-    childResponses.shamefullySendNext(Stream.of<unknown>({}));
+    childResponses.shamefullySendNext(Stream.of<unknown>({ request: { credentialVersion: 0 } }));
     strictEqual(flattenStopOrders(state().parentStopOrders).length, 1);
 
-    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: requests[1] }));
+    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: { ...requests[1], credentialVersion: 0 } }));
     deepStrictEqual(flattenStopOrders(state().parentStopOrders), []);
     deepStrictEqual(Object.keys(state().parentStopOrders), []);
 });
@@ -44,7 +44,7 @@ test("Concurrent parent cancellations leave failed orders visible", () => {
     parentResponses.shamefullySendNext(success$);
     parentResponses.shamefullySendNext(failure$);
     failure$.shamefullySendError(new Error("Cancellation failed"));
-    success$.shamefullySendNext({ request: requests[1] });
+    success$.shamefullySendNext({ request: { ...requests[1], credentialVersion: 0 } });
 
     deepStrictEqual(flattenStopOrders(state().parentStopOrders).map(({price}) => price), [200]);
     deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-failure", "JCO-pending-detail"]);
@@ -53,7 +53,7 @@ test("Concurrent parent cancellations leave failed orders visible", () => {
 
 test("A late parent detail response cannot restore a canceled stop", () => {
     const {details, parentResponses, requests, state} = clearOrders(["JCO-canceled"]);
-    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: requests[1] }));
+    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: { ...requests[1], credentialVersion: 0 } }));
     const canceledState = state();
 
     sendParentDetail(details, "JCO-canceled", 100);
@@ -65,9 +65,9 @@ test("A late active list and its details cannot restore a canceled stop", () => 
     const {details, lists, parentResponses, requests, state} = clearOrders(["JCO-canceled", "JCO-active"]);
     const pendingList$ = Stream.create<unknown>();
     lists.shamefullySendNext(pendingList$);
-    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: requests[1] }));
+    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: { ...requests[1], credentialVersion: 0 } }));
 
-    pendingList$.shamefullySendNext({ text: JSON.stringify([
+    pendingList$.shamefullySendNext({ request: { credentialVersion: 0 }, text: JSON.stringify([
         { parent_order_id: "JCO-canceled" },
         { parent_order_id: "JCO-active" },
         { parent_order_id: "JCO-new" },
@@ -80,7 +80,7 @@ test("A late active list and its details cannot restore a canceled stop", () => 
 });
 
 function sendParentDetail(responses: Stream<Stream<unknown>>, id: string, price: number) {
-    responses.shamefullySendNext(Stream.of<unknown>({ text: JSON.stringify({
+    responses.shamefullySendNext(Stream.of<unknown>({ request: { credentialVersion: 0 }, text: JSON.stringify({
         parameters: [{ condition_type: "STOP", trigger_price: price }],
         parent_order_id: id,
     }) }));

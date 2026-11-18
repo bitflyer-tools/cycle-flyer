@@ -38,7 +38,7 @@ export const canSignTwap = (): boolean => pendingSaves === 0 && ready;
 export const twapCredentialAvailability = (): Stream<boolean> =>
     readiness$.startWith(canSignTwap());
 
-export const twapCredentialVersion = (): number | null =>
+export const currentCredentialVersion = (): number | null =>
     pendingSaves === 0 ? credentialVersion : null;
 
 export const initializeCredentials = (): Promise<boolean> => {
@@ -65,9 +65,10 @@ export const saveCredentials = async (pair: CredentialPair | null): Promise<void
         migration = Promise.resolve(true);
     } finally {
         pendingSaves -= 1;
-        await refreshReadiness(credentialVersion);
+        const version = credentialVersion;
+        await refreshReadiness(version);
+        if (version === currentCredentialVersion()) { credentialsChanged$.shamefullySendNext(undefined); }
     }
-    credentialsChanged$.shamefullySendNext(undefined);
 };
 
 export const signRest = async (method: string, path: string, body: string) => {

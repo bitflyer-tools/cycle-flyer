@@ -3,7 +3,8 @@ import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import sampleCombine from "xstream/extra/sampleCombine";
-import {unsignedRequests$} from "../../../drivers/httpDriver";
+import {currentCredentialVersion} from "../../../credentials";
+import {AccountRequest, unsignedRequests$} from "../../../drivers/httpDriver";
 import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
@@ -51,6 +52,10 @@ export const submissions = (requests$: Stream<OrderRequestBatch>, http: HTTPSour
         .remember();
 };
 
+export const canClearPosition = (state: State): boolean =>
+    !state.isOrdering && state.position.size !== 0 && state.positionCredentialVersion !== undefined
+    && state.positionCredentialVersion === currentCredentialVersion();
+
 export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<OrderRequestBatch> => {
     const withState = (click$: Stream<null>, toRequest: (state: State) => RequestInput) =>
         click$.compose(sampleCombine(state$)).map(([_, state]) => ({ requests: [toRequest(state)] }));
@@ -64,7 +69,9 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
         withState(actions.onClickStopSellButton$, (state) => stopOrder(state.triggerPrice, state.size, "SELL")),
         withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),
         withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder),
-        withState(actions.onClickClearButton$, clearPositionOrder),
+        actions.onClickClearButton$.compose(sampleCombine(state$))
+            .filter(([_, state]) => canClearPosition(state))
+            .map(([_, state]) => ({ requests: [clearPositionOrder(state)] })),
         actions.onClickClearOrderButton$.compose(sampleCombine(state$))
             .map(([_, state]) => ({
                 requests: [cancelOrders(), ...Object.keys(state.parentStopOrders).map(cancelParentOrder)],
@@ -88,5 +95,7 @@ const ifdocoSellOrder = (state: State): RequestInput =>
         "SELL",
     );
 
-const clearPositionOrder = (state: State): RequestInput =>
-    marketOrder(state.position.size, state.position.side === "BUY" ? "SELL" : "BUY");
+const clearPositionOrder = (state: State): AccountRequest => ({
+    ...marketOrder(state.position.size, state.position.side === "BUY" ? "SELL" : "BUY") as RequestOptions,
+    credentialVersion: state.positionCredentialVersion,
+});

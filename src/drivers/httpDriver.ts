@@ -1,8 +1,15 @@
-import {makeHTTPDriver, RequestInput} from "@cycle/http";
+import {makeHTTPDriver, RequestInput, RequestOptions} from "@cycle/http";
 import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
-import {signRest, twapCredentialVersion} from "../credentials";
+import {currentCredentialVersion, signRest} from "../credentials";
 import {TwapSliceRequest} from "../http";
+
+export interface AccountRequest extends RequestOptions {
+    credentialVersion?: number;
+}
+
+export const isCurrentAccountRequest = (request: AccountRequest): boolean =>
+    request.credentialVersion !== undefined && request.credentialVersion === currentCredentialVersion();
 
 export const unsignedRequests$ = Stream.create<RequestInput>();
 
@@ -11,8 +18,10 @@ export const makeSignedHTTPDriver = () => {
     return (requests$: Stream<RequestInput | null>) => driver(
         requests$
             .map((request) => Stream.fromPromise(authorizeRequest(request).then((authorized) => {
-                if (request && !authorized) { unsignedRequests$.shamefullySendNext(request); }
-                return authorized;
+                const accountRequest = authorized as AccountRequest | null;
+                const stale = accountRequest?.credentialVersion !== undefined && !isCurrentAccountRequest(accountRequest);
+                if (request && (!authorized || stale)) { unsignedRequests$.shamefullySendNext(request); }
+                return stale ? null : authorized;
             })))
             .compose(flattenConcurrently)
             .filter((request): request is RequestInput => request !== null),
@@ -26,10 +35,11 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
     }
 
     const {isTwapActive, onSigningFailure} = request as TwapSliceRequest;
-    const isTwap = request.category === "twap-order";
-    const version = twapCredentialVersion();
-    const cancelled = () => isTwap &&
-        (version === null || version !== twapCredentialVersion() || isTwapActive?.() === false);
+    const version = currentCredentialVersion();
+    const expectedVersion = (request as AccountRequest).credentialVersion;
+    if (version === null) { return null; }
+    const cancelled = () => version !== currentCredentialVersion()
+        || (expectedVersion !== undefined && expectedVersion !== version) || isTwapActive?.() === false;
     if (cancelled()) { return null; }
 
     try {
@@ -38,7 +48,12 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
             ? await signRest(request.method || "GET", request.url.slice(origin.length), body)
             : null;
         if (!cancelled() && headers) {
-            return { ...request, headers: Object.assign({}, request.headers, headers) };
+            const authorized: AccountRequest = {
+                ...request,
+                credentialVersion: version,
+                headers: Object.assign({}, request.headers, headers),
+            };
+            return authorized;
         }
     } catch {
         // eslint-disable-next-line no-console

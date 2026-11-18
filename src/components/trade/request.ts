@@ -1,5 +1,6 @@
 import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
+import {credentialsChanged$} from "../../credentials";
 import {getOrders, getParentOrder, getParentOrders, getPositions} from "../../http";
 import {Actions} from "./intent";
 
@@ -20,6 +21,7 @@ export const request = (actions: Actions): Stream<string | RequestInput | null> 
         orders,
         parentOrders,
         positions,
+        credentialsChanged$.map(getPositions),
         refreshes,
         parentOrderDetails,
     ) as Stream<string | RequestInput | null>;

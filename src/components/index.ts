@@ -10,6 +10,7 @@ import {credentialsChanging$} from "../credentials";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
 import {OrderHistory} from "../models/orderHistory";
+import {Position} from "../models/position";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
 import {createParentOrderHistoryStream} from "./trade/order/history";
@@ -98,12 +99,35 @@ export const Root = (sources: Sources): Sinks => {
         sound: routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
         state: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
-            credentialsChanging$.mapTo(resetTwap("TWAP stopped because credentials changed.")),
+            credentialsChanging$.mapTo(resetAccount),
             twapSigningFailed$.mapTo(resetTwap("TWAP stopped because an order could not be signed.")),
             sources.state.isolateSink(ifdocoHistoryReducer$, tradeScope),
             sources.state.isolateSink(orderSigningReducer$, tradeScope),
         ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
+    };
+};
+
+const resetAccount: Reducer<RootState> = (state) => {
+    if (!state?.trade) { return state; }
+    const reset = resetTwap("TWAP stopped because credentials changed.")(state) ?? state;
+    const trade = reset.trade ?? state.trade;
+    return {
+        ...reset,
+        trade: {
+            ...trade,
+            canceledParentOrderIds: undefined,
+            histories: [],
+            orders: [],
+            orderSigningError: undefined,
+            parentStopOrders: {},
+            summaryComponentState: trade.summaryComponentState && {
+                ...trade.summaryComponentState,
+                collateral: 0,
+            },
+            position: new Position([]),
+            positionCredentialVersion: undefined,
+        },
     };
 };
 

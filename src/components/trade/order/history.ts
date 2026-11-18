@@ -1,5 +1,6 @@
 import {Response, ResponseStream} from "@cycle/http";
 import {MemoryStream, Stream} from "xstream";
+import {isCurrentAccountRequest} from "../../../drivers/httpDriver";
 import {createOrderHistory, OrderHistory} from "../../../models/orderHistory";
 
 type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
@@ -8,12 +9,14 @@ export const createHistoryStream = (name: string, stream$: HTTPResponse$): Strea
     stream$
         .mapTo("success")
         .replaceError(() => Stream.of("failed"))
+        .filter(() => isCurrentAccountRequest(stream$.request))
         .map((status) => childOrderHistory(name, stream$.request.send as string, status));
 
 export const createParentOrderHistoryStream = (stream$: HTTPResponse$): Stream<OrderHistory> =>
     stream$
         .mapTo("success")
         .replaceError(() => Stream.of("failed"))
+        .filter(() => isCurrentAccountRequest(stream$.request))
         .map((status) => parentOrderHistories(stream$.request.send as string, status))
         .flatten();
 

@@ -1,4 +1,5 @@
 import {Stream} from "xstream";
+import {isCurrentAccountRequest} from "../../../drivers/httpDriver";
 import {OrderHistory} from "../../../models/orderHistory";
 import {Sources} from "../index";
 
@@ -14,6 +15,7 @@ export const intent = (sources: Sources): Actions => {
         .map((response$) => response$.replaceError(() => Stream.never()))
         .flatten()
         .filter((response) => !!response)
+        .filter((response) => isCurrentAccountRequest(response.request))
         .map((response) => JSON.parse(response.text).collateral);
 
     const onStateLoaded$ = sources.HTTP.select("status")
