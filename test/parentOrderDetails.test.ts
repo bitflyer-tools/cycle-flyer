@@ -3,10 +3,13 @@ import {isolateSink} from "@cycle/http/lib/cjs/isolate";
 import {deepStrictEqual, strictEqual} from "node:assert";
 import {test} from "node:test";
 import Stream from "xstream";
+import type {State} from "../src/components/trade";
 import {intent} from "../src/components/trade/intent";
+import {model} from "../src/components/trade/model";
 import {ActiveParentOrder} from "../src/components/trade/parentOrderDetails";
 import {request} from "../src/components/trade/request";
 import {ParentOrderEvent} from "../src/models/orderEvent";
+import {flattenStopOrders} from "../src/models/parentStopOrders";
 
 test("reuses 20 loaded details and coalesces duplicate IDs while they are pending", (t) => {
     const trade = setup(t);
@@ -32,6 +35,38 @@ test("retries only failed and new details after a list refresh", (t) => {
     deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["b"]);
     trade.complete(trade.requests[2]);
     deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["b", "a"]);
+});
+
+[false, true].forEach((reverse) => {
+    test(`keeps both stop markers when details resolve ${reverse ? "in reverse order" : "in request order"}`, (t) => {
+        const trade = setup(t);
+        let state: State | undefined;
+        const subscription = model(trade.actions).subscribe({
+            next: (reducer) => { state = reducer(state); },
+        });
+        t.after(() => subscription.unsubscribe());
+
+        trade.list(["a", "b"]);
+        deepStrictEqual(state!.parentStopOrders, { a: [], b: [] });
+        const resolve = trade.requests.map((input, index) => {
+            const response$ = Stream.create<Response>();
+            trade.send(input, response$);
+            return () => response$.shamefullySendNext({
+                text: JSON.stringify({
+                    parent_order_id: trade.requestedIds()[index],
+                    parameters: [{
+                        condition_type: "STOP", side: "SELL", size: 0.1, trigger_price: 100 * (index + 1),
+                    }],
+                }),
+            } as Response);
+        });
+        (reverse ? resolve.reverse() : resolve).forEach((complete) => complete());
+
+        deepStrictEqual(state!.parentStopOrders.a?.map((order) => order.price), [100]);
+        deepStrictEqual(state!.parentStopOrders.b?.map((order) => order.price), [200]);
+        const prices = flattenStopOrders(state!.parentStopOrders).map((order) => order.price);
+        deepStrictEqual(prices.sort((a, b) => a - b), [100, 200]);
+    });
 });
 
 test("invalidates the affected parent and discards its pending response", (t) => {
@@ -129,6 +164,7 @@ const setup = (t: { after: (cleanup: () => void) => void }) => {
         send(input, Stream.of({ text: JSON.stringify(body) } as Response));
 
     return {
+        actions,
         complete: (input: RequestOptions) => respond(input, { parent_order_id: requestedId(input), parameters: [] }),
         events,
         fail: (input: RequestOptions) => send(input, Stream.throw(new Error("Request failed"))),
@@ -142,5 +178,6 @@ const setup = (t: { after: (cleanup: () => void) => void }) => {
         reconnect,
         requestedIds: () => requests.map(requestedId),
         requests,
+        send,
     };
 };
