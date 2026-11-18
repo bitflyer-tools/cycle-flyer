@@ -74,6 +74,7 @@ test('board deltas reuse the order form while order inputs still update it', (t)
   const initialTrade = tradeNode;
   assert.ok(initialRenders > 0);
 
+  t.mock.timers.tick(100);
   for (let index = 0; index < 100; index++) {
     board$.shamefullySendNext({ asks: [{ price: 100001, size: index + 1 }], bids: [] });
   }
