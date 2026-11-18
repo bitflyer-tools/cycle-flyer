@@ -3,7 +3,7 @@ const { existsSync, readFileSync, renameSync, rmSync, writeFileSync } = require(
 
 const restPaths = {
   GET: new Set(['getcollateral', 'getpositions', 'getchildorders', 'getparentorders', 'getparentorder']),
-  POST: new Set(['sendchildorder', 'sendparentorder', 'cancelallchildorders']),
+  POST: new Set(['sendchildorder', 'sendparentorder', 'cancelallchildorders', 'cancelparentorder']),
 };
 
 const createCredentialStore = (file, safeStorage, platform = process.platform) => {

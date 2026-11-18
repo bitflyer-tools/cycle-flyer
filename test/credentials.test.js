@@ -288,6 +288,27 @@ test('Electron renderer migrates once and delegates both protocol signatures', a
   assert.equal(auth.signature, hmac(auth.timestamp + auth.nonce));
 });
 
+test('Electron authorizes a parent order cancellation with the exact request body', async (t) => {
+  const store = createCredentialStore(withCredentialFile(t), {
+    isEncryptionAvailable: () => true,
+    encryptString: () => Buffer.from('mock ciphertext'),
+  }, 'darwin');
+  store.save(pair);
+  const renderer = createRenderer(new Map(), {
+    signRest: async (...args) => store.signRest(...args),
+  });
+  const request = await renderer.authorizeRequest(renderer.cancelParentOrder('JCO-stop'));
+  const requestPath = '/v1/me/cancelparentorder?product_code=FX_BTC_JPY';
+
+  assert.ok(request);
+  assert.equal(request.url, 'https://api.bitflyer.jp' + requestPath);
+  assert.equal(request.method, 'POST');
+  assert.deepEqual(JSON.parse(request.send), { parent_order_id: 'JCO-stop', product_code: 'FX_BTC_JPY' });
+  assert.equal(request.headers['ACCESS-KEY'], pair.key);
+  assert.equal(request.headers['ACCESS-SIGN'],
+    hmac(request.headers['ACCESS-TIMESTAMP'] + request.method + requestPath + request.send));
+});
+
 test('failed migration drops plaintext and an explicit save clears the migration error', async () => {
   const entries = new Map([['api-key', pair.key], ['api-secret', pair.secret]]);
   const renderer = createRenderer(entries, {
