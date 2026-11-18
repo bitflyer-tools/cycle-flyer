@@ -15,7 +15,7 @@ interface RealtimeAuth {
 
 interface CredentialBridge {
     hasCredentials(): Promise<boolean>;
-    migrate(pair: CredentialPair): Promise<void>;
+    migrate(pair: CredentialPair): Promise<boolean>;
     save(pair: CredentialPair | null): Promise<void>;
     signRest(method: string, path: string, body: string): Promise<Record<string, string> | null>;
     signRealtime(): Promise<RealtimeAuth | null>;
@@ -26,6 +26,7 @@ export const credentialsChanging$ = Stream.create<void>();
 
 const bridge = (typeof window === "undefined" ? undefined :
     (window as Window & { bitFlyerCredentials?: CredentialBridge }).bitFlyerCredentials);
+const reentryRequiredKey = "bitflyer-credentials-reentry-required";
 let sessionPair: CredentialPair | null = null;
 let migration: Promise<boolean> | undefined;
 let credentialVersion = 0;
@@ -43,7 +44,7 @@ export const currentCredentialVersion = (): number | null =>
 
 export const initializeCredentials = (): Promise<boolean> => {
     if (!migration) {
-        migration = migrateLegacyCredentials().then(() => true, () => false);
+        migration = migrateLegacyCredentials().catch(() => false);
         void migration.then(() => refreshReadiness(0));
     }
     return migration;
@@ -59,6 +60,8 @@ export const saveCredentials = async (pair: CredentialPair | null): Promise<void
         await initializeCredentials();
         if (bridge) {
             await bridge.save(pair);
+            removeLegacyCredentials();
+            localStorage.removeItem(reentryRequiredKey);
         } else {
             sessionPair = pair;
         }
@@ -116,18 +119,29 @@ const refreshReadiness = async (version: number): Promise<void> => {
     readiness$.shamefullySendNext(ready);
 };
 
-const migrateLegacyCredentials = async (): Promise<void> => {
+const migrateLegacyCredentials = async (): Promise<boolean> => {
     const key = localStorage.getItem("api-key");
     const secret = localStorage.getItem("api-secret");
+    if (bridge && localStorage.getItem(reentryRequiredKey)) {
+        removeLegacyCredentials();
+        return false;
+    }
+    if (key && secret) {
+        if (!bridge) {
+            sessionPair = { key, secret };
+        } else if (!await bridge.migrate({ key, secret })) {
+            localStorage.setItem(reentryRequiredKey, "true");
+            removeLegacyCredentials();
+            return false;
+        }
+    }
+    removeLegacyCredentials();
+    return true;
+};
+
+const removeLegacyCredentials = (): void => {
     localStorage.removeItem("api-key");
     localStorage.removeItem("api-secret");
-    if (!key || !secret) { return; }
-
-    if (bridge) {
-        await bridge.migrate({ key, secret });
-    } else {
-        sessionPair = { key, secret };
-    }
 };
 
 const signature = (secret: string, message: string): string =>

@@ -9,20 +9,25 @@ const { outputFiles } = buildSync({
   stdin: {
     contents: [
       'export { SocketIOSource } from "./src/drivers/socketIODriver";',
-      'export { intent } from "./src/components/trade/board/intent";',
-      'export { model } from "./src/components/trade/board/model";',
-      'export { request } from "./src/components/trade/board/request";',
+      'export { BoardComponent } from "./src/components/trade/board";',
     ].join('\n'),
     resolveDir: path.join(__dirname, '..'),
   },
   bundle: true,
-  packages: 'external',
+  loader: { '.styl': 'empty' },
+  external: ['socket.io-client', 'xstream'],
+  define: { window: 'undefined' },
   platform: 'node',
   write: false,
 });
 const testModule = { exports: {} };
-runInNewContext(outputFiles[0].text, { module: testModule, require, localStorage: { 'api-secret': 'test-secret' } });
-const { SocketIOSource, intent, model, request } = testModule.exports;
+runInNewContext(outputFiles[0].text, {
+  module: testModule,
+  require,
+  setTimeout,
+  localStorage: { 'api-secret': 'test-secret' },
+});
+const { SocketIOSource, BoardComponent } = testModule.exports;
 
 const snapshotChannel = 'lightning_board_snapshot_FX_BTC_JPY';
 const boardChannel = 'lightning_board_FX_BTC_JPY';
@@ -55,13 +60,14 @@ test('subscribes only to board deltas and executions on connect and reconnect', 
   assert.equal(socket.handlers.has(snapshotChannel), false);
 });
 
-test('initializes the board from REST and applies WebSocket deltas', () => {
+test('initializes from REST and preserves WebSocket deltas during a refresh', () => {
   const socket = makeSocket();
   const responses = Stream.create();
   const dom = { select: () => dom, events: () => Stream.never() };
-  const actions = intent({
+  const sinks = BoardComponent({
     socket: new SocketIOSource(socket),
     DOM: dom,
+    state: { stream: Stream.never() },
     HTTP: {
       select: (category) => {
         assert.equal(category, 'board');
@@ -72,10 +78,10 @@ test('initializes the board from REST and applies WebSocket deltas', () => {
   });
 
   let state;
-  const subscription = model(actions).subscribe({ next: (reduce) => { state = reduce(state); } });
+  const subscription = sinks.state.subscribe({ next: (reduce) => { state = reduce(state); } });
   try {
     const requests = [];
-    request().take(1).addListener({ next: (value) => requests.push(value) });
+    sinks.HTTP.take(1).addListener({ next: (value) => requests.push(value) });
     assert.equal(requests.length, 1);
     assert.equal(requests[0].category, 'board');
     const url = new URL(requests[0].url);
@@ -91,6 +97,13 @@ test('initializes the board from REST and applies WebSocket deltas', () => {
     socket.receive(boardChannel, { asks: [{ price: 102, size: 3 }], bids: [] });
     assert.equal(state.board.asks[0].size, 3);
     assert.equal(state.board.bids[0].size, 2);
+
+    const refresh = Stream.create();
+    responses.shamefullySendNext(refresh);
+    socket.receive(boardChannel, { asks: [{ price: 102, size: 4 }], bids: [] });
+    refresh.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    refresh.shamefullySendComplete();
+    assert.equal(state.board.asks[0].size, 4);
   } finally {
     subscription.unsubscribe();
   }

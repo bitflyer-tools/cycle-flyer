@@ -21,6 +21,7 @@ const rendererBundle = buildSync({
       export * from './src/components/trade/order/twapRequest';
       export * from './src/components/trade/order/twapView';
       export * from './src/components/setting/view';
+      export { intent as settingsIntent } from './src/components/setting/intent';
     `,
     resolveDir: path.join(__dirname, '..'),
   },
@@ -34,6 +35,7 @@ const createRenderer = (entries, bridge) => {
   const module = { exports: {} };
   const localStorage = {
     getItem: (key) => entries.get(key) || null,
+    setItem: (key, value) => entries.set(key, value),
     removeItem: (key) => entries.delete(key),
   };
   runInNewContext(rendererBundle, {
@@ -65,11 +67,11 @@ test('Electron stores the encrypted pair, reloads it and signs both protocols', 
     },
   };
   const store = createCredentialStore(file, safeStorage, 'linux');
-  store.save(pair, true);
+  assert.equal(store.migrate(pair), true);
   assert.deepEqual(readFileSync(file), encrypted);
-  store.save({ key: 'stale', secret: 'stale' }, true);
 
   const reopened = createCredentialStore(file, safeStorage, 'linux');
+  assert.equal(reopened.migrate({ key: 'stale', secret: 'stale' }), true);
   const method = 'POST';
   const requestPath = '/v1/me/sendchildorder?product_code=FX_BTC_JPY';
   const body = '{"size":1}';
@@ -94,6 +96,7 @@ test('Electron rejects Linux storage backed by a hardcoded password', (t) => {
     getSelectedStorageBackend: () => 'basic_text',
     encryptString: () => assert.fail('Insecure encryption was attempted'),
   }, 'linux');
+  assert.equal(store.migrate(pair), false);
   assert.throws(() => store.save(pair), /OS credential storage is unavailable/);
   assert.equal(existsSync(file), false);
 });
@@ -273,8 +276,8 @@ test('Electron renderer migrates once and delegates both protocol signatures', a
   const renderer = createRenderer(entries, {
     migrate: async (value) => {
       migrations++;
-      assert.equal(entries.size, 0);
-      store.save(value, true);
+      assert.deepEqual([...entries.values()], [pair.key, pair.secret]);
+      return store.migrate(value);
     },
     signRest: async (...args) => store.signRest(...args),
     signRealtime: async () => store.signRealtime(),
@@ -283,6 +286,7 @@ test('Electron renderer migrates once and delegates both protocol signatures', a
     renderer.authorizeRequest(renderer.getPositions()), renderer.signRealtime(),
   ]);
   assert.equal(migrations, 1);
+  assert.equal(entries.size, 0);
   assert.equal(request.headers['ACCESS-SIGN'],
     hmac(request.headers['ACCESS-TIMESTAMP'] + 'GET/v1/me/getpositions?product_code=FX_BTC_JPY'));
   assert.equal(auth.signature, hmac(auth.timestamp + auth.nonce));
@@ -309,17 +313,42 @@ test('Electron authorizes a parent order cancellation with the exact request bod
     hmac(request.headers['ACCESS-TIMESTAMP'] + request.method + requestPath + request.send));
 });
 
-test('failed migration drops plaintext and an explicit save clears the migration error', async () => {
+test('a failed encrypted write keeps legacy credentials available for retry after restart', async () => {
   const entries = new Map([['api-key', pair.key], ['api-secret', pair.secret]]);
   const renderer = createRenderer(entries, {
-    migrate: async () => { throw new Error('OS storage is unavailable'); },
-    save: async (value) => assert.equal(value.secret, pair.secret),
+    migrate: async () => { throw new Error('Could not write encrypted credentials'); },
   });
   assert.equal(await renderer.initializeCredentials(), false);
+  assert.deepEqual([...entries.values()], [pair.key, pair.secret]);
+
+  const restarted = createRenderer(entries, { migrate: async () => true });
+  assert.equal(await restarted.initializeCredentials(), true);
   assert.equal(entries.size, 0);
-  await renderer.saveCredentials(pair);
-  assert.equal(await renderer.initializeCredentials(), true);
+});
+
+test('unavailable secure storage removes plaintext and persists the reentry prompt until save', async () => {
+  const entries = new Map([['api-key', pair.key], ['api-secret', pair.secret]]);
+  const renderer = createRenderer(entries, { migrate: async () => false });
+  assert.equal(await renderer.initializeCredentials(), false);
+  assert.deepEqual([...entries.values()], ['true']);
+
+  const restarted = createRenderer(entries, {
+    save: async (value) => assert.equal(value.secret, pair.secret),
+  });
+  assert.equal(await restarted.initializeCredentials(), false);
+  const never = () => restarted.Stream.never();
+  const settings = restarted.settingsIntent({
+    DOM: { select: () => ({ events: never }) },
+    storage: { local: { getItem: never } },
+  });
+  const message = await new Promise((resolve, reject) => {
+    settings.credentialsMessage$.take(1).addListener({ next: resolve, error: reject });
+  });
+  assert.match(message, /Enter your API key and secret/);
+  await restarted.saveCredentials(pair);
+  assert.equal(await restarted.initializeCredentials(), true);
   assert.equal(entries.size, 0);
+  assert.equal(await createRenderer(entries, {}).initializeCredentials(), true);
 });
 
 test('Settings shows empty inputs with password masking even after credentials are saved', async () => {

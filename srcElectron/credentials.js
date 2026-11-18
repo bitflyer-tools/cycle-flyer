@@ -9,9 +9,11 @@ const restPaths = {
 const createCredentialStore = (file, safeStorage, platform = process.platform) => {
   let credentials;
 
+  const secureStorageAvailable = () => safeStorage.isEncryptionAvailable() &&
+    (platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text');
+
   const requireSecureStorage = () => {
-    if (!safeStorage.isEncryptionAvailable() ||
-        (platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) {
+    if (!secureStorageAvailable()) {
       throw new Error('OS credential storage is unavailable.');
     }
   };
@@ -28,9 +30,8 @@ const createCredentialStore = (file, safeStorage, platform = process.platform) =
     return credentials;
   };
 
-  const save = (value, migrate = false) => {
-    if (migrate && existsSync(file)) return;
-    if (value === null && !migrate) {
+  const save = (value) => {
+    if (value === null) {
       rmSync(file, { force: true });
       credentials = null;
       return;
@@ -51,6 +52,12 @@ const createCredentialStore = (file, safeStorage, platform = process.platform) =
     } finally {
       rmSync(temporary, { force: true });
     }
+  };
+
+  const migrate = (pair) => {
+    if (!secureStorageAvailable()) return false;
+    if (!load()) save(pair);
+    return true;
   };
 
   const signature = (secret, message) => createHmac('sha256', secret).update(message).digest('hex');
@@ -79,7 +86,7 @@ const createCredentialStore = (file, safeStorage, platform = process.platform) =
     return { api_key: pair.key, nonce, signature: signature(pair.secret, `${timestamp}${nonce}`), timestamp };
   };
 
-  return { hasCredentials: () => !!load(), save, signRest, signRealtime };
+  return { hasCredentials: () => !!load(), migrate, save, signRest, signRealtime };
 };
 
 module.exports = { createCredentialStore };
