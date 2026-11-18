@@ -5,14 +5,12 @@
   "main": "srcElectron/index.js",
   "scripts": {
     "build": "node fuse",
-    "test": "esbuild test/orderSubmission.test.ts --bundle --platform=node --define:window=undefined --loader:.styl=empty --outfile=out/orderSubmission.test.cjs && node --test out/orderSubmission.test.cjs",
+    "test": "esbuild test/orderSubmission.test.ts test/trade-stop-orders.test.js test/executions.test.ts --bundle --platform=node --define:window=undefined --loader:.styl=empty --outdir=out --out-extension:.js=.cjs && node --test out/orderSubmission.test.cjs out/trade-stop-orders.test.cjs out/executions.test.cjs test/dev-server.test.js test/release-workflow.test.js",
     "lint": "eslint 'src/**/*.ts'",
     "start": "node fuse.dev",
-    "test": "node --test",
     "start:electron": "electron-forge start --inspect-electron",
     "package": "electron-forge package",
-    "make": "electron-forge make",
-    "test": "esbuild test/trade-stop-orders.test.js --bundle --platform=node --outfile=out/trade-stop-orders.test.cjs && node --test out/trade-stop-orders.test.cjs"
+    "make": "electron-forge make"
   },
   "author": "unhappychoice",
   "license": "MIT",

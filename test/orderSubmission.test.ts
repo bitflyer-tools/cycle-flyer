@@ -98,9 +98,34 @@ for (const outcome of ["succeed", "fail"] as const) {
     });
 }
 
+test("routes account executions without changing session history or reviving stale responses", (t) => {
+    const trade = setup(t);
+    const page = JSON.stringify([{
+        id: 1, exec_date: "2025-03-22T09:57:40.397", side: "BUY", price: 12000000,
+        size: 0.01, child_order_acceptance_id: "JRF20250322-095740-000001",
+    }]);
+    equal(trade.requests.length, 0);
+    trade.refreshExecutions();
+    equal(trade.requests[0].category, "executions");
+    trade.respondTo(trade.requests[0]).succeed(page);
+    equal(trade.executions.rows[0].id, 1);
+    deepEqual(trade.histories, []);
+
+    trade.refreshExecutions();
+    const pending = trade.respondTo(trade.requests[1]);
+    trade.navigate("/setting");
+    trade.navigate("/");
+    pending.succeed(page);
+    deepEqual(trade.executions.rows, []);
+    equal(trade.executions.loading, false);
+});
+
 function setup(t: TestContext) {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
+    Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: { "api-key": "test", "api-secret": "test" },
+    });
     t.after(() => {
         if (originalStorage) {
             Object.defineProperty(globalThis, "localStorage", originalStorage);
@@ -112,11 +137,13 @@ function setup(t: TestContext) {
     const buyIFDOCO$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
+    const refreshExecutions$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
+        ".refresh-executions": { click: refreshExecutions$ },
         ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buyIFDOCO$ },
@@ -151,7 +178,7 @@ function setup(t: TestContext) {
     const requests: RequestOptions[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
-        if (options.category === "ifdoco-order" || options.category === "market-order") {
+        if (["ifdoco-order", "market-order", "executions"].includes(options.category || "")) {
             requests.push(options);
         }
     } });
@@ -163,16 +190,18 @@ function setup(t: TestContext) {
     return {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
+        get executions() { return state!.trade!.executionsComponentState!; },
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
+        refreshExecutions: () => refreshExecutions$.shamefullySendNext(null),
         requests,
         respondTo(request: RequestOptions) {
             const response$ = Object.assign(Stream.createWithMemory<Response>(), { request: { ...request } });
             responses$.shamefullySendNext(response$);
             return {
                 fail: () => response$.shamefullySendError(new Error("Network failure")),
-                succeed: () => {
-                    response$.shamefullySendNext({ request } as Response);
+                succeed: (text?: string) => {
+                    response$.shamefullySendNext({ request, text } as Response);
                     response$.shamefullySendComplete();
                 },
             };
