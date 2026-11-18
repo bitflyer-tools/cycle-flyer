@@ -6,7 +6,8 @@ const { test } = require('node:test');
 const { load } = require('js-yaml');
 
 const workflowPath = path.join(__dirname, '../.github/workflows/release.yml');
-const { jobs } = load(readFileSync(workflowPath, 'utf8'));
+const release = load(readFileSync(workflowPath, 'utf8'));
+const { jobs } = release;
 const [firstStep] = jobs['bump-version'].steps;
 
 function runFirstStep(ref) {
@@ -20,6 +21,7 @@ function runFirstStep(ref) {
 }
 
 test('allows a master branch dispatch and builds from the new version tag', () => {
+  assert.equal(release.on.workflow_dispatch.inputs.version.type, 'choice');
   assert.equal(runFirstStep('refs/heads/master').status, 0);
   assert.equal(jobs.build.needs, 'bump-version');
   const checkout = jobs.build.steps.find(({ uses }) => uses?.startsWith('actions/checkout@'));
@@ -43,7 +45,6 @@ test('limits CI jobs to repository read access', () => {
 });
 
 test('grants release write access only for version bumps and publishing', () => {
-  const release = load(readFileSync(workflowPath, 'utf8'));
   assert.deepEqual(release.permissions, { contents: 'read' });
   assert.deepEqual(
     Object.fromEntries(Object.entries(jobs).map(([name, job]) => [name, job.permissions ?? release.permissions])),
