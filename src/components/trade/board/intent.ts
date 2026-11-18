@@ -1,11 +1,8 @@
 import {Stream} from "xstream";
-import {Board} from "../../../models/board";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
 
 export interface Actions {
-    onBoardLoaded$: Stream<Board>;
-    onBoardSnapshotLoaded$: Stream<Board>;
     onClickAsk$: Stream<number>;
     onClickBid$: Stream<number>;
     onClickGroupSizePlusButton$: Stream<null>;
@@ -16,15 +13,6 @@ export interface Actions {
 export const groupSizeStorageKey = "board-group-size";
 
 export const intent = (sources: Sources): Actions => {
-    const onBoardLoaded$ = sources.socket.board$
-        .map((json) => new Board(json));
-
-    const onBoardSnapshotLoaded$ = sources.HTTP.select("board")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .filter((response) => !!response)
-        .map((response) => new Board(JSON.parse(response.text)));
-
     const onClickAsk$ = sources.DOM.select(".ask")
         .events("click")
         .map((event) => event.currentTarget as HTMLElement)
@@ -44,8 +32,6 @@ export const intent = (sources: Sources): Actions => {
         .mapTo(null);
 
     return {
-        onBoardLoaded$,
-        onBoardSnapshotLoaded$,
         onClickAsk$,
         onClickBid$,
         onClickGroupSizeMinusButton$,

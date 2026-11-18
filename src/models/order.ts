@@ -6,6 +6,6 @@ export class Order {
     constructor(json: any) {
         this.price = json.price;
         this.side = json.side;
-        this.size = json.size;
+        this.size = json.outstanding_size;
     }
 }
