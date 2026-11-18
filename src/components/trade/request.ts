@@ -13,7 +13,7 @@ export const request = (actions: Actions): Stream<string | RequestInput | null> 
         .flatten();
 
     const parentOrderDetails = actions.onParentOrdersLoaded$
-        .map((os) => Stream.fromArray(os.map((order: any) => getParentOrder(order.parent_order_id))))
+        .map((os) => Stream.fromArray(os.map((order) => getParentOrder(order.parent_order_id))))
         .flatten();
 
     return Stream.merge(
