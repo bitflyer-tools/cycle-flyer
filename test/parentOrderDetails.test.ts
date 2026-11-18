@@ -1,9 +1,10 @@
-import {deepStrictEqual} from "node:assert";
+import {deepStrictEqual, ok} from "node:assert";
 import {test} from "node:test";
 import Stream from "xstream";
 import type {Sources, State} from "../src/components/trade";
 import {intent} from "../src/components/trade/intent";
 import {model} from "../src/components/trade/model";
+import {flattenStopOrders} from "../src/models/parentStopOrders";
 
 const response = (body: object) => ({ text: JSON.stringify(body) });
 const stopDetail = (id: number, price: number) => response({
@@ -38,8 +39,9 @@ const stopDetail = (id: number, price: number) => response({
 
         try {
             activeOrders$.shamefullySendNext(response([{ parent_order_id: 1 }, { parent_order_id: 2 }]));
-            deepStrictEqual(state?.parentStopOrders, {});
-            deepStrictEqual(state?.stopOrders, []);
+            ok(state);
+            deepStrictEqual(state.parentStopOrders, { 1: [], 2: [] });
+            deepStrictEqual(flattenStopOrders(state.parentStopOrders), []);
             details$.shamefullySendNext(first$);
             details$.shamefullySendNext(second$);
 
@@ -47,9 +49,10 @@ const stopDetail = (id: number, price: number) => response({
             const resolveSecond = () => second$.shamefullySendNext(stopDetail(2, 200));
             (reverse ? [resolveSecond, resolveFirst] : [resolveFirst, resolveSecond]).forEach((resolve) => resolve());
 
-            deepStrictEqual(state?.parentStopOrders[1]?.map((order) => order.price), [100]);
-            deepStrictEqual(state?.parentStopOrders[2]?.map((order) => order.price), [200]);
-            deepStrictEqual(state?.stopOrders.map((order) => order.price).sort((a, b) => a - b), [100, 200]);
+            deepStrictEqual(state.parentStopOrders[1]?.map((order) => order.price), [100]);
+            deepStrictEqual(state.parentStopOrders[2]?.map((order) => order.price), [200]);
+            const prices = flattenStopOrders(state.parentStopOrders).map((order) => order.price);
+            deepStrictEqual(prices.sort((a, b) => a - b), [100, 200]);
         } finally {
             subscription.unsubscribe();
         }
