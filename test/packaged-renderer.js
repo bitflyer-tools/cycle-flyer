@@ -6,9 +6,8 @@ const { join } = require('node:path');
 const { setTimeout: delay } = require('node:timers/promises');
 
 const checkRenderer = async () => {
-  const { app, BrowserWindow } = process.mainModule.require('electron');
-  const assert = process.mainModule.require('node:assert/strict');
-  const delay = process.mainModule.require('node:timers/promises').setTimeout;
+  const assert = process.getBuiltinModule('node:assert/strict');
+  const { setTimeout: delay } = process.getBuiltinModule('node:timers/promises');
   const waitFor = async (check, description) => {
     for (let attempt = 0; attempt < 100; attempt++) {
       const result = await check();
@@ -17,6 +16,11 @@ const checkRenderer = async () => {
     }
     throw new Error('Timed out waiting for ' + description);
   };
+
+  // The inspector can accept requests before Electron loads the app entry point.
+  const mainModule = await waitFor(() => process.mainModule, 'the app entry point');
+  const { app, BrowserWindow } = mainModule.require('electron');
+  await app.whenReady();
 
   assert.equal(app.isPackaged, true);
   assert.equal(app.commandLine.hasSwitch('no-sandbox'), false);
