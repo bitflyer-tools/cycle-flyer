@@ -15,7 +15,7 @@ export const authenticate = async (client: Socket, onAuthenticated: () => void):
             }
         });
     } catch {
-        // tslint:disable-next-line:no-console
+        // eslint-disable-next-line no-console
         console.error("Unable to sign bitFlyer private-channel authentication.");
     }
 };

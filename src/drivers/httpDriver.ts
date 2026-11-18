@@ -25,7 +25,7 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
         const headers = await signRest(request.method || "GET", request.url.slice(origin.length), body);
         return headers ? { ...request, headers: Object.assign({}, request.headers, headers) } : null;
     } catch {
-        // tslint:disable-next-line:no-console
+        // eslint-disable-next-line no-console
         console.error("Unable to sign the bitFlyer request.");
         return null;
     }
