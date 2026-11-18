@@ -24,3 +24,7 @@ You can view the order book without an API key.
 ## Author
 
 [@unhappychoice](https://unhappychoice.com)
+
+## Tests
+
+Use Node.js 24. Run `npm ci` to install dependencies and `npm test` to run the full suite.
