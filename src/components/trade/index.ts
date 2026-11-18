@@ -9,9 +9,8 @@ import {SocketIOSource} from "../../drivers/socketIODriver";
 import {Sound} from "../../drivers/soundDriver";
 import {Order} from "../../models/order";
 import {OrderHistory} from "../../models/orderHistory";
-import {ParentStopOrders} from "../../models/parentStopOrders";
+import {flattenStopOrders, ParentStopOrders} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
-import {StopOrder} from "../../models/stopOrder";
 import {BoardComponent, State as BoardComponentState} from "./board/index";
 import "./index.styl";
 import {intent} from "./intent";
@@ -48,7 +47,6 @@ export interface State {
     parentStopOrders: ParentStopOrders;
     position: Position;
     price: number;
-    stopOrders: StopOrder[];
     boardComponentState?: BoardComponentState;
     orderComponentState?: OrderComponentState;
     summaryComponentState?: SummaryComponentState;
@@ -79,7 +77,7 @@ export const Trade = (sources: Sources): Sinks => {
                 orders: state.orders,
                 position: state.position,
                 price: state.price,
-                stopOrders: state.stopOrders,
+                stopOrders: flattenStopOrders(state.parentStopOrders),
             },
             set: (state: State, boardComponentState: BoardComponentState) => ({
                 ...state,
@@ -98,7 +96,7 @@ export const Trade = (sources: Sources): Sinks => {
                 orders: state.orders,
                 position: state.position,
                 price: state.price,
-                stopOrders: state.stopOrders,
+                stopOrders: flattenStopOrders(state.parentStopOrders),
             },
             set: (state: State, orderComponentState: OrderComponentState) => ({
                 ...state,
@@ -106,7 +104,6 @@ export const Trade = (sources: Sources): Sinks => {
                 orderComponentState,
                 orders: orderComponentState.orders,
                 price: orderComponentState.price,
-                stopOrders: orderComponentState.stopOrders,
             }),
         },
     })(sources);
