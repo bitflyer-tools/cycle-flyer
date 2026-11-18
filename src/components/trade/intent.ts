@@ -6,7 +6,6 @@ import {Position} from "../../models/position";
 import {Sources} from "./index";
 
 export interface Actions {
-    onExecutionCreated$: Stream<Execution>;
     onExecutionBatch$: Stream<Execution[]>;
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
     onMyOrderChanged$: Stream<null>;
@@ -17,8 +16,6 @@ export interface Actions {
 }
 
 export const intent = (sources: Sources): Actions => {
-    const onExecutionCreated$ = sources.socket.execution$;
-
     const onMyExecutionCreated$ = sources.socket.childOrderEvent$.filter(isExecution);
 
     const onMyOrderChanged$ = Stream.merge(
@@ -48,7 +45,6 @@ export const intent = (sources: Sources): Actions => {
         .map((positions) => new Position(positions));
 
     return {
-        onExecutionCreated$,
         onExecutionBatch$: sources.socket.executionBatch$,
         onMyExecutionCreated$,
         onMyOrderChanged$,

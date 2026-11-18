@@ -23,13 +23,13 @@ const bundledExports = { exports: {} };
 new Function('require', 'module', bundle)(require, bundledExports);
 const { SocketIOSource, intent, model, Board } = bundledExports.exports;
 
-function tradeWithBoard(board, stopOrders = []) {
+function tradeWithBoard(board) {
   const handlers = new Map();
   const socket = new SocketIOSource({ on: (name, handler) => handlers.set(name, handler) });
   const actions = intent({ socket, HTTP: { select: () => Stream.never() } });
   let state;
   model(actions).addListener({ next: (reducer) => { state = reducer(state); } });
-  state = { ...state, boardComponentState: { board }, stopOrders };
+  state = { ...state, boardComponentState: { board } };
   return {
     socket,
     get state() { return state; },
@@ -69,11 +69,7 @@ test('matches sequential pruning and delivers every execution in order', () => {
     { side: 'BUY', price: 102 },
   ];
   executions.forEach(({ side, price }) => expected.remove(side, price));
-  const stopOrderPrices = [];
-  const trade = tradeWithBoard(board, [
-    { isExcuted: (price) => { stopOrderPrices.push(price); return false; } },
-    { isExcuted: (price) => price <= 97 },
-  ]);
+  const trade = tradeWithBoard(board);
   const individualExecutions = [];
   trade.socket.execution$.addListener({ next: (execution) => individualExecutions.push(execution) });
 
@@ -81,8 +77,6 @@ test('matches sequential pruning and delivers every execution in order', () => {
 
   assert.deepEqual(board, expected);
   assert.deepEqual(individualExecutions, executions);
-  assert.deepEqual(stopOrderPrices, [103, 97, 98, 102]);
-  assert.equal(trade.state.stopOrders.length, 1);
   assert.equal(trade.state.currentPrice, 102);
 
   const state = trade.state;
