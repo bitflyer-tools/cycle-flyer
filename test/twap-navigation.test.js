@@ -64,6 +64,7 @@ test("leaving Trade stops a partially completed TWAP and restores idle controls"
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
             parentOrderEvent$: Stream.never(),
+            reconnect$: Stream.never(),
         },
         storage: { local: { getItem: (key) => Stream.of(key === "order-size" ? "0.03" : null) } },
     });
