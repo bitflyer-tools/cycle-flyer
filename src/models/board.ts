@@ -1,5 +1,6 @@
 import {ceilBy, floorBy} from "../util";
 import {BoardOrder} from "./boardOrder";
+import {Execution} from "./execution";
 
 export class Board {
     public asks: BoardOrder[];
@@ -22,6 +23,20 @@ export class Board {
         } else {
             this.bids = this.bids.filter((bid) => bid.price <= price);
         }
+    }
+
+    public removeExecutions(executions: Execution[]): void {
+        let highestBuy: number | undefined;
+        let lowestSell: number | undefined;
+        executions.forEach(({ side, price }) => {
+            if (side === "BUY") {
+                highestBuy = Math.max(highestBuy ?? price, price);
+            } else {
+                lowestSell = Math.min(lowestSell ?? price, price);
+            }
+        });
+        if (highestBuy !== undefined) { this.remove("BUY", highestBuy); }
+        if (lowestSell !== undefined) { this.remove("SELL", lowestSell); }
     }
 
     public merge(asks: BoardOrder[], bids: BoardOrder[]): Board {

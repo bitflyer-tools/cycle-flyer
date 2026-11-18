@@ -163,6 +163,7 @@ function setup(t: TestContext) {
             board$: Stream.never(),
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
+            executionBatch$: Stream.never(),
             parentOrderEvent$: Stream.never(),
             reconnect$: Stream.never(),
         },
