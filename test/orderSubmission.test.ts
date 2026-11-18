@@ -23,7 +23,7 @@ test("accepts a single IFDOCO submission until its delayed success", (t) => {
 
     order.respondTo(order.requests[0]).succeed();
     equal(order.state.isOrdering, false);
-    deepEqual(order.state.histories.map(({ status }) => status), ["success", "success", "success"]);
+    deepEqual(order.histories.map(({ status }) => status), ["success", "success", "success"]);
 
     order.sellIFDOCO();
     equal(order.requests.length, 2);
@@ -34,7 +34,7 @@ test("accepts a single IFDOCO submission until its delayed success", (t) => {
 
     sellResponse.succeed();
     equal(order.state.isOrdering, false);
-    equal(order.state.histories.length, 9);
+    equal(order.histories.length, 9);
 });
 
 test("releases a failed IFDOCO and keeps a later market order locked through stale responses", (t) => {
@@ -43,25 +43,28 @@ test("releases a failed IFDOCO and keeps a later market order locked through sta
     order.buyIFDOCO();
     order.respondTo(order.requests[0]).fail();
     equal(order.state.isOrdering, false);
-    deepEqual(order.state.histories.map(({ status }) => status), ["failed", "failed", "failed"]);
+    deepEqual(order.histories.map(({ status }) => status), ["failed", "failed", "failed"]);
 
     order.buyMarket();
     const marketResponse = order.respondTo(order.requests[1]);
     const staleResponse = order.respondTo(order.requests[0]);
     staleResponse.succeed();
-    equal(order.state.histories.length, 6);
+    equal(order.histories.length, 6);
     equal(order.state.isOrdering, true);
     order.buyIFDOCO();
     equal(order.requests.length, 2);
 
     marketResponse.succeed();
     equal(order.state.isOrdering, false);
-    equal(order.state.histories[0].name, "Market");
+    equal(order.histories[0].name, "Market");
     order.buyIFDOCO();
     equal(order.requests.length, 3);
 });
 
 for (const outcome of ["succeed", "fail"] as const) {
+    const status = outcome === "succeed" ? "success" : "failed";
+    const expectedHistories = ["Stop", "Limit", "Market"].map((name) => ({ name, status }));
+
     test(`keeps IFDOCO pending after returning from settings until the original request settles (${outcome})`, (t) => {
         const order = setup(t);
         order.buyIFDOCO();
@@ -75,6 +78,7 @@ for (const outcome of ["succeed", "fail"] as const) {
 
         response[outcome]();
         equal(order.state.isOrdering, false);
+        deepEqual(order.histories.map(({ name, status }) => ({ name, status })), expectedHistories);
         order.sellIFDOCO();
         equal(order.requests.length, 2);
     });
@@ -85,8 +89,10 @@ for (const outcome of ["succeed", "fail"] as const) {
 
         order.navigate("/setting");
         order.respondTo(order.requests[0])[outcome]();
+        deepEqual(order.histories.map(({ name, status }) => ({ name, status })), expectedHistories);
         order.navigate("/");
         equal(order.state.isOrdering, false);
+        deepEqual(order.histories.map(({ name, status }) => ({ name, status })), expectedHistories);
         order.sellIFDOCO();
         equal(order.requests.length, 2);
     });
@@ -157,6 +163,7 @@ function setup(t: TestContext) {
     return {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
+        get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         requests,
         respondTo(request: RequestOptions) {

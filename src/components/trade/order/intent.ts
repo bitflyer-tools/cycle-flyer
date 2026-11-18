@@ -46,7 +46,6 @@ export const intent = (sources: Sources): Actions => {
     const onHistoryCreated$ = Stream.merge(
         sources.HTTP.select("market-order").map((response$) => createHistoryStream("Market", response$)),
         sources.HTTP.select("limit-order").map((response$) => createHistoryStream("Limit", response$)),
-        sources.HTTP.select("ifdoco-order").map(createParentOrderHistoryStream),
         sources.HTTP.select("stop-order").map(createParentOrderHistoryStream),
     ).compose(flattenConcurrently);
 
