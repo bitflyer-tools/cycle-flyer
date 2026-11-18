@@ -39,7 +39,14 @@ function tradeHarness(t) {
   const trade = Trade({
     DOM: mockDOMSource({}),
     HTTP: { select },
-    socket: { board$: Stream.never(), execution$, childOrderEvent$, parentOrderEvent$: Stream.never() },
+    orderRequests: { select: () => Stream.never() },
+    socket: {
+      board$: Stream.never(),
+      execution$,
+      childOrderEvent$,
+      parentOrderEvent$: Stream.never(),
+      reconnect$: Stream.never(),
+    },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: () => Stream.never() } },
   }, Stream.of(false));
