@@ -1,4 +1,5 @@
 import {Stream} from "xstream";
+import {twapCredentialVersion} from "../../../credentials";
 import {OrderHistory} from "../../../models/orderHistory";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
@@ -22,9 +23,11 @@ export const twapStorageKeys = {
 };
 
 export const twapIntent = (sources: Sources): TwapActions => ({
-    onClickTwapBuyButton$: clicks(sources.DOM, ".twap-order-buttons", ".buy-button"),
+    onClickTwapBuyButton$: clicks(sources.DOM, ".twap-order-buttons", ".buy-button")
+        .filter(() => twapCredentialVersion() !== null),
     onClickTwapCancelButton$: clicks(sources.DOM, ".twap-order-buttons", ".cancel-button"),
-    onClickTwapSellButton$: clicks(sources.DOM, ".twap-order-buttons", ".sell-button"),
+    onClickTwapSellButton$: clicks(sources.DOM, ".twap-order-buttons", ".sell-button")
+        .filter(() => twapCredentialVersion() !== null),
     onTwapIntervalChanged$: numberInputs(sources.DOM, "#twap-interval-input"),
     onTwapIntervalLoaded$: loadNumber(sources.storage, twapStorageKeys.interval),
     onTwapSliceCreated$: sources.HTTP.select("twap-order")

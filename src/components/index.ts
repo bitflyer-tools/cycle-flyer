@@ -5,10 +5,15 @@ import {Reducer, StateSource} from "@cycle/state";
 import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
+import {credentialsChanging$} from "../credentials";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
-import {Trade} from "./trade";
+import {State as TradeState, Trade} from "./trade";
+
+interface RootState {
+    trade?: TradeState;
+}
 
 export interface Sources {
     DOM: DOMSource;
@@ -55,7 +60,18 @@ export const Root = (sources: Sources): Sinks => {
         HTTP: routes$.map((sinks: Sinks) => sinks.HTTP).flatten(),
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
         sound: routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
-        state: routes$.map((sinks: Sinks) => sinks.state).flatten(),
+        state: Stream.merge(
+            routes$.map((sinks: Sinks) => sinks.state).flatten(),
+            credentialsChanging$.mapTo(resetTwap),
+        ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
     };
+};
+
+const resetTwap: Reducer<RootState> = (state) => {
+    const trade = state?.trade;
+    const order = trade?.orderComponentState;
+    if (!trade || !order || !order.twap.remaining) { return state; }
+    const orderComponentState = { ...order, twap: { ...order.twap, remaining: 0 } };
+    return { ...state, trade: { ...trade, orderComponentState } };
 };

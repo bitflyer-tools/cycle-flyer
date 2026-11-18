@@ -21,10 +21,16 @@ interface CredentialBridge {
 }
 
 export const credentialsChanged$ = Stream.create<void>();
+export const credentialsChanging$ = Stream.create<void>();
 
 const bridge = (window as Window & { bitFlyerCredentials?: CredentialBridge }).bitFlyerCredentials;
 let sessionPair: CredentialPair | null = null;
 let migration: Promise<boolean> | undefined;
+let credentialVersion = 0;
+let pendingSaves = 0;
+
+export const twapCredentialVersion = (): number | null =>
+    pendingSaves === 0 ? credentialVersion : null;
 
 export const initializeCredentials = (): Promise<boolean> => {
     if (!migration) {
@@ -34,13 +40,20 @@ export const initializeCredentials = (): Promise<boolean> => {
 };
 
 export const saveCredentials = async (pair: CredentialPair | null): Promise<void> => {
-    await initializeCredentials();
-    if (bridge) {
-        await bridge.save(pair);
-    } else {
-        sessionPair = pair;
+    credentialVersion += 1;
+    pendingSaves += 1;
+    try {
+        credentialsChanging$.shamefullySendNext(undefined);
+        await initializeCredentials();
+        if (bridge) {
+            await bridge.save(pair);
+        } else {
+            sessionPair = pair;
+        }
+        migration = Promise.resolve(true);
+    } finally {
+        pendingSaves -= 1;
     }
-    migration = Promise.resolve(true);
     credentialsChanged$.shamefullySendNext(undefined);
 };
 

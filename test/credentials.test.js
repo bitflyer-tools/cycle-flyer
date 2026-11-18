@@ -18,6 +18,7 @@ const rendererBundle = buildSync({
       export * from './src/drivers/httpDriver';
       export * from './src/drivers/privateChannel';
       export * from './src/http';
+      export * from './src/components/trade/order/twapRequest';
       export * from './src/components/setting/view';
     `,
     resolveDir: path.join(__dirname, '..'),
@@ -35,7 +36,7 @@ const createRenderer = (entries, bridge) => {
     removeItem: (key) => entries.delete(key),
   };
   runInNewContext(rendererBundle, {
-    console, crypto: webcrypto, Date, localStorage, module, setTimeout, clearTimeout,
+    console, crypto: webcrypto, Date, localStorage, module, setTimeout, clearTimeout, setInterval, clearInterval,
     window: { bitFlyerCredentials: bridge },
   });
   return module.exports;
@@ -130,6 +131,64 @@ test('browser signs the actual REST URL and body for each dispatch', async (t) =
   const order = await renderer.authorizeRequest(renderer.marketOrder(1, 'BUY'));
   assert.equal(order.headers['ACCESS-SIGN'], hmac('2000POST' + new URL(order.url).pathname +
     new URL(order.url).search + order.send));
+});
+
+for (const [operation, replacement] of [
+  ['replacing', { key: 'another-api-key', secret: 'another-api-secret' }],
+  ['clearing', null],
+]) {
+  test(`${operation} credentials stops the remaining TWAP requests`, async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const renderer = createRenderer(new Map());
+    await renderer.saveCredentials(pair);
+    const buy$ = renderer.Stream.create();
+    const state$ = renderer.Stream.of({ size: 0.03, twap: { interval: 1, slices: 3 } });
+    const requests = [];
+    const listener = { next: (request) => requests.push(request) };
+    const requests$ = renderer.twapRequest({
+      onClickTwapBuyButton$: buy$,
+      onClickTwapSellButton$: renderer.Stream.never(),
+      onClickTwapCancelButton$: renderer.Stream.never(),
+    }, state$);
+    requests$.addListener(listener);
+    t.after(() => requests$.removeListener(listener));
+
+    buy$.shamefullySendNext(null);
+    assert.equal(requests.length, 1);
+    assert.equal((await renderer.authorizeRequest(requests[0])).headers['ACCESS-KEY'], pair.key);
+    await renderer.saveCredentials(replacement);
+    t.mock.timers.tick(3000);
+    assert.equal(requests.length, 1);
+
+    if (replacement) {
+      buy$.shamefullySendNext(null);
+      assert.equal(requests.length, 2);
+      assert.equal((await renderer.authorizeRequest(requests[1])).headers['ACCESS-KEY'], replacement.key);
+    }
+  });
+}
+
+test('TWAP authorization drops requests that overlap an Electron credential update', async () => {
+  let finishSigning;
+  let finishSaving;
+  const headers = { 'ACCESS-KEY': pair.key };
+  const renderer = createRenderer(new Map(), {
+    signRest: () => finishSigning
+      ? Promise.resolve(headers)
+      : new Promise((resolve) => { finishSigning = resolve; }),
+    save: () => new Promise((resolve) => { finishSaving = resolve; }),
+  });
+  await renderer.initializeCredentials();
+  const request = renderer.twapSliceOrder(0.01, 'BUY');
+  const signing = renderer.authorizeRequest(request);
+  await Promise.resolve();
+  const saving = renderer.saveCredentials(pair);
+  const duringSave = await renderer.authorizeRequest(request);
+  finishSaving();
+  await saving;
+  finishSigning(headers);
+  assert.equal(duringSave, null);
+  assert.equal(await signing, null);
 });
 
 test('browser private channels authenticate before subscribing', async () => {

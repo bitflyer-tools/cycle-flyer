@@ -1,7 +1,7 @@
 import {makeHTTPDriver, RequestInput} from "@cycle/http";
 import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
-import {signRest} from "../credentials";
+import {signRest, twapCredentialVersion} from "../credentials";
 
 export const makeSignedHTTPDriver = () => {
     const driver = makeHTTPDriver();
@@ -22,7 +22,11 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
     try {
         const body = request.send || "";
         if (typeof body !== "string") { return null; }
+        const isTwap = request.category === "twap-order";
+        const version = twapCredentialVersion();
+        if (isTwap && version === null) { return null; }
         const headers = await signRest(request.method || "GET", request.url.slice(origin.length), body);
+        if (isTwap && version !== twapCredentialVersion()) { return null; }
         return headers ? { ...request, headers: Object.assign({}, request.headers, headers) } : null;
     } catch {
         // eslint-disable-next-line no-console
