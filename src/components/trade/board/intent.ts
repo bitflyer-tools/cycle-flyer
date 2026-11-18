@@ -2,6 +2,7 @@ import {Stream} from "xstream";
 import {Board} from "../../../models/board";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
+import {pollResponse} from "../pollResponse";
 
 export interface Actions {
     onBoardLoaded$: Stream<Board>;
@@ -19,11 +20,8 @@ export const intent = (sources: Sources): Actions => {
     const onBoardLoaded$ = sources.socket.board$
         .map((json) => new Board(json));
 
-    const onBoardSnapshotLoaded$ = sources.HTTP.select("board")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .filter((response) => !!response)
-        .map((response) => new Board(JSON.parse(response.text)));
+    const onBoardSnapshotLoaded$ = pollResponse(sources.HTTP.select("board"), (json) =>
+        isBoardSide(json?.asks) && isBoardSide(json?.bids) ? new Board(json) : undefined);
 
     const onClickAsk$ = sources.DOM.select(".ask")
         .events("click")
@@ -53,3 +51,7 @@ export const intent = (sources: Sources): Actions => {
         onGroupSizeLoaded$: loadNumber(sources.storage, groupSizeStorageKey),
     };
 };
+
+const isBoardSide = (orders: unknown): boolean =>
+    Array.isArray(orders) && orders.every((order) =>
+        Number.isFinite(order?.price) && Number.isFinite(order?.size));

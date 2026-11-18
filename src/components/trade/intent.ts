@@ -3,6 +3,7 @@ import debounce from "xstream/extra/debounce";
 import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
 import {Sources} from "./index";
+import {pollResponse} from "./pollResponse";
 
 export interface Actions {
     onExecutionCreated$: Stream<object>;
@@ -39,11 +40,8 @@ export const intent = (sources: Sources): Actions => {
         .flatten()
         .map((response) => JSON.parse(response.text));
 
-    const onPositionsLoaded$ = sources.HTTP.select("positions")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .map((response) => JSON.parse(response.text))
-        .map((positions) => new Position(positions));
+    const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json) =>
+        isPositionList(json) ? new Position(json) : undefined);
 
     return {
         onExecutionCreated$,
@@ -55,3 +53,8 @@ export const intent = (sources: Sources): Actions => {
         onPositionsLoaded$,
     };
 };
+
+const isPositionList = (positions: unknown): boolean =>
+    Array.isArray(positions) && positions.every((position) =>
+        (position?.side === "BUY" || position?.side === "SELL")
+        && Number.isFinite(position.price) && Number.isFinite(position.size) && position.size > 0);
