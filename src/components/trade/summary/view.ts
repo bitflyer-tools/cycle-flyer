@@ -7,7 +7,7 @@ export const view = (state$: Stream<State>) =>
         div(".summary", [
             div(".current-price", [
                 span(".label", "Current price"),
-                span(".number", state.currentPrice.toLocaleString()),
+                span(".number", state.currentPrice?.toLocaleString() ?? "Pending"),
                 span(".unit", "JPY"),
             ]),
             div(".position", [
@@ -17,7 +17,7 @@ export const view = (state$: Stream<State>) =>
             ]),
             div(".position-diff", [
                 span(".label", "Position diff"),
-                span(profitDifferenceClass(state), state.position.toDiffString(state.currentPrice)),
+                span(profitDifferenceClass(state), state.currentPrice === null ? "Pending" : state.position.toDiffString(state.currentPrice)),
                 span(".unit", "JPY"),
             ]),
             div(".position-size", [
@@ -27,7 +27,7 @@ export const view = (state$: Stream<State>) =>
             ]),
             div(".profit", [
                 span(".label", "Profit / Loss"),
-                span(profitClass(state), state.position.toProfitString(state.currentPrice)),
+                span(profitClass(state), state.currentPrice === null ? "Pending" : state.position.toProfitString(state.currentPrice)),
                 span(".unit", "JPY"),
             ]),
             div(".collateral", [
@@ -60,13 +60,13 @@ export const view = (state$: Stream<State>) =>
         ]));
 
 const collateralString = (state: State): string => {
-    if (!state.position.price) { return state.collateral.toLocaleString(); }
+    if (state.currentPrice === null || !state.position.price) { return state.collateral.toLocaleString(); }
     const profit = state.position.profit(state.currentPrice);
     return (state.collateral + profit).toLocaleString();
 };
 
 const profitClass = (state: State): string => {
-    if (!state.position.price) { return ".number"; }
+    if (state.currentPrice === null || !state.position.price) { return ".number"; }
     if (state.position.side === "BUY") {
         return state.currentPrice - state.position.price >= 0.0 ? ".number.plus" : ".number.minus";
     } else {
@@ -75,7 +75,7 @@ const profitClass = (state: State): string => {
 };
 
 const profitDifferenceClass = (state: State): string => {
-    if (!state.position.price) { return ".number"; }
+    if (state.currentPrice === null || !state.position.price) { return ".number"; }
     return state.currentPrice - state.position.price >= 0.0 ? ".number.plus" : ".number.minus";
 };
 

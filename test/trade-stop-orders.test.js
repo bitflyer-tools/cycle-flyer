@@ -48,7 +48,7 @@ test("a public execution updates the market price while the active stop stays vi
 
     assert.equal(board.asks[0].price, 110);
     assert.deepEqual(snapshots.slice(beforeExecution - 1), [
-        { price: 0, stops: [110] },
+        { price: null, stops: [110] },
         { price: 110, stops: [110] },
         { price: 110, stops: [110] },
     ]);
