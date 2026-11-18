@@ -1,12 +1,39 @@
-import {RequestInput} from "@cycle/http";
+import {HTTPSource, RequestInput, RequestOptions} from "@cycle/http";
 import Stream from "xstream";
+import dropRepeats from "xstream/extra/dropRepeats";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import sampleCombine from "xstream/extra/sampleCombine";
 import {cancelOrders, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
-import {twapRequest} from "./twapRequest";
 
-export const request = (actions: Actions, state$: Stream<State>): Stream<string | RequestInput | null> => {
+interface Submission extends RequestOptions {
+    submissionId: symbol;
+}
+
+export const submissions = (requests$: Stream<RequestInput>, http: HTTPSource): Stream<Submission | null> => {
+    const requested$ = requests$
+        .map((request) => ({ ...request as RequestOptions, submissionId: Symbol() }));
+
+    const completed$ = http.select()
+        .map((response$) => ({ response$, submissionId: (response$.request as Submission).submissionId }))
+        .filter(({ submissionId }) => !!submissionId)
+        .map(({ response$, submissionId }) =>
+            response$.last().mapTo(submissionId).replaceError(() => Stream.of(submissionId)))
+        .compose(flattenConcurrently);
+
+    return Stream.merge(completed$, requested$)
+        .fold<Submission | null>((pending, event) => {
+            if (typeof event === "symbol") {
+                return pending?.submissionId === event ? null : pending;
+            }
+            return pending || event;
+        }, null)
+        .compose(dropRepeats())
+        .remember();
+};
+
+export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<RequestInput> => {
     const clickedState = (click$: Stream<null>) =>
         click$.compose(sampleCombine(state$)).map(([_, state]) => state);
     const withState = (click$: Stream<null>, toRequest: (state: State) => RequestInput) =>
@@ -24,9 +51,8 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<string 
         withIFDOCOState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),
         withIFDOCOState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder),
         withState(actions.onClickClearButton$, clearPositionOrder),
-        actions.onClickClearOrderButton$.map((_) => cancelOrders()),
-        twapRequest(actions, state$),
-    ) as Stream<string | RequestInput | null>;
+        actions.onClickClearOrderButton$.map(() => cancelOrders()),
+    );
 };
 
 const ifdocoBuyOrder = (state: State): RequestInput =>

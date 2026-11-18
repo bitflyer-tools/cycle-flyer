@@ -1,12 +1,10 @@
 const assert = require("node:assert/strict");
 const {test} = require("node:test");
 const Stream = require("xstream").default;
-globalThis.window = {};
 const {ifdocoSection} = require("../src/components/trade/order/ifdocoView");
-delete globalThis.window;
 const {intent, storageKeys} = require("../src/components/trade/order/intent");
 const {model} = require("../src/components/trade/order/model");
-const {request} = require("../src/components/trade/order/request");
+const {orderRequests} = require("../src/components/trade/order/request");
 
 function setup(t, storedWidth) {
     const widthInput$ = Stream.create();
@@ -29,7 +27,7 @@ function setup(t, storedWidth) {
     });
     const state$ = Stream.createWithMemory();
     let state;
-    const reducers = model(actions).subscribe({
+    const reducers = model(actions, Stream.never()).subscribe({
         next: (reduce) => {
             state = { ...reduce(state), currentPrice: 10000000 };
             state$.shamefullySendNext(state);
@@ -45,7 +43,7 @@ function setup(t, storedWidth) {
         else delete globalThis.localStorage;
     });
     const requests = [];
-    const subscription = request(actions, state$).subscribe({ next: (value) => requests.push(value) });
+    const subscription = orderRequests(actions, state$).subscribe({ next: (value) => requests.push(value) });
     t.after(() => {
         subscription.unsubscribe();
         reducers.unsubscribe();
