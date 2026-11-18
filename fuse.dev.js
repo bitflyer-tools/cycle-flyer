@@ -34,13 +34,15 @@ const startDevServer = async () => {
   await ctx.watch();
   console.log('Watching for changes...');
 
-  const { host, port } = await ctx.serve({
+  const host = '127.0.0.1';
+  const { port } = await ctx.serve({
     servedir: 'public',
+    host,
     port: 4444,
     fallback: 'public/index.html',
   });
 
-  console.log(`Dev server running at http://localhost:${port}`);
+  console.log(`Dev server running at http://${host}:${port}`);
 };
 
 startDevServer().catch((err) => {
