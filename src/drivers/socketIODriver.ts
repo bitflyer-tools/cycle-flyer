@@ -13,7 +13,6 @@ export const makeSocketIODriver = () => (): SocketIOSource => {
 const productCode = "FX_BTC_JPY";
 
 export class SocketIOSource {
-    public boardSnapshot$: Stream<object> = Stream.create();
     public board$: Stream<object> = Stream.create();
     public ticker$: Stream<object> = Stream.create();
     public execution$: Stream<object> = Stream.create();
@@ -21,7 +20,6 @@ export class SocketIOSource {
     public parentOrderEvent$: Stream<ParentOrderEvent> = Stream.create();
 
     private channels: { [channelName: string]: (message: any) => void } = {
-        [`lightning_board_snapshot_${productCode}`]: (message) => this.boardSnapshot$.shamefullySendNext(message),
         [`lightning_board_${productCode}`]: (message) => this.board$.shamefullySendNext(message),
         [`lightning_executions_${productCode}`]: (messages) => sendEach(this.execution$, messages),
         child_order_events: (events) => sendEach(this.childOrderEvent$, events.filter(isTargetProduct)),

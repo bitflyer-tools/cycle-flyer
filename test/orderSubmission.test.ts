@@ -131,6 +131,55 @@ for (const outcome of ["succeed", "fail"] as const) {
     });
 }
 
+test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
+    const order = setup(t);
+    order.respondTo({ category: "parent-orders", _namespace: ["trade"] }).succeed([
+        { parent_order_id: "JCO-success" },
+        { parent_order_id: "JCO-failure" },
+    ]);
+
+    order.clearOrders();
+    order.clearOrders();
+    deepEqual(order.requests.map(({ category }) => category), [
+        "cancel-orders", "cancel-parent-order", "cancel-parent-order",
+    ]);
+    equal(order.state.isOrdering, true);
+
+    order.respondTo(order.requests[0]).succeed();
+    order.respondTo(order.requests[1]).succeed();
+    order.buyMarket();
+    equal(order.requests.length, 3);
+    equal(order.state.isOrdering, true);
+    deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-failure"]);
+
+    order.respondTo(order.requests[2]).fail();
+    equal(order.state.isOrdering, false);
+    order.clearOrders();
+    deepEqual(order.requests.slice(3).map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
+    equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
+});
+
+test("settles an unsigned parent cancellation while waiting for the rest of Clear Orders", async (t) => {
+    const order = setup(t);
+    await saveCredentials(null);
+    order.respondTo({ category: "parent-orders", _namespace: ["trade"] }).succeed([
+        { parent_order_id: "JCO-unsigned" },
+    ]);
+
+    order.clearOrders();
+    deepEqual(order.requests.map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
+    await rejectUnsigned(order.requests[1]);
+    equal(order.state.isOrdering, true);
+    equal(order.signingAlert?.text, "Could not sign the request to clear orders. Check your bitFlyer credentials in Settings.");
+
+    order.respondTo(order.requests[0]).succeed();
+    equal(order.state.isOrdering, false);
+    deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-unsigned"]);
+    order.clearOrders();
+    equal(order.requests.length, 4);
+    equal(order.signingAlert, undefined);
+});
+
 test("blocks TWAP with missing credentials and immediately after clearing them", async (t) => {
     const order = setup(t);
     await saveCredentials(null);
@@ -249,7 +298,7 @@ function setup(t: TestContext) {
     const requests: RequestOptions[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
-        if (["ifdoco-order", "market-order", "twap-order", "cancel-orders"].includes(options.category)) {
+        if (["ifdoco-order", "market-order", "twap-order", "cancel-orders", "cancel-parent-order"].includes(options.category)) {
             requests.push(options);
         }
     } });
@@ -274,8 +323,8 @@ function setup(t: TestContext) {
             responses$.shamefullySendNext(response$);
             return {
                 fail: () => response$.shamefullySendError(new Error("Network failure")),
-                succeed: () => {
-                    response$.shamefullySendNext({ request } as Response);
+                succeed: (body?: unknown) => {
+                    response$.shamefullySendNext({ request, text: JSON.stringify(body) } as Response);
                     response$.shamefullySendComplete();
                 },
             };
@@ -283,5 +332,6 @@ function setup(t: TestContext) {
         sellIFDOCO: () => sellIFDOCO$.shamefullySendNext(null),
         get signingAlert() { return findSigningAlert(vNode); },
         get state() { return state!.trade!.orderComponentState!; },
+        get tradeState() { return state!.trade!; },
     };
 }

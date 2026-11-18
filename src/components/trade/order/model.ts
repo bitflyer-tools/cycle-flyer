@@ -14,10 +14,10 @@ const defaultState: State = {
     ifdocoOrder: new IFDOCOrder(10000, 50),
     isOrdering: false,
     orders: [],
+    parentStopOrders: {},
     position: new Position([]),
     price: 0,
     size: 0,
-    stopOrders: [],
     triggerPrice: 0,
     twap: defaultTwapOrder,
 };
