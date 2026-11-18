@@ -11,11 +11,16 @@ export const makeSocketIODriver = () => (): SocketIOSource => {
 
 const productCode = "FX_BTC_JPY";
 
+export interface PublicExecution {
+    price: number;
+    side: string;
+}
+
 export class SocketIOSource {
     public boardSnapshot$: Stream<object> = Stream.create();
     public board$: Stream<object> = Stream.create();
     public ticker$: Stream<object> = Stream.create();
-    public execution$: Stream<object> = Stream.create();
+    public execution$: Stream<PublicExecution> = Stream.create();
     public childOrderEvent$: Stream<ChildOrderEvent> = Stream.create();
     public parentOrderEvent$: Stream<ParentOrderEvent> = Stream.create();
 

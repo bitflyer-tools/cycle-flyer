@@ -1,11 +1,13 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
+import {PublicExecution} from "../../drivers/socketIODriver";
 import {Order} from "../../models/order";
 import {createOrderHistory} from "../../models/orderHistory";
 import {putParentOrder, retainActive} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
 import {State} from "./index";
 import {Actions} from "./intent";
+import {checkPriceAlert, isExecutionPrice} from "./priceAlert";
 
 const defaultState: State = {
     currentPrice: 0,
@@ -14,15 +16,16 @@ const defaultState: State = {
     parentStopOrders: {},
     position: new Position([]),
     price: 0,
+    lastExecutionPrice: 0,
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
-    const defaultReducer$ = Stream.of((state: State) => state || defaultState);
+    const defaultReducer$ = Stream.of(startTradeSession);
 
     const currentPriceReducer$ = actions.onExecutionCreated$
-        .map((execution: any) => (state: State) => {
-            if (state.boardComponentState) { state.boardComponentState.board.remove(execution.side, execution.price); }
-            return { ...state, currentPrice: execution.price };
+        .map((execution) => {
+            const time = new Date();
+            return (state: State) => applyExecution(state, execution, time);
         });
 
     const myExecutionReducer$ = actions.onMyExecutionCreated$
@@ -57,4 +60,24 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         parentOrderReducer$,
         parentOrdersReducer$,
     ) as Stream<Reducer<State>>;
+};
+
+const startTradeSession = (state: State = defaultState): State => ({
+    ...state,
+    lastExecutionPrice: 0,
+    summaryComponentState: state.summaryComponentState && { ...state.summaryComponentState, priceAlert: null },
+});
+
+const applyExecution = (state: State, { price, side }: PublicExecution, time: Date): State => {
+    if (!isExecutionPrice(price)) { return { ...state, lastExecutionPrice: 0 }; }
+
+    state.boardComponentState?.board.remove(side, price);
+    const summary = state.summaryComponentState;
+    const priceAlert = summary && checkPriceAlert(summary.priceAlert, state.lastExecutionPrice, price, time);
+    return {
+        ...state,
+        currentPrice: price,
+        lastExecutionPrice: price,
+        summaryComponentState: summary && { ...summary, priceAlert: priceAlert ?? null },
+    };
 };

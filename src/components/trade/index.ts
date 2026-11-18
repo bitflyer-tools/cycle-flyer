@@ -48,6 +48,7 @@ export interface State {
     parentStopOrders: ParentStopOrders;
     position: Position;
     price: number;
+    lastExecutionPrice: number;
     boardComponentState?: BoardComponentState;
     orderComponentState?: OrderComponentState;
     summaryComponentState?: SummaryComponentState;

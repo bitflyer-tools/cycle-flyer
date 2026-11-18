@@ -1,11 +1,12 @@
 import {Stream} from "xstream";
 import debounce from "xstream/extra/debounce";
+import {PublicExecution} from "../../drivers/socketIODriver";
 import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
 import {Sources} from "./index";
 
 export interface Actions {
-    onExecutionCreated$: Stream<object>;
+    onExecutionCreated$: Stream<PublicExecution>;
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
     onMyOrderChanged$: Stream<null>;
     onOrdersLoaded$: Stream<object[]>;

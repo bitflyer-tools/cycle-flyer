@@ -5,6 +5,17 @@ import {OrderHistory} from "../../models/orderHistory";
 import {State} from "./index";
 
 export const sound = (state$: Stream<State>): Stream<Sound> =>
+    Stream.merge(orderSound(state$), priceAlertSound(state$));
+
+const priceAlertSound = (state$: Stream<State>): Stream<Sound> =>
+    state$
+        .map((state) => state?.summaryComponentState?.priceAlert)
+        .compose(dropRepeats())
+        .drop(1)
+        .filter((alert) => alert?.status === "triggered")
+        .mapTo<Sound>("price-alert");
+
+const orderSound = (state$: Stream<State>): Stream<Sound> =>
     state$
         .filter((state) => !!state)
         .map((state) => state.histories[0])

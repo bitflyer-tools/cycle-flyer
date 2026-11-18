@@ -1,6 +1,7 @@
 import {div, hr, li, span, ul} from "@cycle/dom";
 import Stream from "xstream";
 import {State} from "./index";
+import {priceAlertView} from "./priceAlertView";
 
 export const view = (state$: Stream<State>) =>
     state$.map((state) =>
@@ -10,6 +11,7 @@ export const view = (state$: Stream<State>) =>
                 span(".number", state.currentPrice.toLocaleString()),
                 span(".unit", "JPY"),
             ]),
+            priceAlertView(state.priceAlert),
             div(".position", [
                 span(".label", "Position"),
                 span(".number", state.position.toPriceString()),
