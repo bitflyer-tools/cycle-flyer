@@ -9,8 +9,11 @@ export const minimumOrderSize = 0.01;
 
 export const defaultTwapOrder: TwapOrder = { interval: 60, remaining: 0, slices: 5, totalSlices: 0 };
 
-export const sliceSize = (size: number, slices: number): number =>
-    slices > 0 ? Math.floor(size / slices * 100000000) / 100000000 : 0;
+export const sliceSize = (size: number, slices: number): number => {
+    if (!Number.isFinite(size) || size <= 0 || !Number.isInteger(slices) || slices <= 0) { return 0; }
+    const sliceUnits = orderUnits(size) / BigInt(slices);
+    return Number(`${sliceUnits}e-${orderPrecision}`);
+};
 
 export const isRunning = (twap: TwapOrder): boolean => twap.remaining > 0;
 
@@ -20,3 +23,14 @@ export const canStart = (twap: TwapOrder, size: number): boolean =>
     && twap.slices > 0
     && twap.interval > 0
     && sliceSize(size, twap.slices) >= minimumOrderSize;
+
+const orderPrecision = 8;
+
+const orderUnits = (size: number): bigint => {
+    const [coefficient, exponent = "0"] = size.toString().split("e");
+    const [whole, fraction = ""] = coefficient.split(".");
+    const digits = whole + fraction;
+    const unitDigits = whole.length + Number(exponent) + orderPrecision;
+    if (unitDigits <= 0) { return BigInt(0); }
+    return BigInt(digits.slice(0, unitDigits) + "0".repeat(Math.max(0, unitDigits - digits.length)));
+};
