@@ -7,6 +7,7 @@ import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
 import {Sources} from "./index";
 import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
+import {pollResponse} from "./pollResponse";
 
 export interface Actions {
     onCancelParentOrder$: Stream<string>;
@@ -48,11 +49,8 @@ export const intent = (sources: Sources): Actions => {
         sources.HTTP, onParentOrdersLoaded$, sources.socket.parentOrderEvent$, sources.socket.reconnect$,
     );
 
-    const onPositionsLoaded$ = sources.HTTP.select("positions")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .map((response) => JSON.parse(response.text))
-        .map((positions) => new Position(positions));
+    const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json) =>
+        isPositionList(json) ? new Position(json) : undefined);
 
     return {
         onCancelParentOrder$,
@@ -66,3 +64,8 @@ export const intent = (sources: Sources): Actions => {
         parentOrderRequests$: details.requests$,
     };
 };
+
+const isPositionList = (positions: unknown): boolean =>
+    Array.isArray(positions) && positions.every((position) =>
+        (position?.side === "BUY" || position?.side === "SELL")
+        && Number.isFinite(position.price) && Number.isFinite(position.size) && position.size > 0);
