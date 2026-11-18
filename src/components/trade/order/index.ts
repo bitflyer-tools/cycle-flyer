@@ -1,4 +1,5 @@
 import Stream from "xstream";
+import {Sound} from "../../../drivers/soundDriver";
 import {IFDOCOrder} from "../../../models/ifdocoOrder";
 import {Order} from "../../../models/order";
 import {OrderHistory} from "../../../models/orderHistory";
@@ -27,7 +28,7 @@ export interface State {
     twap: TwapOrder;
 }
 
-export const OrderComponent = (sources: Sources): Sinks => {
+export const OrderComponent = (sources: Sources): Sinks & { sound: Stream<Sound> } => {
     const state$ = sources.state.stream as any as Stream<State>;
     const actions = intent(sources);
     const reducer$ = model(actions);
@@ -38,6 +39,8 @@ export const OrderComponent = (sources: Sources): Sinks => {
         DOM: view$,
         HTTP: request$,
         router: Stream.never(),
+        sound: Stream.merge(actions.onOrderOutcome$, actions.onTwapSliceOutcome$)
+            .map(({ status }): Sound => status === "success" ? "success" : "failure"),
         state: reducer$ as any,
         storage: storage(state$),
     };

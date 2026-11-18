@@ -29,8 +29,11 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const cancelOrdersReducer$ = actions.onCancelOrders$
         .map((_) => (state: State) => ({ ...state, orders: [] as Order[], stopOrders: [] as StopOrder[] }));
 
-    const historyReducer$ = Stream.merge(actions.onHistoryCreated$, actions.onTwapSliceCreated$)
-        .map((history) => (state: State) => ({ ...state, histories: [history].concat(state.histories)}));
+    const historyReducer$ = Stream.merge(actions.onOrderOutcome$, actions.onTwapSliceOutcome$)
+        .map(({ histories }) => (state: State) => ({
+            ...state,
+            histories: histories.slice().reverse().concat(state.histories),
+        }));
 
     const isOrderingReducer$ = Stream.merge(
         actions.onClickMarketBuyButton$.mapTo(true),
@@ -40,7 +43,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         actions.onClickStopBuyButton$.mapTo(true),
         actions.onClickStopSellButton$.mapTo(true),
         actions.onClickClearButton$.mapTo(true),
-        actions.onHistoryCreated$.mapTo(false),
+        actions.onOrderOutcome$.mapTo(false),
     ).map((isOrdering) => (state: State) => ({ ...state, isOrdering }));
 
     const priceReducer$ = actions.onPriceChanged$
