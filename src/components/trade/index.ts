@@ -16,6 +16,7 @@ import "./index.styl";
 import {intent} from "./intent";
 import {model} from "./model";
 import {OrderComponent, State as OrderComponentState} from "./order";
+import {OrderRequestBatch} from "./order/request";
 import {request} from "./request";
 import {sound} from "./sound";
 import {State as SummaryComponentState} from "./summary";
@@ -42,6 +43,7 @@ export interface Sinks {
 }
 
 export interface State {
+    canceledParentOrderIds?: ReadonlySet<string>;
     currentPrice: number;
     histories: readonly OrderHistory[];
     orders: Order[];
@@ -54,7 +56,7 @@ export interface State {
 }
 
 export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
-    orderRequests: Stream<RequestInput>;
+    orderRequests: Stream<OrderRequestBatch>;
 } => {
     const summaryComponent = isolate(SummaryComponent, {
         state: {
@@ -97,9 +99,9 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
                 currentPrice: state.currentPrice,
                 histories: state.histories,
                 orders: state.orders,
+                parentStopOrders: state.parentStopOrders,
                 position: state.position,
                 price: state.price,
-                stopOrders: flattenStopOrders(state.parentStopOrders),
             },
             set: (state: State, orderComponentState: OrderComponentState) => ({
                 ...state,
