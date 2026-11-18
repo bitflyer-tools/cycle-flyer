@@ -10,7 +10,9 @@ export const stopOrdersOf = (parentOrder: any): StopOrder[] =>
         .map((parameter: any) => new StopOrder(parameter));
 
 export const putParentOrder = (parentStopOrders: ParentStopOrders, parentOrder: any): ParentStopOrders =>
-    ({ ...parentStopOrders, [parentOrder.parent_order_id]: stopOrdersOf(parentOrder) });
+    Object.prototype.hasOwnProperty.call(parentStopOrders, parentOrder.parent_order_id)
+        ? { ...parentStopOrders, [parentOrder.parent_order_id]: stopOrdersOf(parentOrder) }
+        : parentStopOrders;
 
 export const retainActive = (parentStopOrders: ParentStopOrders, activeParentOrders: { parent_order_id: string }[]): ParentStopOrders =>
     activeParentOrders

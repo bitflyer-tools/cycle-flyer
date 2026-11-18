@@ -7,8 +7,8 @@ import {model as tradeModel} from "../src/components/trade/model";
 import {State} from "../src/components/trade/order";
 import {intent} from "../src/components/trade/order/intent";
 import {model} from "../src/components/trade/order/model";
-import {request} from "../src/components/trade/order/request";
-import {retainActive} from "../src/models/parentStopOrders";
+import {orderRequests} from "../src/components/trade/order/request";
+import {flattenStopOrders, retainActive} from "../src/models/parentStopOrders";
 import {StopOrder} from "../src/models/stopOrder";
 
 test("Clear Orders cancels a standalone stop by parent order ID", () => {
@@ -29,10 +29,10 @@ test("A standalone stop stays visible until its parent cancellation succeeds", (
     const {childResponses, parentResponses, requests, state} = clearOrders(["JCO-stop"]);
 
     childResponses.shamefullySendNext(Stream.of<unknown>({}));
-    strictEqual(state().stopOrders.length, 1);
+    strictEqual(flattenStopOrders(state().parentStopOrders).length, 1);
 
     parentResponses.shamefullySendNext(Stream.of<unknown>({ request: requests[1] }));
-    deepStrictEqual(state().stopOrders, []);
+    deepStrictEqual(flattenStopOrders(state().parentStopOrders), []);
     deepStrictEqual(Object.keys(state().parentStopOrders), []);
 });
 
@@ -46,7 +46,7 @@ test("Concurrent parent cancellations leave failed orders visible", () => {
     failure$.shamefullySendError(new Error("Cancellation failed"));
     success$.shamefullySendNext({ request: requests[1] });
 
-    deepStrictEqual(state().stopOrders.map(({price}) => price), [200]);
+    deepStrictEqual(flattenStopOrders(state().parentStopOrders).map(({price}) => price), [200]);
     deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-failure", "JCO-pending-detail"]);
     strictEqual(JSON.parse(requests[3].send).parent_order_id, "JCO-pending-detail");
 });
@@ -76,7 +76,7 @@ test("A late active list and its details cannot restore a canceled stop", () => 
     sendParentDetail(details, "JCO-new", 300);
 
     deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-active", "JCO-new"]);
-    deepStrictEqual(state().stopOrders.map(({price}) => price), [200, 300]);
+    deepStrictEqual(flattenStopOrders(state().parentStopOrders).map(({price}) => price), [200, 300]);
 });
 
 function sendParentDetail(responses: Stream<Stream<unknown>>, id: string, price: number) {
@@ -119,7 +119,7 @@ function clearOrders(ids: string[], lastDetailPending = false) {
     const actions = intent(sources);
     const state$ = Stream.createWithMemory<State>();
     let currentState: State & TradeState;
-    model(actions).addListener({
+    model(actions, Stream.of(false)).addListener({
         next: (reducer) => {
             currentState = reducer(currentState)! as State & TradeState;
             state$.shamefullySendNext(currentState);
@@ -137,7 +137,7 @@ function clearOrders(ids: string[], lastDetailPending = false) {
         .map((_, index) => new StopOrder({ trigger_price: (index + 1) * 100 }));
     const loadedStops = Object.fromEntries(stopOrders.map((order, index) => [ids[index], [order]]));
     const parentStopOrders = retainActive(loadedStops, ids.map((id) => ({ parent_order_id: id })));
-    currentState = { ...currentState!, parentStopOrders, stopOrders };
+    currentState = { ...currentState!, parentStopOrders };
     state$.shamefullySendNext(currentState);
 
     Object.defineProperty(globalThis, "localStorage", {
@@ -145,7 +145,7 @@ function clearOrders(ids: string[], lastDetailPending = false) {
         value: { "api-key": "test-key", "api-secret": "test-secret" },
     });
     const requests: Array<{ url: string; method: string; send: string }> = [];
-    request(actions, state$).addListener({ next: (input) => requests.push(input as typeof requests[number]) });
+    orderRequests(actions, state$).addListener({ next: (batch) => requests.push(...batch.requests as typeof requests) });
     clicks$.shamefullySendNext(null);
 
     return { childResponses, details, lists, parentResponses, requests, state: () => currentState };

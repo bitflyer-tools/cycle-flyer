@@ -8,12 +8,4 @@ export class StopOrder {
         this.side = json.side;
         this.size = json.size;
     }
-
-    public isExcuted(currentPrice: number): boolean {
-        if (this.side === "BUY") {
-            return currentPrice >= this.price;
-        } else {
-            return currentPrice <= this.price;
-        }
-    }
 }
