@@ -10,6 +10,12 @@ Download the latest release from [GitHub Releases](https://github.com/bitflyer-t
 
 ![](./images/looking.png)
 
+## Quick start
+
+1. From [GitHub Releases](https://github.com/bitflyer-tools/cycle-flyer/releases/latest), run the Windows setup executable, extract the macOS ZIP on Apple Silicon, or install the Linux `.deb` or `.rpm` package on x86-64. Open Cycle Flyer.
+2. Open **Setting**, then enter your bitFlyer Lightning credentials in **API Key** and **API Secret**. To view account data, use a key with read permissions for collateral, positions, and orders.
+3. Return to **Trade** and check the `FX_BTC_JPY` order book and your account summary. You can do this without placing an order.
+
 ## Author
 
 [@unhappychoice](https://unhappychoice.com)
