@@ -1,5 +1,6 @@
 import { io, Socket } from "socket.io-client";
 import Stream from "xstream";
+import {Execution} from "../models/execution";
 import {ChildOrderEvent, ParentOrderEvent} from "../models/orderEvent";
 import {authenticate, privateChannelNames} from "./privateChannel";
 
@@ -15,14 +16,18 @@ export class SocketIOSource {
     public boardSnapshot$: Stream<object> = Stream.create();
     public board$: Stream<object> = Stream.create();
     public ticker$: Stream<object> = Stream.create();
-    public execution$: Stream<object> = Stream.create();
+    public execution$: Stream<Execution> = Stream.create();
+    public executionBatch$: Stream<Execution[]> = Stream.create();
     public childOrderEvent$: Stream<ChildOrderEvent> = Stream.create();
     public parentOrderEvent$: Stream<ParentOrderEvent> = Stream.create();
 
     private channels: { [channelName: string]: (message: any) => void } = {
         [`lightning_board_snapshot_${productCode}`]: (message) => this.boardSnapshot$.shamefullySendNext(message),
         [`lightning_board_${productCode}`]: (message) => this.board$.shamefullySendNext(message),
-        [`lightning_executions_${productCode}`]: (messages) => sendEach(this.execution$, messages),
+        [`lightning_executions_${productCode}`]: (messages: Execution[]) => {
+            this.executionBatch$.shamefullySendNext(messages);
+            sendEach(this.execution$, messages);
+        },
         child_order_events: (events) => sendEach(this.childOrderEvent$, events.filter(isTargetProduct)),
         parent_order_events: (events) => sendEach(this.parentOrderEvent$, events.filter(isTargetProduct)),
     };

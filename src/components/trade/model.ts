@@ -20,10 +20,11 @@ const defaultState: State = {
 export const model = (actions: Actions): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
-    const currentPriceReducer$ = actions.onExecutionCreated$
-        .map((execution: any) => (state: State) => {
-            if (state.boardComponentState) { state.boardComponentState.board.remove(execution.side, execution.price); }
-            return { ...state, currentPrice: execution.price };
+    const currentPriceReducer$ = actions.onExecutionBatch$
+        .filter((executions) => executions.length > 0)
+        .map((executions) => (state: State) => {
+            state.boardComponentState?.board.removeExecutions(executions);
+            return { ...state, currentPrice: executions[executions.length - 1].price };
         });
 
     const myExecutionReducer$ = actions.onMyExecutionCreated$
@@ -44,7 +45,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map((parentOrder) => (state: State) => withStopOrders(state, putParentOrder(state.parentStopOrders, parentOrder)));
 
     const stopOrdersDeleteReducer$ = actions.onExecutionCreated$
-        .map((execution: any) => (state: State) => {
+        .map((execution) => (state: State) => {
             const stopOrders = state.stopOrders.filter((order) => !order.isExcuted(execution.price));
             return { ...state, stopOrders };
         });

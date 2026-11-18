@@ -1,11 +1,13 @@
 import {Stream} from "xstream";
 import debounce from "xstream/extra/debounce";
+import {Execution} from "../../models/execution";
 import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
 import {Sources} from "./index";
 
 export interface Actions {
-    onExecutionCreated$: Stream<object>;
+    onExecutionCreated$: Stream<Execution>;
+    onExecutionBatch$: Stream<Execution[]>;
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
     onMyOrderChanged$: Stream<null>;
     onOrdersLoaded$: Stream<object[]>;
@@ -47,6 +49,7 @@ export const intent = (sources: Sources): Actions => {
 
     return {
         onExecutionCreated$,
+        onExecutionBatch$: sources.socket.executionBatch$,
         onMyExecutionCreated$,
         onMyOrderChanged$,
         onOrdersLoaded$,
