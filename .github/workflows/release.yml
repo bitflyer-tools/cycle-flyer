@@ -12,6 +12,15 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Require the tagged commit on master
+        run: |
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/master; then
+            echo "::error::The tagged commit must be in the history of master."
+            exit 1
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
