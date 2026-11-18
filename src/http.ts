@@ -98,6 +98,12 @@ export const stopOrder = (triggerPrice: number, size: number, side: string): Req
 export const cancelOrders = (): RequestInput =>
     requestInput("cancel-orders", "/v1/me/cancelallchildorders", "POST", { product_code: "FX_BTC_JPY" });
 
+export const cancelParentOrder = (parentOrderId: string): RequestInput =>
+    requestInput("cancel-parent-order", "/v1/me/cancelparentorder", "POST", {
+        parent_order_id: parentOrderId,
+        product_code: "FX_BTC_JPY",
+    });
+
 const requestInput = (category: string, path: string, method: string, json?: object, q?: object) => {
     const [key, secret] = getApiKeys();
 
