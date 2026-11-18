@@ -16,8 +16,10 @@ interface ActiveDetail {
 
 interface PendingDetail {
     entry: ActiveDetail;
-    request: RequestOptions;
+    requestId: symbol;
 }
+
+type DetailRequest = RequestOptions & { parentOrderDetailRequestId?: symbol };
 
 interface DetailUpdate {
     requests?: RequestOptions[];
@@ -35,8 +37,9 @@ export const parentOrderDetails = (
 
     const load = (id: string, entry: ActiveDetail): RequestOptions[] => {
         if (entry.loaded || pending.has(id)) { return []; }
-        const request = getParentOrder(id);
-        pending.set(id, { entry, request });
+        const requestId = Symbol();
+        const request: DetailRequest = { ...getParentOrder(id), parentOrderDetailRequestId: requestId };
+        pending.set(id, { entry, requestId });
         return [request];
     };
 
@@ -62,10 +65,10 @@ export const parentOrderDetails = (
         return {};
     };
 
-    const settle = (request: RequestOptions, detail?: ActiveParentOrder): DetailUpdate => {
+    const settle = (request: DetailRequest, detail?: ActiveParentOrder): DetailUpdate => {
         const id = (request.query as ActiveParentOrder).parent_order_id;
         const previous = pending.get(id);
-        if (!previous || previous.request !== request) { return {}; }
+        if (!previous || previous.requestId !== request.parentOrderDetailRequestId) { return {}; }
         pending.delete(id);
         const entry = active.get(id);
         if (!entry) { return {}; }

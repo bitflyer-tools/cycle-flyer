@@ -1,4 +1,5 @@
 import {RequestOptions, Response} from "@cycle/http";
+import {isolateSink} from "@cycle/http/lib/cjs/isolate";
 import {deepStrictEqual, strictEqual} from "node:assert";
 import {test} from "node:test";
 import Stream from "xstream";
@@ -27,6 +28,8 @@ test("retries only failed and new details after a list refresh", (t) => {
     trade.complete(trade.requests[1]);
     trade.list(["a", "b", "c"]);
     deepStrictEqual(trade.requestedIds(), ["a", "b", "a", "c"]);
+    trade.complete(trade.requests[0]);
+    deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["b"]);
     trade.complete(trade.requests[2]);
     deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["b", "a"]);
 });
@@ -90,8 +93,9 @@ const setup = (t: { after: (cleanup: () => void) => void }) => {
     const requests: RequestOptions[] = [];
     const listRequests: RequestOptions[] = [];
     const loaded: ActiveParentOrder[] = [];
-    const sink = request(actions).subscribe({ next: (input) => {
-        if (typeof input !== "object" || !input) { return; }
+    const request$ = request(actions).filter((input): input is string | RequestOptions => input !== null);
+    const sink = isolateSink(request$, "trade").subscribe({ next: (input) => {
+        if (typeof input !== "object") { return; }
         if (input.category === "parent-order") { requests.push(input); }
         if (input.category === "parent-orders") { listRequests.push(input); }
     } });
