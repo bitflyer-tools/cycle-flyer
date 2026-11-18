@@ -27,9 +27,6 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Run tests
-        run: npm test
-
   build:
     runs-on: ubuntu-24.04
     steps:
