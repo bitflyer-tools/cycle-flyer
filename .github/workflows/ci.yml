@@ -28,7 +28,7 @@ jobs:
         run: npm run lint
 
       - name: Run tests
-        run: node --test test/order-view.test.js test/socket-board.test.js
+        run: node --test test/*.test.js
 
   build:
     runs-on: ubuntu-24.04
