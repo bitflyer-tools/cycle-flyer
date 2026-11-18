@@ -21,6 +21,7 @@ export interface State {
     ifdocoOrder: IFDOCOrder;
     isOrdering: boolean;
     orders: Order[];
+    orderSigningError?: string;
     position: Position;
     price: number;
     size: number;

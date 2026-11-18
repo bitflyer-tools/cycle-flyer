@@ -45,6 +45,7 @@ export interface State {
     currentPrice: number;
     histories: OrderHistory[];
     orders: Order[];
+    orderSigningError?: string;
     parentStopOrders: ParentStopOrders;
     position: Position;
     price: number;
@@ -97,6 +98,7 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
                 currentPrice: state.currentPrice,
                 histories: state.histories,
                 orders: state.orders,
+                orderSigningError: state.orderSigningError,
                 position: state.position,
                 price: state.price,
                 stopOrders: flattenStopOrders(state.parentStopOrders),

@@ -1,4 +1,4 @@
-import {mockDOMSource} from "@cycle/dom";
+import {mockDOMSource, VNode} from "@cycle/dom";
 import {RequestOptions, Response, ResponseStream} from "@cycle/http";
 import {MainHTTPSource} from "@cycle/http/lib/cjs/MainHTTPSource";
 import {StateSource} from "@cycle/state";
@@ -10,7 +10,38 @@ import Stream, {MemoryStream} from "xstream";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
 import {saveCredentials} from "../src/credentials";
-import {authorizeRequest} from "../src/drivers/httpDriver";
+import {authorizeRequest, makeSignedHTTPDriver, unsignedRequests$} from "../src/drivers/httpDriver";
+
+test("shows a signing error for a market order without credentials and clears it on retry", async (t) => {
+    const order = setup(t);
+    await saveCredentials(null);
+    order.buyMarket();
+    equal(order.state.isOrdering, true);
+
+    await rejectUnsigned(order.requests[0]);
+    equal(order.state.isOrdering, false);
+    equal(order.signingAlert?.text, "Could not sign the order. Check your bitFlyer credentials in Settings.");
+
+    order.buyMarket();
+    equal(order.requests.length, 2);
+    equal(order.signingAlert, undefined);
+});
+
+test("shows a clear-orders signing error after returning from Settings", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    order.clearOrders();
+    equal(order.requests[0].category, "cancel-orders");
+    equal(order.state.isOrdering, true);
+    order.navigate("/setting");
+
+    await rejectUnsigned({ ...order.requests[0], send: {} });
+    order.navigate("/");
+    equal(order.state.isOrdering, false);
+    equal(order.signingAlert?.text,
+        "Could not sign the request to clear orders. Check your bitFlyer credentials in Settings.");
+});
 
 test("accepts a single IFDOCO submission until its delayed success", (t) => {
     const order = setup(t);
@@ -121,7 +152,6 @@ test("blocks TWAP with missing credentials and immediately after clearing them",
 });
 
 test("stops TWAP on signing failure and ignores old slices after a restart", async (t) => {
-    t.mock.timers.enable({ apis: ["setInterval"] });
     const order = setup(t);
     await saveCredentials({ key: "test-key", secret: "test-secret" });
     t.after(() => saveCredentials(null));
@@ -145,7 +175,22 @@ test("stops TWAP on signing failure and ignores old slices after a restart", asy
     equal(order.histories[0].name, "TWAP");
 });
 
+function rejectUnsigned(request: RequestOptions) {
+    return new Promise<void>((resolve, reject) => {
+        unsignedRequests$.filter((unsigned) => unsigned === request).take(1).addListener({ next: () => resolve() });
+        makeSignedHTTPDriver()(Stream.of(request)).select().addListener({
+            next: () => reject(new Error("An unsigned request reached the HTTP driver")),
+        });
+    });
+}
+
+function findSigningAlert(node: VNode): VNode | undefined {
+    if (node.sel === "div.order-signing-error") { return node; }
+    return node.children?.map((child) => typeof child === "string" ? undefined : findSigningAlert(child)).find(Boolean);
+}
+
 function setup(t: TestContext) {
+    t.mock.timers.enable({ apis: ["setInterval"] });
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
     t.after(() => {
@@ -160,6 +205,7 @@ function setup(t: TestContext) {
     const sellIFDOCO$ = Stream.create<null>();
     const buyTWAP$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
+    const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
@@ -167,6 +213,7 @@ function setup(t: TestContext) {
     const orderEvents = {
         ".twap-order-buttons": { ".buy-button": { click: buyTWAP$ } },
         ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
+        ".order-buttons": { ".clear-order-button": { click: clearOrders$ } },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buyIFDOCO$ },
             ".sell-button": { click: sellIFDOCO$ },
@@ -202,11 +249,14 @@ function setup(t: TestContext) {
     const requests: RequestOptions[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
-        if (options.category === "ifdoco-order" || options.category === "market-order" || options.category === "twap-order") {
+        if (["ifdoco-order", "market-order", "twap-order", "cancel-orders"].includes(options.category)) {
             requests.push(options);
         }
     } });
+    let vNode: VNode;
+    const dom = main.DOM.subscribe({ next: (node) => { vNode = node; } });
     t.after(() => {
+        dom.unsubscribe();
         http.unsubscribe();
         reducers.unsubscribe();
     });
@@ -215,6 +265,7 @@ function setup(t: TestContext) {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
         buyTWAP: () => buyTWAP$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
+        clearOrders: () => clearOrders$.shamefullySendNext(null),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         requests,
@@ -230,6 +281,7 @@ function setup(t: TestContext) {
             };
         },
         sellIFDOCO: () => sellIFDOCO$.shamefullySendNext(null),
+        get signingAlert() { return findSigningAlert(vNode); },
         get state() { return state!.trade!.orderComponentState!; },
     };
 }

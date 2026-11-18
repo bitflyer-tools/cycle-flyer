@@ -12,6 +12,10 @@ interface Submission extends RequestOptions {
     submissionId: symbol;
 }
 
+export const unsignedSubmissions$ = unsignedRequests$
+    .map((request) => request as Submission)
+    .filter(({ submissionId }) => !!submissionId);
+
 export const submissions = (requests$: Stream<RequestInput>, http: HTTPSource): Stream<Submission | null> => {
     const requested$ = requests$
         .map((request) => ({ ...request as RequestOptions, submissionId: Symbol() }));
@@ -23,9 +27,7 @@ export const submissions = (requests$: Stream<RequestInput>, http: HTTPSource): 
             response$.last().mapTo(submissionId).replaceError(() => Stream.of(submissionId)))
         .compose(flattenConcurrently);
 
-    const unsigned$ = unsignedRequests$
-        .map((request) => (request as Submission).submissionId)
-        .filter((id) => !!id);
+    const unsigned$ = unsignedSubmissions$.map(({ submissionId }) => submissionId);
 
     return Stream.merge(completed$, unsigned$, requested$)
         .fold<Submission | null>((pending, event) => {

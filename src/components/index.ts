@@ -13,7 +13,7 @@ import {OrderHistory} from "../models/orderHistory";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
 import {createParentOrderHistoryStream} from "./trade/order/history";
-import {submissions} from "./trade/order/request";
+import {submissions, unsignedSubmissions$} from "./trade/order/request";
 import {twapSigningFailed$} from "./trade/order/twapRequest";
 
 export interface Sources {
@@ -57,6 +57,14 @@ export const Root = (sources: Sources): Sinks => {
     const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<RequestInput>()).flatten();
     const pending$ = submissions(orderRequests$, sources.HTTP);
     const isOrdering$ = pending$.map((pending) => pending !== null);
+    const orderSigningError$ = Stream.merge(
+        pending$.filter((pending) => pending !== null).mapTo(undefined),
+        unsignedSubmissions$.map(({ category }) => category === "cancel-orders"
+            ? "Could not sign the request to clear orders. Check your bitFlyer credentials in Settings."
+            : "Could not sign the order. Check your bitFlyer credentials in Settings."),
+    );
+    const orderSigningReducer$ = orderSigningError$.map<Reducer<TradeState>>((orderSigningError) =>
+        (state) => state && { ...state, orderSigningError });
     const ifdocoHistories$: Stream<OrderHistory> = sources.HTTP.select("ifdoco-order")
         .map(createParentOrderHistoryStream)
         .compose(flattenConcurrently);
@@ -91,6 +99,7 @@ export const Root = (sources: Sources): Sinks => {
             credentialsChanging$.mapTo(resetTwap("TWAP stopped because credentials changed.")),
             twapSigningFailed$.mapTo(resetTwap("TWAP stopped because an order could not be signed.")),
             sources.state.isolateSink(ifdocoHistoryReducer$, tradeScope),
+            sources.state.isolateSink(orderSigningReducer$, tradeScope),
         ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
     };

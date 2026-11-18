@@ -12,6 +12,9 @@ import {twapSection} from "./twapView";
 export const view = (state$: Stream<State>): Stream<VNode> =>
     Stream.combine(state$, twapCredentialAvailability()).map(([state, canSign]) =>
         div(".order", [
+            ...(state.orderSigningError
+                ? [div(".order-signing-error", { attrs: { role: "alert" } }, state.orderSigningError)]
+                : []),
             sizeSection(state),
             hr(),
             marketSection(state),
