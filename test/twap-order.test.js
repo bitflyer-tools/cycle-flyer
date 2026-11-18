@@ -1,103 +1,165 @@
-const assert = require("node:assert/strict");
-const {test} = require("node:test");
-const Stream = require("xstream").default;
-const {twapIntent} = require("../src/components/trade/order/twapIntent");
-const {twapModel} = require("../src/components/trade/order/twapModel");
-const {twapRequest} = require("../src/components/trade/order/twapRequest");
-const {canStart, defaultTwapOrder} = require("../src/models/twapOrder");
+const assert = require('node:assert/strict');
+const { test } = require('node:test');
+const { buildSync } = require('esbuild');
+const Stream = require('xstream').default;
+
+const { outputFiles } = buildSync({
+  stdin: {
+    contents: [
+      'export { canStart, defaultTwapOrder, sliceSize } from "./src/models/twapOrder";',
+      'export { twapIntent } from "./src/components/trade/order/twapIntent";',
+      'export { twapModel } from "./src/components/trade/order/twapModel";',
+      'export { twapSection } from "./src/components/trade/order/twapView";',
+      'export { twapRequest } from "./src/components/trade/order/twapRequest";',
+    ].join('\n'),
+    resolveDir: process.cwd(),
+  },
+  bundle: true,
+  external: ['xstream'],
+  banner: { js: 'const window = {};' },
+  platform: 'node',
+  write: false,
+});
+const testModule = { exports: {} };
+new Function('require', 'module', 'localStorage', outputFiles[0].text)(
+  require, testModule, { 'api-key': 'test-key', 'api-secret': 'test-secret' },
+);
+const {
+  canStart, defaultTwapOrder, sliceSize, twapIntent, twapModel, twapRequest, twapSection,
+} = testModule.exports;
+const twap = { interval: 1, remaining: 0, slices: 29 };
+
+test('previews TWAP slices and enables both sides at the exact minimum', () => {
+  const { children: [, , , , status, buttons] } = twapSection({ size: 0.29, twap });
+  assert.equal(status.text, '0.01 x 29 every 1 sec');
+  assert.deepEqual(buttons.children.map((button) => button.data.attrs.disabled), [false, false]);
+});
+
+test('keeps both sides disabled one unit below the required total', () => {
+  const { children: [, , , , status, buttons] } = twapSection({ size: 0.28999999, twap });
+  assert.equal(status.text, '0.00999999 x 29 every 1 sec');
+  assert.deepEqual(buttons.children.map((button) => button.data.attrs.disabled), [true, true]);
+});
+
+test('discards fractional units and supports scientific notation', () => {
+  assert.equal(sliceSize(0.289999999, 29), 0.00999999);
+  assert.equal(sliceSize(2.9e-7, 29), 1e-8);
+  assert.equal(sliceSize(9e-9, 1), 0);
+});
+
+test('schedules all 29 requests at the exact minimum size', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const buy$ = Stream.create();
+  const requests = [];
+  const subscription = twapRequest({
+    onClickTwapBuyButton$: buy$,
+    onClickTwapSellButton$: Stream.never(),
+    onClickTwapCancelButton$: Stream.never(),
+  }, Stream.of({ size: 0.29, twap })).subscribe({ next: (request) => requests.push(request) });
+  t.after(() => subscription.unsubscribe());
+
+  buy$.shamefullySendNext({});
+  assert.equal(requests.length, 1);
+  for (let index = 1; index < twap.slices; index++) {
+    t.mock.timers.tick(1000);
+  }
+  assert.equal(requests.length, 29);
+  assert.ok(requests.every(({ category, send }) =>
+    category === 'twap-order' && JSON.parse(send).size === 0.01));
+});
 
 function setup(t, savedInterval, interval = defaultTwapOrder.interval) {
-    const buy$ = Stream.create();
-    const sell$ = Stream.create();
-    const dom = { select: () => dom, events: () => Stream.never() };
-    const actions = {
-        ...twapIntent({
-            DOM: dom,
-            HTTP: { select: () => Stream.never() },
-            storage: { local: { getItem: (key) => Stream.of(key === "twap-interval" ? savedInterval : null) } },
-        }),
-        onClickTwapBuyButton$: buy$,
-        onClickTwapSellButton$: sell$,
-    };
-    let state = { size: 0.03, twap: { ...defaultTwapOrder, interval, slices: 3 } };
-    const state$ = Stream.createWithMemory();
-    state$.shamefullySendNext(state);
-    const modelSubscription = twapModel(actions).subscribe({
-        next: (reducer) => {
-            state = reducer(state);
-            state$.shamefullySendNext(state);
-        },
-    });
-    const requests = [];
-    const requestSubscription = twapRequest(actions, state$).subscribe({
-        next: (request) => requests.push(request),
-    });
-    t.after(() => {
-        modelSubscription.unsubscribe();
-        requestSubscription.unsubscribe();
-    });
-    return { buy$, sell$, requests, getState: () => state };
+  const buy$ = Stream.create();
+  const sell$ = Stream.create();
+  const dom = { select: () => dom, events: () => Stream.never() };
+  const actions = {
+    ...twapIntent({
+      DOM: dom,
+      HTTP: { select: () => Stream.never() },
+      storage: { local: { getItem: (key) => Stream.of(key === "twap-interval" ? savedInterval : null) } },
+    }),
+    onClickTwapBuyButton$: buy$,
+    onClickTwapSellButton$: sell$,
+  };
+  let state = { size: 0.03, twap: { ...defaultTwapOrder, interval, slices: 3 } };
+  const state$ = Stream.createWithMemory();
+  state$.shamefullySendNext(state);
+  const modelSubscription = twapModel(actions).subscribe({
+    next: (reducer) => {
+      state = reducer(state);
+      state$.shamefullySendNext(state);
+    },
+  });
+  const requests = [];
+  const requestSubscription = twapRequest(actions, state$).subscribe({
+    next: (request) => requests.push(request),
+  });
+  t.after(() => {
+    modelSubscription.unsubscribe();
+    requestSubscription.unsubscribe();
+  });
+  return { buy$, sell$, requests, getState: () => state };
 }
 
 test("TWAP start eligibility respects the browser timer limit", () => {
-    const eligible = (interval) => canStart({ ...defaultTwapOrder, interval, slices: 3 }, 0.03);
-    assert.equal(eligible(2147483.647), true);
-    for (const interval of [2147483.648, 2147484, Number.MAX_VALUE, Infinity, -Infinity, NaN, 0, -1]) {
-        assert.equal(eligible(interval), false, String(interval));
-    }
+  const eligible = (interval) => canStart({ ...defaultTwapOrder, interval, slices: 3 }, 0.03);
+  assert.equal(eligible(2147483.647), true);
+  for (const interval of [2147483.648, 2147484, Number.MAX_VALUE, Infinity, -Infinity, NaN, 0, -1]) {
+    assert.equal(eligible(interval), false, String(interval));
+  }
 });
 
 test("invalid saved intervals keep TWAP idle with no order requests", (t) => {
-    for (const interval of ["2147484", "Infinity", "-Infinity", "NaN"]) {
-        const { buy$, sell$, requests, getState } = setup(t, interval);
-        assert.equal(canStart(getState().twap, 0.03), false, interval);
-        buy$.shamefullySendNext(null);
-        sell$.shamefullySendNext(null);
-        assert.equal(getState().twap.remaining, 0, interval);
-        assert.deepEqual(requests, [], interval);
-    }
+  for (const interval of ["2147484", "Infinity", "-Infinity", "NaN"]) {
+    const { buy$, sell$, requests, getState } = setup(t, interval);
+    assert.equal(canStart(getState().twap, 0.03), false, interval);
+    buy$.shamefullySendNext(null);
+    sell$.shamefullySendNext(null);
+    assert.equal(getState().twap.remaining, 0, interval);
+    assert.deepEqual(requests, [], interval);
+  }
 });
 
 test("the scheduler rejects invalid intervals even when directly supplied in state", (t) => {
-    for (const interval of [2147484, Number.MAX_VALUE, Infinity, NaN]) {
-        const { buy$, sell$, requests, getState } = setup(t, null, interval);
-        buy$.shamefullySendNext(null);
-        sell$.shamefullySendNext(null);
-        assert.equal(getState().twap.remaining, 0, String(interval));
-        assert.deepEqual(requests, [], String(interval));
-    }
+  for (const interval of [2147484, Number.MAX_VALUE, Infinity, NaN]) {
+    const { buy$, sell$, requests, getState } = setup(t, null, interval);
+    buy$.shamefullySendNext(null);
+    sell$.shamefullySendNext(null);
+    assert.equal(getState().twap.remaining, 0, String(interval));
+    assert.deepEqual(requests, [], String(interval));
+  }
 });
 
 test("a valid saved interval submits the first slice immediately and spaces the rest", (t) => {
-    const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-    Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: { "api-key": "test-key", "api-secret": "test-secret" },
-    });
-    t.after(() => {
-        if (originalStorage) Object.defineProperty(globalThis, "localStorage", originalStorage);
-        else delete globalThis.localStorage;
-    });
-    t.mock.timers.enable({ apis: ["setInterval"] });
-    const { buy$, requests, getState } = setup(t, "2.5");
-    assert.equal(getState().twap.interval, 2.5);
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const { buy$, requests, getState } = setup(t, "2.5");
+  assert.equal(getState().twap.interval, 2.5);
 
-    buy$.shamefullySendNext(null);
-    assert.equal(requests.length, 1);
-    t.mock.timers.tick(2499);
-    assert.equal(requests.length, 1);
-    t.mock.timers.tick(1);
-    assert.equal(requests.length, 2);
-    t.mock.timers.tick(2499);
-    assert.equal(requests.length, 2);
-    t.mock.timers.tick(1);
-    t.mock.timers.tick(2500);
-    assert.deepEqual(requests.map(({ category, send }) => {
-        const { side, size } = JSON.parse(send);
-        return [category, side, size];
-    }), [
-        ["twap-order", "BUY", 0.01],
-        ["twap-order", "BUY", 0.01],
-        ["twap-order", "BUY", 0.01],
-    ]);
+  buy$.shamefullySendNext(null);
+  assert.equal(requests.length, 1);
+  t.mock.timers.tick(2499);
+  assert.equal(requests.length, 1);
+  t.mock.timers.tick(1);
+  assert.equal(requests.length, 2);
+  t.mock.timers.tick(2499);
+  assert.equal(requests.length, 2);
+  t.mock.timers.tick(1);
+  t.mock.timers.tick(2500);
+  assert.deepEqual(requests.map(({ category, send }) => {
+    const { side, size } = JSON.parse(send);
+    return [category, side, size];
+  }), [
+    ["twap-order", "BUY", 0.01],
+    ["twap-order", "BUY", 0.01],
+    ["twap-order", "BUY", 0.01],
+  ]);
+});
+
+test('shows the timer limit and disables both sides for an overflowing interval', () => {
+  const { children: [, , , intervalHelp, , buttons] } = twapSection({
+    size: 0.29,
+    twap: { ...twap, interval: 2147483.648 },
+  });
+  assert.match(intervalHelp.text, /2147483\.647 seconds/);
+  assert.deepEqual(buttons.children.map((button) => button.data.attrs.disabled), [true, true]);
 });

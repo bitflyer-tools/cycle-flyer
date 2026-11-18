@@ -27,12 +27,6 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test trade orders
-        run: npm test
-
-      - name: Test release workflow
-        run: node --test test/release-workflow.test.js
-
   build:
     runs-on: ubuntu-24.04
     steps:
@@ -46,6 +40,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Test
+        run: npm test
 
       - name: Build
         run: npm run build

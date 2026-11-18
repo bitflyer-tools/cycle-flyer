@@ -9,6 +9,7 @@ import "./index.styl";
 import {groupSizeStorageKey, intent} from "./intent";
 import {model} from "./model";
 import {request} from "./request";
+import {synchronizeBoard} from "./synchronizeBoard";
 import {view} from "./view";
 
 export interface State {
@@ -23,7 +24,8 @@ export interface State {
 
 export const BoardComponent = (sources: Sources): Sinks => {
     const actions = intent(sources);
-    const reducer$ = model(actions);
+    const boardReducer$ = synchronizeBoard(sources.socket.board$, sources.HTTP.select("board"));
+    const reducer$ = model(actions, boardReducer$);
     const view$ = view(sources.state.stream as any);
     const request$ = request();
 

@@ -14,15 +14,15 @@ const defaultState: State = {
     ifdocoOrder: new IFDOCOrder(10000, 50),
     isOrdering: false,
     orders: [],
+    parentStopOrders: {},
     position: new Position([]),
     price: 0,
     size: 0,
-    stopOrders: [],
     triggerPrice: 0,
     twap: defaultTwapOrder,
 };
 
-export const model = (actions: Actions): Stream<Reducer<State>> => {
+export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
     const cancelOrdersReducer$ = actions.onCancelOrders$
@@ -31,16 +31,8 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const historyReducer$ = Stream.merge(actions.onHistoryCreated$, actions.onTwapSliceCreated$)
         .map((history) => (state: State) => ({ ...state, histories: [history].concat(state.histories)}));
 
-    const isOrderingReducer$ = Stream.merge(
-        actions.onClickMarketBuyButton$.mapTo(true),
-        actions.onClickMarketSellButton$.mapTo(true),
-        actions.onClickLimitBuyButton$.mapTo(true),
-        actions.onClickLimitSellButton$.mapTo(true),
-        actions.onClickStopBuyButton$.mapTo(true),
-        actions.onClickStopSellButton$.mapTo(true),
-        actions.onClickClearButton$.mapTo(true),
-        actions.onHistoryCreated$.mapTo(false),
-    ).map((isOrdering) => (state: State) => ({ ...state, isOrdering }));
+    const isOrderingReducer$ = isOrdering$
+        .map((isOrdering) => (state: State) => ({ ...state, isOrdering }));
 
     const priceReducer$ = actions.onPriceChanged$
         .map((price) => (state: State) => ({ ...state, price }));
