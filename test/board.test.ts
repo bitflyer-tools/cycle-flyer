@@ -1,63 +1,104 @@
-import {deepStrictEqual, strictEqual} from "node:assert";
+import {VNode} from "@cycle/dom";
+import {deepStrictEqual} from "node:assert/strict";
 import {test} from "node:test";
+import Stream from "xstream";
+import {State} from "../src/components/trade/board";
+import {view} from "../src/components/trade/board/view";
 import {Board} from "../src/models/board";
-import {BoardOrder} from "../src/models/boardOrder";
+import {Position} from "../src/models/position";
+import {StopOrder} from "../src/models/stopOrder";
 
-test("merge replaces, removes, and sorts levels on both sides", () => {
-    const board = new Board({
-        asks: [{ price: 110, size: 1 }, { price: 120, size: 2 }, { price: 130, size: 3 }],
-        bids: [{ price: 100, size: 4 }, { price: 90, size: 5 }, { price: 80, size: 6 }],
+test("renders summed active and stop markers on their display sides", () => {
+    const state = boardState();
+    const orders = [
+        { side: "SELL", price: 101, size: 0.5 },
+        { side: "SELL", price: 109, size: 0.25 },
+        { side: "BUY", price: 101, size: 1 },
+        { side: "BUY", price: 109, size: 2 },
+    ];
+    const stopOrders = [
+        { side: "BUY", price: 111, size: 4 },
+        { side: "BUY", price: 119, size: 8 },
+        { side: "SELL", price: 91, size: 16 },
+        { side: "SELL", price: 99, size: 32 },
+        { side: "BUY", price: 300, size: 64 },
+    ].map((order) => new StopOrder(order));
+
+    view(Stream.of({ ...state, orders, stopOrders })).addListener({
+        next: (board) => deepStrictEqual(markers(board), [
+            ["div.ask", 110, [["span.my-order", "0.75"], ["span.my-stop-order", "12"]]],
+            ["div.ask", 120, []],
+            ["div.bid", 100, [["span.my-order", "3"], ["span.my-stop-order", "48"]]],
+            ["div.bid", 90, []],
+        ]),
     });
-
-    const result = board.merge(
-        [{ price: 140, size: 7 }, { price: 120, size: 0 }, { price: 110, size: 8 }],
-        [{ price: 70, size: 9 }, { price: 90, size: 0 }, { price: 100, size: 10 }],
-    );
-
-    strictEqual(result, board);
-    deepStrictEqual(board.asks, [
-        new BoardOrder({ price: 110, size: 8 }),
-        new BoardOrder({ price: 130, size: 3 }),
-        new BoardOrder({ price: 140, size: 7 }),
-    ]);
-    deepStrictEqual(board.bids, [
-        new BoardOrder({ price: 100, size: 10 }),
-        new BoardOrder({ price: 80, size: 6 }),
-        new BoardOrder({ price: 70, size: 9 }),
-    ]);
 });
 
-test("merge preserves levels on a side with no updates", () => {
-    const board = new Board({
-        asks: [{ price: 110, size: 1 }],
-        bids: [{ price: 100, size: 2 }],
-    });
-    const originalBid = board.bids[0];
-
-    board.merge([{ price: 100, size: 0 }, { price: 120, size: 0 }], []);
-
-    deepStrictEqual(board.asks, [new BoardOrder({ price: 110, size: 1 })]);
-    deepStrictEqual(board.bids, [originalBid]);
-    strictEqual(board.bids[0], originalBid);
-});
-
-test("merge reads an existing price once when checking many changed prices", () => {
-    const board = new Board({ asks: [], bids: [] });
-    let priceReads = 0;
-    board.asks = [{
+test("reuses marker totals until their order list or group size changes", (context) => {
+    context.mock.timers.enable({ apis: ["setInterval"] });
+    const reads = { active: 0, stop: 0 };
+    const orders = [{
+        side: "SELL",
         get price() {
-            priceReads++;
-            return 200;
+            reads.active++;
+            return 105;
         },
         size: 1,
     }];
-    const updates = Array.from({ length: 100 }, (_, index) => new BoardOrder({
-        price: 201 + index,
-        size: 0,
-    }));
+    const stop = new StopOrder({ side: "BUY", price: 115, size: 2 });
+    Object.defineProperty(stop, "price", {
+        get: () => {
+            reads.stop++;
+            return 115;
+        },
+    });
+    const state = { ...boardState(), orders, stopOrders: [stop] };
+    const state$ = Stream.create<State>();
+    const rendered: VNode[] = [];
+    view(state$).addListener({ next: (board) => rendered.push(board) });
 
-    board.merge(updates, []);
-
-    strictEqual(board.asks.length, 1);
-    strictEqual(priceReads, 1);
+    state$.shamefullySendNext(state);
+    deepStrictEqual(reads, { active: 1, stop: 1 });
+    context.mock.timers.tick(100);
+    state$.shamefullySendNext({ ...state, board: boardState().board });
+    deepStrictEqual(reads, { active: 1, stop: 1 });
+    context.mock.timers.tick(100);
+    const updatedOrders = { ...state, orders: [...orders] };
+    state$.shamefullySendNext(updatedOrders);
+    deepStrictEqual(reads, { active: 2, stop: 1 });
+    context.mock.timers.tick(100);
+    const updatedStops = { ...updatedOrders, stopOrders: [...state.stopOrders] };
+    state$.shamefullySendNext(updatedStops);
+    deepStrictEqual(reads, { active: 2, stop: 2 });
+    context.mock.timers.tick(100);
+    state$.shamefullySendNext({ ...updatedStops, groupedSize: 5 });
+    deepStrictEqual(reads, { active: 3, stop: 3 });
+    deepStrictEqual(markers(rendered[4])[0], ["div.ask", 105, [["span.my-order", "1"]]]);
+    state$.shamefullySendComplete();
 });
+
+function boardState(): State {
+    return {
+        board: new Board({
+            asks: [{ price: 105, size: 1 }, { price: 115, size: 1 }],
+            bids: [{ price: 105, size: 1 }, { price: 95, size: 1 }],
+        }),
+        currentPrice: 0,
+        groupedSize: 10,
+        orders: [],
+        position: new Position([]),
+        price: 0,
+        stopOrders: [],
+    };
+}
+
+function markers(board: VNode) {
+    const [, asks, bids] = board.children as VNode[];
+    return (asks.children as VNode[]).concat(bids.children as VNode[]).map((row) => [
+        row.sel,
+        row.data?.dataset?.price,
+        (row.children as VNode[])
+            .filter((child) => child?.sel === "span.my-order" || child?.sel === "span.my-stop-order")
+            .map((child) => [child.sel, child.text]),
+    ]);
+}
