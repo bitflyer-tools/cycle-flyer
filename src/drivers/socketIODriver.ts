@@ -13,16 +13,15 @@ export const makeSocketIODriver = () => (): SocketIOSource => {
 const productCode = "FX_BTC_JPY";
 
 export class SocketIOSource {
-    public boardSnapshot$: Stream<object> = Stream.create();
     public board$: Stream<object> = Stream.create();
     public ticker$: Stream<object> = Stream.create();
     public execution$: Stream<Execution> = Stream.create();
     public executionBatch$: Stream<Execution[]> = Stream.create();
     public childOrderEvent$: Stream<ChildOrderEvent> = Stream.create();
+    public reconnect$: Stream<null> = Stream.create();
     public parentOrderEvent$: Stream<ParentOrderEvent> = Stream.create();
 
     private channels: { [channelName: string]: (message: any) => void } = {
-        [`lightning_board_snapshot_${productCode}`]: (message) => this.boardSnapshot$.shamefullySendNext(message),
         [`lightning_board_${productCode}`]: (message) => this.board$.shamefullySendNext(message),
         [`lightning_executions_${productCode}`]: (messages: Execution[]) => {
             this.executionBatch$.shamefullySendNext(messages);
@@ -35,9 +34,12 @@ export class SocketIOSource {
     constructor(client: Socket) {
         const publicChannelNames = Object.keys(this.channels).filter((name) => privateChannelNames.indexOf(name) < 0);
 
+        let connectedOnce = false;
         client.on("connect", () => {
             publicChannelNames.forEach((channelName) => client.emit("subscribe", channelName));
             authenticate(client, () => privateChannelNames.forEach((channelName) => client.emit("subscribe", channelName)));
+            if (connectedOnce) { this.reconnect$.shamefullySendNext(null); }
+            connectedOnce = true;
         });
 
         Object.keys(this.channels).forEach((channelName) => client.on(channelName, this.channels[channelName]));

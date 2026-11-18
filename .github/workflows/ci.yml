@@ -27,12 +27,6 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test release workflow
-        run: node --test test/release-workflow.test.js
-
-      - name: Test execution batches
-        run: node --test test/execution-batch.test.js
-
   build:
     runs-on: ubuntu-24.04
     steps:

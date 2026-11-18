@@ -18,6 +18,7 @@ function setup(t) {
     let state;
     const snapshots = [];
     const subscription = model({
+        onCancelParentOrder$: Stream.never(),
         onExecutionBatch$: executionBatch$,
         onMyExecutionCreated$: Stream.never(),
         onOrdersLoaded$: Stream.never(),
@@ -28,9 +29,11 @@ function setup(t) {
         next: (reducer) => {
             state = reducer(state);
             state = { ...state, boardComponentState: { board } };
+            const stopOrders = flattenStopOrders(state.parentStopOrders);
             snapshots.push({
                 price: state.currentPrice,
-                stops: flattenStopOrders(state.parentStopOrders).map((order) => order.price),
+                stopOrders,
+                stops: stopOrders.map((order) => order.price),
             });
         },
     });
@@ -47,7 +50,8 @@ test("a public execution batch prunes the board and updates the price while the 
     parentOrder$.shamefullySendNext(parentOrder);
 
     assert.deepEqual(board.asks.map(({ price }) => price), [110]);
-    assert.deepEqual(snapshots.slice(beforeExecution - 1), [
+    assert.equal(snapshots[beforeExecution].stopOrders, snapshots[beforeExecution - 1].stopOrders);
+    assert.deepEqual(snapshots.slice(beforeExecution - 1).map(({ price, stops }) => ({ price, stops })), [
         { price: 0, stops: [110] },
         { price: 108, stops: [110] },
         { price: 108, stops: [110] },

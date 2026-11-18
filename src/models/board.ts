@@ -87,7 +87,7 @@ export class Board {
         if (priceSize > 99 && Object.keys(prices).length > 0) {
             const min = Math.min.apply(null, Object.keys(prices).map((price) => +price));
             const max = Math.max.apply(null, Object.keys(prices).map((price) => +price));
-            const keys = Array((max - min) / priceSize).fill(priceSize).map((value, index) => min + index * value);
+            const keys = Array((max - min) / priceSize + 1).fill(priceSize).map((value, index) => min + index * value);
             return keys.map((key) => new BoardOrder({ price: +key, size: +(prices[key] || 0) }));
         }
 
