@@ -5,8 +5,10 @@
   "main": "srcElectron/index.js",
   "scripts": {
     "build": "node fuse",
+    "test:prepare": "esbuild test/orderSubmission.test.ts test/trade-stop-orders.test.js --bundle --packages=external --platform=node --banner:js=\"globalThis.window = undefined;\" --loader:.styl=empty --sourcemap=inline --outdir=out/test --out-extension:.js=.cjs",
+    "test": "npm run test:prepare && node --test test/dev-server.test.js test/position.test.cjs test/release-workflow.test.js \"out/test/*.test.cjs\"",
     "lint": "eslint 'src/**/*.ts'",
-    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include=\"src/**/*.ts\"",
+    "test:coverage": "npm run test:prepare && node --enable-source-maps --test --experimental-test-coverage --test-coverage-exclude=\"**/node_modules/**\" --test-coverage-include=\"{src/**/*.ts,out/test/*.cjs}\" test/dev-server.test.js test/position.test.cjs test/release-workflow.test.js \"out/test/*.test.cjs\"",
     "start": "node fuse.dev",
     "start:electron": "electron-forge start --inspect-electron",
     "package": "electron-forge package",

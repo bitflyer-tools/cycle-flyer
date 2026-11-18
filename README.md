@@ -10,6 +10,17 @@ Download the latest release from [GitHub Releases](https://github.com/bitflyer-t
 
 ![](./images/looking.png)
 
+## Quick start
+
+1. Download the installer or archive for your platform from [GitHub Releases](https://github.com/bitflyer-tools/cycle-flyer/releases/latest).
+2. Follow the instructions for your platform.
+   - **Windows** — Run the Setup executable.
+   - **macOS (Apple Silicon, `arm64`)** — Extract the ZIP.
+   - **Linux (x86-64)** — Install the `.deb` (`amd64`) or `.rpm` (`x86_64`) package for your distribution.
+3. Open Cycle Flyer. On the **Trade** screen, check the bid and ask prices and the spread in the order book. Use **−** and **+** next to **Group** to adjust the price grouping.
+
+You can view the order book without an API key.
+
 ## Tests
 
 With Node.js 24, run `npm ci` and then `npm run test:coverage` to run the full test suite and print the coverage report.
