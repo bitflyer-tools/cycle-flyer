@@ -14,10 +14,18 @@ export const putParentOrder = (parentStopOrders: ParentStopOrders, parentOrder: 
         ? { ...parentStopOrders, [parentOrder.parent_order_id]: stopOrdersOf(parentOrder) }
         : parentStopOrders;
 
-export const retainActive = (parentStopOrders: ParentStopOrders, activeParentOrders: any[]): ParentStopOrders =>
+export const retainActive = (parentStopOrders: ParentStopOrders, activeParentOrders: { parent_order_id: string }[]): ParentStopOrders =>
     activeParentOrders
         .map((order) => order.parent_order_id)
         .reduce((acc: ParentStopOrders, id: string) => ({ ...acc, [id]: parentStopOrders[id] || [] }), {});
 
-export const flattenStopOrders = (parentStopOrders: ParentStopOrders): StopOrder[] =>
-    Object.keys(parentStopOrders).reduce((acc: StopOrder[], id) => acc.concat(parentStopOrders[id]), []);
+export const flattenStopOrders = (parentStopOrders: ParentStopOrders): StopOrder[] => {
+    const cached = flattenedStopOrders.get(parentStopOrders);
+    if (cached) { return cached; }
+
+    const orders = Object.keys(parentStopOrders).reduce((acc: StopOrder[], id) => acc.concat(parentStopOrders[id]), []);
+    flattenedStopOrders.set(parentStopOrders, orders);
+    return orders;
+};
+
+const flattenedStopOrders = new WeakMap<ParentStopOrders, StopOrder[]>();

@@ -39,20 +39,28 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const positionReducer$ = actions.onPositionsLoaded$
         .map((position) => (state: State) => ({ ...state, position }));
 
+    const cancelParentOrderReducer$ = actions.onCancelParentOrder$
+        .map((id) => (state: State) => {
+            const parentStopOrders = { ...state.parentStopOrders };
+            delete parentStopOrders[id];
+            const canceledParentOrderIds = new Set(state.canceledParentOrderIds).add(id);
+            return { ...state, canceledParentOrderIds, parentStopOrders };
+        });
+
     const parentOrdersReducer$ = actions.onParentOrdersLoaded$
-        .map((parentOrders) => (state: State) => ({
-            ...state,
-            parentStopOrders: retainActive(state.parentStopOrders, parentOrders),
-        }));
+        .map((parentOrders) => (state: State) => {
+            const activeOrders = parentOrders.filter(({ parent_order_id }) => !state.canceledParentOrderIds?.has(parent_order_id));
+            return { ...state, parentStopOrders: retainActive(state.parentStopOrders, activeOrders) };
+        });
 
     const parentOrderReducer$ = actions.onParentOrderLoaded$
-        .map((parentOrder) => (state: State) => ({
-            ...state,
-            parentStopOrders: putParentOrder(state.parentStopOrders, parentOrder),
-        }));
+        .map((parentOrder) => (state: State) => state.canceledParentOrderIds?.has(parentOrder.parent_order_id)
+            ? state
+            : { ...state, parentStopOrders: putParentOrder(state.parentStopOrders, parentOrder) });
 
     return Stream.merge(
         defaultReducer$,
+        cancelParentOrderReducer$,
         currentPriceReducer$,
         myExecutionReducer$,
         ordersReducer$,

@@ -19,7 +19,7 @@ export const getOrders = (): RequestInput =>
 export const getParentOrders = (): RequestInput =>
     requestInput("parent-orders", "/v1/me/getparentorders", "GET", undefined, { parent_order_state: "ACTIVE" });
 
-export const getParentOrder = (parentOrderId: number): RequestInput =>
+export const getParentOrder = (parentOrderId: string): RequestOptions =>
     requestInput("parent-order", "/v1/me/getparentorder", "GET", undefined, { parent_order_id: parentOrderId });
 
 export const marketOrder = (size: number, side: string): RequestInput => {
@@ -97,6 +97,12 @@ export const stopOrder = (triggerPrice: number, size: number, side: string): Req
 
 export const cancelOrders = (): RequestInput =>
     requestInput("cancel-orders", "/v1/me/cancelallchildorders", "POST", { product_code: "FX_BTC_JPY" });
+
+export const cancelParentOrder = (parentOrderId: string): RequestInput =>
+    requestInput("cancel-parent-order", "/v1/me/cancelparentorder", "POST", {
+        parent_order_id: parentOrderId,
+        product_code: "FX_BTC_JPY",
+    });
 
 const requestInput = (category: string, path: string, method: string, json?: object, q?: object) => {
     const [key, secret] = getApiKeys();
