@@ -1,9 +1,11 @@
+import {RequestOptions} from "@cycle/http";
 import {Stream} from "xstream";
 import debounce from "xstream/extra/debounce";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
 import {Sources} from "./index";
+import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
 import {pollResponse} from "./pollResponse";
 
 export interface Actions {
@@ -12,8 +14,9 @@ export interface Actions {
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
     onMyOrderChanged$: Stream<null>;
     onOrdersLoaded$: Stream<object[]>;
-    onParentOrderLoaded$: Stream<{ parent_order_id: string }>;
-    onParentOrdersLoaded$: Stream<{ parent_order_id: string }[]>;
+    onParentOrderLoaded$: Stream<ActiveParentOrder>;
+    onParentOrdersLoaded$: Stream<ActiveParentOrder[]>;
+    parentOrderRequests$: Stream<RequestOptions>;
     onPositionsLoaded$: Stream<Position>;
 }
 
@@ -30,6 +33,7 @@ export const intent = (sources: Sources): Actions => {
     const onMyOrderChanged$ = Stream.merge(
         sources.socket.childOrderEvent$.mapTo(null),
         sources.socket.parentOrderEvent$.mapTo(null),
+        sources.socket.reconnect$,
     ).compose(debounce(500));
 
     const onOrdersLoaded$ = sources.HTTP.select("orders")
@@ -42,10 +46,9 @@ export const intent = (sources: Sources): Actions => {
         .flatten()
         .map((response) => JSON.parse(response.text));
 
-    const onParentOrderLoaded$ = sources.HTTP.select("parent-order")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .map((response) => JSON.parse(response.text));
+    const details = parentOrderDetails(
+        sources.HTTP, onParentOrdersLoaded$, sources.socket.parentOrderEvent$, sources.socket.reconnect$,
+    );
 
     const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json) =>
         isPositionList(json) ? new Position(json) : undefined);
@@ -56,9 +59,10 @@ export const intent = (sources: Sources): Actions => {
         onMyExecutionCreated$,
         onMyOrderChanged$,
         onOrdersLoaded$,
-        onParentOrderLoaded$,
+        onParentOrderLoaded$: details.loaded$,
         onParentOrdersLoaded$,
         onPositionsLoaded$,
+        parentOrderRequests$: details.requests$,
     };
 };
 

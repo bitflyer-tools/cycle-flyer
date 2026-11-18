@@ -7,7 +7,7 @@ const Stream = require('xstream').default;
 
 const { outputFiles } = buildSync({
   stdin: {
-    contents: ['board', 'trade', 'summary'].flatMap((component) => {
+    contents: ['trade', 'summary'].flatMap((component) => {
       const directory = component === 'trade' ? 'trade' : `trade/${component}`;
       return ['intent', 'model'].map((name) =>
         `export { ${name} as ${component}_${name} } from "./src/components/${directory}/${name}";`);
@@ -24,13 +24,6 @@ runInNewContext(outputFiles[0].text, { module: testModule, require });
 const components = testModule.exports;
 
 const tests = [
-  {
-    component: 'board', category: 'board',
-    first: { asks: [{ price: 102, size: 1 }], bids: [] },
-    invalid: [{ asks: [{ price: 102 }], bids: [] }, { asks: [] }],
-    next: { asks: [{ price: 103, size: 1 }], bids: [] },
-    read: (state) => state.board.asks[0].price, expected: [102, 103],
-  },
   {
     component: 'trade', category: 'positions',
     first: [{ side: 'SELL', price: 100, size: 1 }],
@@ -61,7 +54,7 @@ for (const { component, category, first, invalid, next, read, expected } of test
     const actions = components[`${component}_intent`]({
       DOM: dom,
       storage: { local: { getItem: () => idle } },
-      socket: { board$: idle, execution$: idle, childOrderEvent$: idle, parentOrderEvent$: idle },
+      socket: { board$: idle, execution$: idle, childOrderEvent$: idle, parentOrderEvent$: idle, reconnect$: idle },
       HTTP: { select: (name) => name === category ? responses : idle },
     });
 
