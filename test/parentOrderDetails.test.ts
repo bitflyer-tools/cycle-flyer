@@ -52,6 +52,19 @@ test("invalidates the affected parent and discards its pending response", (t) =>
     deepStrictEqual(trade.requestedIds(), ["a", "b", "a", "a"]);
 });
 
+test("uses a late acceptance ID to invalidate only the affected cached detail", (t) => {
+    const trade = setup(t);
+    trade.list(["a", "b"], ["a"]);
+    trade.requests.forEach(trade.complete);
+    trade.list(["a", "b"]);
+    trade.list(["a", "b"], ["a"]);
+    deepStrictEqual(trade.requestedIds(), ["a", "b"]);
+
+    trade.events.shamefullySendNext({ parent_order_acceptance_id: "acceptance-a" } as ParentOrderEvent);
+    trade.list(["a", "b"]);
+    deepStrictEqual(trade.requestedIds(), ["a", "b", "a"]);
+});
+
 test("reconciles on reconnect and ignores responses for removed parents", async (t) => {
     const trade = setup(t);
     trade.list(["a", "b"]);
@@ -119,8 +132,11 @@ const setup = (t: { after: (cleanup: () => void) => void }) => {
         complete: (input: RequestOptions) => respond(input, { parent_order_id: requestedId(input), parameters: [] }),
         events,
         fail: (input: RequestOptions) => send(input, Stream.throw(new Error("Request failed"))),
-        list: (ids: string[]) => respond({ category: "parent-orders", url: "" },
-            ids.map((id) => ({ parent_order_acceptance_id: `acceptance-${id}`, parent_order_id: id }))),
+        list: (ids: string[], withoutAcceptanceId: string[] = []) => respond({ category: "parent-orders", url: "" },
+            ids.map((id) => ({
+                parent_order_acceptance_id: withoutAcceptanceId.includes(id) ? undefined : `acceptance-${id}`,
+                parent_order_id: id,
+            }))),
         listRequests,
         loaded,
         reconnect,
