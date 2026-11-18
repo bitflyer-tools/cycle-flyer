@@ -6,11 +6,11 @@
   "scripts": {
     "build": "node fuse",
     "lint": "eslint 'src/**/*.ts'",
-    "test": "esbuild test/clearOrders.test.ts test/orderSubmission.test.ts test/trade-stop-orders.test.js test/twap.test.ts --bundle --platform=node --define:window=undefined --loader:.styl=empty --outdir=out/tests --out-extension:.js=.cjs && node --test out/tests/*.test.cjs test/dev-server.test.js test/order-view.test.js test/release-workflow.test.js test/socket-board.test.js",
     "start": "node fuse.dev",
     "start:electron": "electron-forge start --inspect-electron",
     "package": "electron-forge package",
-    "make": "electron-forge make"
+    "make": "electron-forge make",
+    "test": "esbuild test/clearOrders.test.ts test/orderSubmission.test.ts test/trade-stop-orders.test.cjs test/twap.test.ts --bundle --platform=node --define:window=undefined --loader:.styl=empty --outdir=out/tests --out-extension:.js=.cjs && esbuild test/board.test.ts --bundle --platform=node --banner:js=\"globalThis.window = {};\" --outfile=out/tests/board.test.cjs && node --test out/tests/*.test.cjs test/*.test.js"
   },
   "author": "unhappychoice",
   "license": "MIT",
