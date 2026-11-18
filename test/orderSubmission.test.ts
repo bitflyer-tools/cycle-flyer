@@ -100,10 +100,10 @@ for (const outcome of ["succeed", "fail"] as const) {
 
 test("routes account executions without changing session history or reviving stale responses", (t) => {
     const trade = setup(t);
-    const page = JSON.stringify([{
+    const page = [{
         id: 1, exec_date: "2025-03-22T09:57:40.397", side: "BUY", price: 12000000,
         size: 0.01, child_order_acceptance_id: "JRF20250322-095740-000001",
-    }]);
+    }];
     equal(trade.requests.length, 0);
     trade.refreshExecutions();
     equal(trade.requests[0].category, "executions");
@@ -118,6 +118,34 @@ test("routes account executions without changing session history or reviving sta
     pending.succeed(page);
     deepEqual(trade.executions.rows, []);
     equal(trade.executions.loading, false);
+});
+
+test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
+    const order = setup(t);
+    order.respondTo({ category: "parent-orders", _namespace: ["trade"] }).succeed([
+        { parent_order_id: "JCO-success" },
+        { parent_order_id: "JCO-failure" },
+    ]);
+
+    order.clearOrders();
+    order.clearOrders();
+    deepEqual(order.requests.map(({ category }) => category), [
+        "cancel-orders", "cancel-parent-order", "cancel-parent-order",
+    ]);
+    equal(order.state.isOrdering, true);
+
+    order.respondTo(order.requests[0]).succeed();
+    order.respondTo(order.requests[1]).succeed();
+    order.buyMarket();
+    equal(order.requests.length, 3);
+    equal(order.state.isOrdering, true);
+    deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-failure"]);
+
+    order.respondTo(order.requests[2]).fail();
+    equal(order.state.isOrdering, false);
+    order.clearOrders();
+    deepEqual(order.requests.slice(3).map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
+    equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
 
 function setup(t: TestContext) {
@@ -138,12 +166,14 @@ function setup(t: TestContext) {
     const sellIFDOCO$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
     const refreshExecutions$ = Stream.create<null>();
+    const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
         ".refresh-executions": { click: refreshExecutions$ },
+        ".order-buttons": { ".clear-order-button": { click: clearOrders$ } },
         ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buyIFDOCO$ },
@@ -161,6 +191,7 @@ function setup(t: TestContext) {
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
             parentOrderEvent$: Stream.never(),
+            reconnect$: Stream.never(),
         },
         state: new StateSource(state$, "state"),
         storage: { local: { getItem: () => Stream.of("0.01") } },
@@ -178,7 +209,7 @@ function setup(t: TestContext) {
     const requests: RequestOptions[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
-        if (["ifdoco-order", "market-order", "executions"].includes(options.category || "")) {
+        if (["ifdoco-order", "market-order", "cancel-orders", "cancel-parent-order", "executions"].includes(options.category as string)) {
             requests.push(options);
         }
     } });
@@ -190,6 +221,7 @@ function setup(t: TestContext) {
     return {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
+        clearOrders: () => clearOrders$.shamefullySendNext(null),
         get executions() { return state!.trade!.executionsComponentState!; },
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
@@ -200,13 +232,14 @@ function setup(t: TestContext) {
             responses$.shamefullySendNext(response$);
             return {
                 fail: () => response$.shamefullySendError(new Error("Network failure")),
-                succeed: (text?: string) => {
-                    response$.shamefullySendNext({ request, text } as Response);
+                succeed: (body?: unknown) => {
+                    response$.shamefullySendNext({ request, text: JSON.stringify(body) } as Response);
                     response$.shamefullySendComplete();
                 },
             };
         },
         sellIFDOCO: () => sellIFDOCO$.shamefullySendNext(null),
         get state() { return state!.trade!.orderComponentState!; },
+        get tradeState() { return state!.trade!; },
     };
 }
