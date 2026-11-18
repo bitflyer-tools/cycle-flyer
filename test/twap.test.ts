@@ -78,7 +78,7 @@ const createTwap = (context: TestContext) => {
     const actions = intent(sources);
     const state$ = Stream.createWithMemory<State>();
     let state: State | undefined;
-    const reducer = model(actions).subscribe({
+    const reducer = model(actions, Stream.never()).subscribe({
         next: (reduce) => {
             state = reduce(state);
             if (state) { state$.shamefullySendNext(state); }
