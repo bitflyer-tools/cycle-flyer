@@ -5,10 +5,14 @@ import {Reducer, StateSource} from "@cycle/state";
 import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
+import {OrderHistory} from "../models/orderHistory";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
+import {createParentOrderHistoryStream} from "./trade/order/history";
+import {submissions} from "./trade/order/request";
 
 interface RootState {
     trade?: TradeState;
@@ -32,20 +36,37 @@ export interface Sinks {
     sound?: Stream<Sound>;
 }
 
+const tradeScope = "trade";
+
 export const Root = (sources: Sources): Sinks => {
-    const trade = isolate(Trade, { "*": "trade" });
-    const routes$ = sources.router
+    const trade = isolate(Trade, { "*": tradeScope });
+    const routes$: Stream<Sinks & { orderRequests?: Stream<RequestInput> }> = sources.router
         .define({
             "/": trade,
             "/setting": isolate(Setting, { "*": "setting" }),
         })
-        .map((route: any): Sinks => {
-            const sinks = route.value({...sources, router: sources.router.path(route.path)});
+        .map((route: any) => {
+            const sinks = route.value({
+                ...sources,
+                // Apply the same HTTP isolation to both request sinks.
+                orderRequests: sources.HTTP,
+                router: sources.router.path(route.path),
+            }, isOrdering$);
             return route.value === trade ? sinks : {
                 ...sinks,
                 state: sinks.state.startWith(clearTwapProgress),
             };
-        });
+        })
+        .remember();
+
+    const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<RequestInput>()).flatten();
+    const pending$ = submissions(orderRequests$, sources.HTTP);
+    const isOrdering$ = pending$.map((pending) => pending !== null);
+    const ifdocoHistories$: Stream<OrderHistory> = sources.HTTP.select("ifdoco-order")
+        .map(createParentOrderHistoryStream)
+        .compose(flattenConcurrently);
+    const ifdocoHistoryReducer$ = ifdocoHistories$
+        .map((history) => (state: TradeState) => ({ ...state, histories: [history].concat(state.histories) }));
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>
@@ -63,10 +84,16 @@ export const Root = (sources: Sources): Sinks => {
 
     return {
         DOM: view$,
-        HTTP: routes$.map((sinks: Sinks) => sinks.HTTP).flatten(),
+        HTTP: Stream.merge(
+            routes$.map((sinks) => sinks.HTTP).flatten(),
+            pending$.filter((pending) => pending !== null).map<RequestInput | null>((pending) => pending),
+        ),
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
         sound: routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
-        state: routes$.map((sinks: Sinks) => sinks.state).flatten(),
+        state: Stream.merge(
+            routes$.map((sinks: Sinks) => sinks.state).flatten(),
+            sources.state.isolateSink(ifdocoHistoryReducer$, tradeScope),
+        ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
     };
 };

@@ -84,7 +84,8 @@ test("leaving Trade stops a partially completed TWAP and restores idle controls"
 
     buy.shamefullySendNext(null);
     assert.equal(requests.length, 1);
-    twapResponses.shamefullySendNext(Stream.of({ request: requests[0] }));
+    const response = { request: requests[0] };
+    twapResponses.shamefullySendNext(Object.assign(Stream.of(response), response));
     await flush();
     assert.equal(findNode(view, "p.twap-status").text, "Running: 2 / 3 slices left");
 

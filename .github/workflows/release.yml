@@ -12,6 +12,9 @@ on:
           - minor
           - major
 
+permissions:
+  contents: read
+
 jobs:
   bump-version:
     runs-on: ubuntu-24.04
