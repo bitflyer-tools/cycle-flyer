@@ -59,4 +59,4 @@ const sellLines = (state: State): Lines => ({
 });
 
 const ifdocoButtonDisabled = (state: State): boolean =>
-    state.isOrdering || state.size === 0 || state.ifdocoOrder.width === 0;
+    state.isOrdering || state.size === 0 || !state.ifdocoOrder.hasValidWidth();

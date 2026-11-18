@@ -7,8 +7,12 @@ import {Actions} from "./intent";
 import {twapRequest} from "./twapRequest";
 
 export const request = (actions: Actions, state$: Stream<State>): Stream<string | RequestInput | null> => {
+    const clickedState = (click$: Stream<null>) =>
+        click$.compose(sampleCombine(state$)).map(([_, state]) => state);
     const withState = (click$: Stream<null>, toRequest: (state: State) => RequestInput) =>
-        click$.compose(sampleCombine(state$)).map(([_, state]) => toRequest(state));
+        clickedState(click$).map(toRequest);
+    const withIFDOCOState = (click$: Stream<null>, toRequest: (state: State) => RequestInput) =>
+        clickedState(click$).filter((state) => state.ifdocoOrder.hasValidWidth()).map(toRequest);
 
     return Stream.merge(
         withState(actions.onClickMarketBuyButton$, (state) => marketOrder(state.size, "BUY")),
@@ -17,8 +21,8 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<string 
         withState(actions.onClickLimitSellButton$, (state) => limitOrder(state.price, state.size, "SELL")),
         withState(actions.onClickStopBuyButton$, (state) => stopOrder(state.triggerPrice, state.size, "BUY")),
         withState(actions.onClickStopSellButton$, (state) => stopOrder(state.triggerPrice, state.size, "SELL")),
-        withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),
-        withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder),
+        withIFDOCOState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),
+        withIFDOCOState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder),
         withState(actions.onClickClearButton$, clearPositionOrder),
         actions.onClickClearOrderButton$.map((_) => cancelOrders()),
         twapRequest(actions, state$),
