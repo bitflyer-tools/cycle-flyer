@@ -43,7 +43,7 @@ function setup(t, storedWidth) {
         else delete globalThis.localStorage;
     });
     const requests = [];
-    const subscription = orderRequests(actions, state$).subscribe({ next: (value) => requests.push(value) });
+    const subscription = orderRequests(actions, state$).subscribe({ next: ({ requests: batch }) => requests.push(...batch) });
     t.after(() => {
         subscription.unsubscribe();
         reducers.unsubscribe();

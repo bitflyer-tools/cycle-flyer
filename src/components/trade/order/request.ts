@@ -3,17 +3,25 @@ import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import sampleCombine from "xstream/extra/sampleCombine";
-import {cancelOrders, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
+import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
+
+export interface OrderRequestBatch {
+    requests: RequestInput[];
+    _namespace?: string[];
+}
 
 interface Submission extends RequestOptions {
     submissionId: symbol;
 }
 
-export const submissions = (requests$: Stream<RequestInput>, http: HTTPSource): Stream<Submission | null> => {
-    const requested$ = requests$
-        .map((request) => ({ ...request as RequestOptions, submissionId: Symbol() }));
+export const submissions = (requests$: Stream<OrderRequestBatch>, http: HTTPSource): Stream<Submission[] | null> => {
+    const requested$ = requests$.map(({ requests, _namespace }) => requests.map((request) => ({
+        ...request as RequestOptions,
+        _namespace,
+        submissionId: Symbol(),
+    })));
 
     const completed$ = http.select()
         .map((response$) => ({ response$, submissionId: (response$.request as Submission).submissionId }))
@@ -22,24 +30,30 @@ export const submissions = (requests$: Stream<RequestInput>, http: HTTPSource): 
             response$.last().mapTo(submissionId).replaceError(() => Stream.of(submissionId)))
         .compose(flattenConcurrently);
 
+    const idle = { batch: null as Submission[] | null, remaining: [] as symbol[] };
     return Stream.merge(completed$, requested$)
-        .fold<Submission | null>((pending, event) => {
+        .fold((pending, event) => {
             if (typeof event === "symbol") {
-                return pending?.submissionId === event ? null : pending;
+                const remaining = pending.remaining.filter((id) => id !== event);
+                return remaining.length ? { ...pending, remaining } : idle;
             }
-            return pending || event;
-        }, null)
+            return pending.batch ? pending : { batch: event, remaining: event.map(({ submissionId }) => submissionId) };
+        }, idle)
+        .map(({ batch }) => batch)
         .compose(dropRepeats())
         .remember();
 };
 
-export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<RequestInput> => {
+export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<OrderRequestBatch> => {
     const clickedState = (click$: Stream<null>) =>
         click$.compose(sampleCombine(state$)).map(([_, state]) => state);
+    const toBatch = (request: RequestInput): OrderRequestBatch => ({ requests: [request] });
     const withState = (click$: Stream<null>, toRequest: (state: State) => RequestInput) =>
-        clickedState(click$).map(toRequest);
+        clickedState(click$).map((state) => toBatch(toRequest(state)));
     const withIFDOCOState = (click$: Stream<null>, toRequest: (state: State) => RequestInput) =>
-        clickedState(click$).filter((state) => state.ifdocoOrder.hasValidWidth()).map(toRequest);
+        clickedState(click$)
+            .filter((state) => state.ifdocoOrder.hasValidWidth())
+            .map((state) => toBatch(toRequest(state)));
 
     return Stream.merge(
         withState(actions.onClickMarketBuyButton$, (state) => marketOrder(state.size, "BUY")),
@@ -51,7 +65,10 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<R
         withIFDOCOState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),
         withIFDOCOState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder),
         withState(actions.onClickClearButton$, clearPositionOrder),
-        actions.onClickClearOrderButton$.map(() => cancelOrders()),
+        actions.onClickClearOrderButton$.compose(sampleCombine(state$))
+            .map(([_, state]) => ({
+                requests: [cancelOrders(), ...Object.keys(state.parentStopOrders).map(cancelParentOrder)],
+            })),
     );
 };
 
