@@ -27,8 +27,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test release workflow
-        run: node --test test/release-workflow.test.js
+      - name: Run tests
+        run: node --test test/dev-server.test.js test/order-view.test.js test/release-workflow.test.js test/socket-board.test.js test/twap-navigation.test.js
 
   build:
     runs-on: ubuntu-24.04

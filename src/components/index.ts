@@ -12,7 +12,7 @@ import {OrderHistory} from "../models/orderHistory";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
 import {createParentOrderHistoryStream} from "./trade/order/history";
-import {submissions} from "./trade/order/request";
+import {OrderRequestBatch, submissions} from "./trade/order/request";
 
 interface RootState {
     trade?: TradeState;
@@ -40,7 +40,7 @@ const tradeScope = "trade";
 
 export const Root = (sources: Sources): Sinks => {
     const trade = isolate(Trade, { "*": tradeScope });
-    const routes$: Stream<Sinks & { orderRequests?: Stream<RequestInput> }> = sources.router
+    const routes$: Stream<Sinks & { orderRequests?: Stream<OrderRequestBatch> }> = sources.router
         .define({
             "/": trade,
             "/setting": isolate(Setting, { "*": "setting" }),
@@ -48,7 +48,7 @@ export const Root = (sources: Sources): Sinks => {
         .map((route: any) => {
             const sinks = route.value({
                 ...sources,
-                // Apply the same HTTP isolation to both request sinks.
+                // Tag order batches with the same HTTP scopes as the other requests.
                 orderRequests: sources.HTTP,
                 router: sources.router.path(route.path),
             }, isOrdering$);
@@ -59,7 +59,7 @@ export const Root = (sources: Sources): Sinks => {
         })
         .remember();
 
-    const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<RequestInput>()).flatten();
+    const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<OrderRequestBatch>()).flatten();
     const pending$ = submissions(orderRequests$, sources.HTTP);
     const isOrdering$ = pending$.map((pending) => pending !== null);
     const ifdocoHistories$: Stream<OrderHistory> = sources.HTTP.select("ifdoco-order")
@@ -86,7 +86,9 @@ export const Root = (sources: Sources): Sinks => {
         DOM: view$,
         HTTP: Stream.merge(
             routes$.map((sinks) => sinks.HTTP).flatten(),
-            pending$.filter((pending) => pending !== null).map<RequestInput | null>((pending) => pending),
+            pending$.filter((pending) => pending !== null)
+                .map((pending) => Stream.fromArray<RequestInput | null>(pending))
+                .compose(flattenConcurrently),
         ),
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
         sound: routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
