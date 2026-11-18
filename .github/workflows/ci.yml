@@ -66,6 +66,8 @@ jobs:
 
       - name: Test packaged renderer
         run: |
-          sudo chown root:root "out/Cycle Flyer-linux-x64/chrome-sandbox"
-          sudo chmod 4755 "out/Cycle Flyer-linux-x64/chrome-sandbox"
-          xvfb-run -a node test/packaged-renderer.js "out/Cycle Flyer-linux-x64/cycle-flyer"
+          # Chromium splits the Linux sandbox helper command at spaces.
+          mv "out/Cycle Flyer-linux-x64" out/cycle-flyer-smoke
+          sudo chown root:root out/cycle-flyer-smoke/chrome-sandbox
+          sudo chmod 4755 out/cycle-flyer-smoke/chrome-sandbox
+          xvfb-run -a node test/packaged-renderer.js out/cycle-flyer-smoke/cycle-flyer
