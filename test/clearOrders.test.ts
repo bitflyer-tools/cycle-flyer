@@ -1,3 +1,4 @@
+import {RequestOptions} from "@cycle/http";
 import {deepStrictEqual, strictEqual} from "node:assert/strict";
 import {test} from "node:test";
 import Stream from "xstream";
@@ -52,17 +53,17 @@ test("Concurrent parent cancellations leave failed orders visible", () => {
 });
 
 test("A late parent detail response cannot restore a canceled stop", () => {
-    const {details, parentResponses, requests, state} = clearOrders(["JCO-canceled"]);
+    const {sendParentDetail, parentResponses, requests, state} = clearOrders(["JCO-canceled"]);
     parentResponses.shamefullySendNext(Stream.of<unknown>({ request: requests[1] }));
     const canceledState = state();
 
-    sendParentDetail(details, "JCO-canceled", 100);
+    sendParentDetail("JCO-canceled", 100);
 
     strictEqual(state(), canceledState);
 });
 
 test("A late active list and its details cannot restore a canceled stop", () => {
-    const {details, lists, parentResponses, requests, state} = clearOrders(["JCO-canceled", "JCO-active"]);
+    const {sendParentDetail, lists, parentResponses, requests, state} = clearOrders(["JCO-canceled", "JCO-active"]);
     const pendingList$ = Stream.create<unknown>();
     lists.shamefullySendNext(pendingList$);
     parentResponses.shamefullySendNext(Stream.of<unknown>({ request: requests[1] }));
@@ -72,19 +73,12 @@ test("A late active list and its details cannot restore a canceled stop", () => 
         { parent_order_id: "JCO-active" },
         { parent_order_id: "JCO-new" },
     ]) });
-    sendParentDetail(details, "JCO-canceled", 100);
-    sendParentDetail(details, "JCO-new", 300);
+    sendParentDetail("JCO-canceled", 100);
+    sendParentDetail("JCO-new", 300);
 
     deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-active", "JCO-new"]);
     deepStrictEqual(flattenStopOrders(state().parentStopOrders).map(({price}) => price), [200, 300]);
 });
-
-function sendParentDetail(responses: Stream<Stream<unknown>>, id: string, price: number) {
-    responses.shamefullySendNext(Stream.of<unknown>({ text: JSON.stringify({
-        parameters: [{ condition_type: "STOP", trigger_price: price }],
-        parent_order_id: id,
-    }) }));
-}
 
 function clearOrders(ids: string[], lastDetailPending = false) {
     const clicks$ = Stream.create();
@@ -113,6 +107,7 @@ function clearOrders(ids: string[], lastDetailPending = false) {
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
             parentOrderEvent$: Stream.never(),
+            reconnect$: Stream.never(),
         },
         storage: { local: { getItem: () => Stream.never() } },
     } as unknown as Parameters<typeof intent>[0];
@@ -126,7 +121,8 @@ function clearOrders(ids: string[], lastDetailPending = false) {
         },
     });
 
-    tradeModel(tradeIntent(sources)).addListener({
+    const tradeActions = tradeIntent(sources);
+    tradeModel(tradeActions).addListener({
         next: (reducer) => {
             currentState = reducer(currentState)! as State & TradeState;
             state$.shamefullySendNext(currentState);
@@ -144,9 +140,28 @@ function clearOrders(ids: string[], lastDetailPending = false) {
         configurable: true,
         value: { "api-key": "test-key", "api-secret": "test-secret" },
     });
+    const detailRequests = new Map<string, RequestOptions>();
+    tradeActions.parentOrderRequests$.addListener({
+        next: (request) => {
+            const {parent_order_id} = request.query as { parent_order_id: string };
+            detailRequests.set(parent_order_id, request);
+        },
+    });
+    lists.shamefullySendNext(Stream.of({ text: JSON.stringify(ids.map((id) => ({ parent_order_id: id }))) }));
+
+    const sendParentDetail = (id: string, price: number) => {
+        const request = detailRequests.get(id);
+        strictEqual(detailRequests.has(id), true);
+        const response$ = Stream.of<unknown>({ text: JSON.stringify({
+            parameters: [{ condition_type: "STOP", trigger_price: price }],
+            parent_order_id: id,
+        }) });
+        details.shamefullySendNext(Object.assign(response$, { request }));
+    };
+
     const requests: Array<{ url: string; method: string; send: string }> = [];
     orderRequests(actions, state$).addListener({ next: (batch) => requests.push(...batch.requests as typeof requests) });
     clicks$.shamefullySendNext(null);
 
-    return { childResponses, details, lists, parentResponses, requests, state: () => currentState };
+    return { childResponses, sendParentDetail, lists, parentResponses, requests, state: () => currentState };
 }
