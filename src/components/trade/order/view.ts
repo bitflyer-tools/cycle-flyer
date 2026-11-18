@@ -1,5 +1,6 @@
 import {button, div, h4, hr, VNode} from "@cycle/dom";
 import Stream from "xstream";
+import dropRepeats from "xstream/extra/dropRepeats";
 import {sideButtons} from "./buttons";
 import {ifdocoSection} from "./ifdocoView";
 import {State} from "./index";
@@ -10,7 +11,7 @@ import {twapSection} from "./twapView";
 import {isValidLimitOrder, isValidMarketOrder} from "./validation";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
-    state$.map((state) =>
+    state$.compose(dropRepeats(sameViewInputs)).map((state) =>
         div(".order", [
             sizeSection(state),
             hr(),
@@ -27,6 +28,20 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
             ifdocoSection(state),
         ]),
     );
+
+const sameViewInputs = (previous: State, next: State): boolean =>
+    Object.is(previous.currentPrice, next.currentPrice)
+    && previous.isOrdering === next.isOrdering
+    && Object.is(previous.position.size, next.position.size)
+    && Object.is(previous.price, next.price)
+    && Object.is(previous.size, next.size)
+    && Object.is(previous.triggerPrice, next.triggerPrice)
+    && Object.is(previous.ifdocoOrder.width, next.ifdocoOrder.width)
+    && Object.is(previous.ifdocoOrder.ratio, next.ifdocoOrder.ratio)
+    && Object.is(previous.twap.slices, next.twap.slices)
+    && Object.is(previous.twap.interval, next.twap.interval)
+    && Object.is(previous.twap.remaining, next.twap.remaining)
+    && clearOrderButtonDisabled(previous) === clearOrderButtonDisabled(next);
 
 const marketSection = (state: State): VNode =>
     div([
@@ -57,4 +72,4 @@ const clearSection = (state: State): VNode =>
     ]);
 
 const clearOrderButtonDisabled = (state: State): boolean =>
-    state.isOrdering || (state.orders.length + state.stopOrders.length) === 0;
+    state.isOrdering || (state.orders.length + Object.keys(state.parentStopOrders).length) === 0;

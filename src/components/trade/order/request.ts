@@ -1,13 +1,51 @@
-import {RequestInput} from "@cycle/http";
+import {HTTPSource, RequestInput, RequestOptions} from "@cycle/http";
 import Stream from "xstream";
+import dropRepeats from "xstream/extra/dropRepeats";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import sampleCombine from "xstream/extra/sampleCombine";
-import {cancelOrders, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
+import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
-import {twapRequest} from "./twapRequest";
 import {isValidLimitOrder, isValidMarketOrder} from "./validation";
 
-export const request = (actions: Actions, state$: Stream<State>): Stream<string | RequestInput | null> => {
+export interface OrderRequestBatch {
+    requests: RequestInput[];
+    _namespace?: string[];
+}
+
+interface Submission extends RequestOptions {
+    submissionId: symbol;
+}
+
+export const submissions = (requests$: Stream<OrderRequestBatch>, http: HTTPSource): Stream<Submission[] | null> => {
+    const requested$ = requests$.map(({ requests, _namespace }) => requests.map((request) => ({
+        ...request as RequestOptions,
+        _namespace,
+        submissionId: Symbol(),
+    })));
+
+    const completed$ = http.select()
+        .map((response$) => ({ response$, submissionId: (response$.request as Submission).submissionId }))
+        .filter(({ submissionId }) => !!submissionId)
+        .map(({ response$, submissionId }) =>
+            response$.last().mapTo(submissionId).replaceError(() => Stream.of(submissionId)))
+        .compose(flattenConcurrently);
+
+    const idle = { batch: null as Submission[] | null, remaining: [] as symbol[] };
+    return Stream.merge(completed$, requested$)
+        .fold((pending, event) => {
+            if (typeof event === "symbol") {
+                const remaining = pending.remaining.filter((id) => id !== event);
+                return remaining.length ? { ...pending, remaining } : idle;
+            }
+            return pending.batch ? pending : { batch: event, remaining: event.map(({ submissionId }) => submissionId) };
+        }, idle)
+        .map(({ batch }) => batch)
+        .compose(dropRepeats())
+        .remember();
+};
+
+export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<OrderRequestBatch> => {
     const withState = (
         click$: Stream<null>,
         toRequest: (state: State) => RequestInput,
@@ -15,7 +53,7 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<string 
     ) =>
         click$.compose(sampleCombine(state$))
             .filter(([_, state]) => isValid(state))
-            .map(([_, state]) => toRequest(state));
+            .map(([_, state]) => ({ requests: [toRequest(state)] }));
 
     return Stream.merge(
         withState(actions.onClickMarketBuyButton$, (state) => marketOrder(state.size, "BUY"), isValidMarketOrder),
@@ -27,9 +65,11 @@ export const request = (actions: Actions, state$: Stream<State>): Stream<string 
         withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),
         withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder),
         withState(actions.onClickClearButton$, clearPositionOrder),
-        actions.onClickClearOrderButton$.map((_) => cancelOrders()),
-        twapRequest(actions, state$),
-    ) as Stream<string | RequestInput | null>;
+        actions.onClickClearOrderButton$.compose(sampleCombine(state$))
+            .map(([_, state]) => ({
+                requests: [cancelOrders(), ...Object.keys(state.parentStopOrders).map(cancelParentOrder)],
+            })),
+    );
 };
 
 const ifdocoBuyOrder = (state: State): RequestInput =>

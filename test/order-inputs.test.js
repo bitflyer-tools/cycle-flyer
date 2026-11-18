@@ -6,6 +6,7 @@ const { outputFiles: [bundle] } = buildSync({
   stdin: {
     contents: `
       export { OrderComponent } from './src/components/trade/order';
+      export { submissions } from './src/components/trade/order/request';
       export { default as Stream } from 'xstream';
     `,
     resolveDir: __dirname + '/..',
@@ -19,7 +20,7 @@ const { outputFiles: [bundle] } = buildSync({
 const compiled = { exports: {} };
 const loadBundle = new Function('module', 'exports', 'require', 'window', 'localStorage', bundle.text);
 loadBundle(compiled, compiled.exports, require, {}, { 'api-key': 'key', 'api-secret': 'secret' });
-const { OrderComponent, Stream } = compiled.exports;
+const { OrderComponent, Stream, submissions } = compiled.exports;
 
 function orderPanel() {
   const events = new Map();
@@ -32,17 +33,21 @@ function orderPanel() {
     },
   });
   const state$ = Stream.createWithMemory();
+  const batches$ = Stream.create();
+  const http = { select: () => Stream.never() };
+  const pending$ = submissions(batches$, http);
   const sinks = OrderComponent({
     DOM: dom(),
-    HTTP: { select: () => Stream.never() },
+    HTTP: http,
     state: { stream: state$ },
     storage: { local: { getItem: () => Stream.never() } },
-  });
+  }, pending$.map((batch) => batch !== null));
   const requests = [];
   let state;
   let vnode;
   sinks.DOM.addListener({ next: (value) => { vnode = value; } });
-  sinks.HTTP.addListener({ next: (value) => requests.push(value) });
+  pending$.addListener({ next: (batch) => { if (batch) requests.push(...batch); } });
+  sinks.orderRequests.addListener({ next: (batch) => batches$.shamefullySendNext(batch) });
   sinks.state.addListener({ next: (reduce) => state$.shamefullySendNext(state = reduce(state)) });
   return {
     requests,
