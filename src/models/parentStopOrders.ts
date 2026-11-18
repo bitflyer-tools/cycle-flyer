@@ -19,5 +19,13 @@ export const retainActive = (parentStopOrders: ParentStopOrders, activeParentOrd
         .map((order) => order.parent_order_id)
         .reduce((acc: ParentStopOrders, id: string) => ({ ...acc, [id]: parentStopOrders[id] || [] }), {});
 
-export const flattenStopOrders = (parentStopOrders: ParentStopOrders): StopOrder[] =>
-    Object.keys(parentStopOrders).reduce((acc: StopOrder[], id) => acc.concat(parentStopOrders[id]), []);
+export const flattenStopOrders = (parentStopOrders: ParentStopOrders): StopOrder[] => {
+    const cached = flattenedStopOrders.get(parentStopOrders);
+    if (cached) { return cached; }
+
+    const orders = Object.keys(parentStopOrders).reduce((acc: StopOrder[], id) => acc.concat(parentStopOrders[id]), []);
+    flattenedStopOrders.set(parentStopOrders, orders);
+    return orders;
+};
+
+const flattenedStopOrders = new WeakMap<ParentStopOrders, StopOrder[]>();
