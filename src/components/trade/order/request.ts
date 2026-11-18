@@ -5,16 +5,23 @@ import {cancelOrders, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../
 import {State} from "./index";
 import {Actions} from "./intent";
 import {twapRequest} from "./twapRequest";
+import {isValidLimitOrder, isValidMarketOrder} from "./validation";
 
 export const request = (actions: Actions, state$: Stream<State>): Stream<string | RequestInput | null> => {
-    const withState = (click$: Stream<null>, toRequest: (state: State) => RequestInput) =>
-        click$.compose(sampleCombine(state$)).map(([_, state]) => toRequest(state));
+    const withState = (
+        click$: Stream<null>,
+        toRequest: (state: State) => RequestInput,
+        isValid: (state: State) => boolean = () => true,
+    ) =>
+        click$.compose(sampleCombine(state$))
+            .filter(([_, state]) => isValid(state))
+            .map(([_, state]) => toRequest(state));
 
     return Stream.merge(
-        withState(actions.onClickMarketBuyButton$, (state) => marketOrder(state.size, "BUY")),
-        withState(actions.onClickMarketSellButton$, (state) => marketOrder(state.size, "SELL")),
-        withState(actions.onClickLimitBuyButton$, (state) => limitOrder(state.price, state.size, "BUY")),
-        withState(actions.onClickLimitSellButton$, (state) => limitOrder(state.price, state.size, "SELL")),
+        withState(actions.onClickMarketBuyButton$, (state) => marketOrder(state.size, "BUY"), isValidMarketOrder),
+        withState(actions.onClickMarketSellButton$, (state) => marketOrder(state.size, "SELL"), isValidMarketOrder),
+        withState(actions.onClickLimitBuyButton$, (state) => limitOrder(state.price, state.size, "BUY"), isValidLimitOrder),
+        withState(actions.onClickLimitSellButton$, (state) => limitOrder(state.price, state.size, "SELL"), isValidLimitOrder),
         withState(actions.onClickStopBuyButton$, (state) => stopOrder(state.triggerPrice, state.size, "BUY")),
         withState(actions.onClickStopSellButton$, (state) => stopOrder(state.triggerPrice, state.size, "SELL")),
         withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),

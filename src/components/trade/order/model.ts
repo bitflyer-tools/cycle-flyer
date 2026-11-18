@@ -8,6 +8,7 @@ import {defaultTwapOrder} from "../../../models/twapOrder";
 import {State} from "./index";
 import {Actions} from "./intent";
 import {twapModel} from "./twapModel";
+import {isValidLimitOrder, isValidMarketOrder} from "./validation";
 
 const defaultState: State = {
     currentPrice: 0,
@@ -32,11 +33,12 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
     const historyReducer$ = Stream.merge(actions.onHistoryCreated$, actions.onTwapSliceCreated$)
         .map((history) => (state: State) => ({ ...state, histories: [history].concat(state.histories)}));
 
+    const marketOrderReducer$ = Stream.merge(actions.onClickMarketBuyButton$, actions.onClickMarketSellButton$)
+        .mapTo(startOrdering(isValidMarketOrder));
+    const limitOrderReducer$ = Stream.merge(actions.onClickLimitBuyButton$, actions.onClickLimitSellButton$)
+        .mapTo(startOrdering(isValidLimitOrder));
+
     const isOrderingReducer$ = Stream.merge(
-        actions.onClickMarketBuyButton$.mapTo(true),
-        actions.onClickMarketSellButton$.mapTo(true),
-        actions.onClickLimitBuyButton$.mapTo(true),
-        actions.onClickLimitSellButton$.mapTo(true),
         actions.onClickStopBuyButton$.mapTo(true),
         actions.onClickStopSellButton$.mapTo(true),
         actions.onClickClearButton$.mapTo(true),
@@ -63,6 +65,8 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         cancelOrdersReducer$,
         historyReducer$,
         isOrderingReducer$,
+        marketOrderReducer$,
+        limitOrderReducer$,
         priceReducer$,
         priceWidthReducer$,
         ratioReducer$,
@@ -71,3 +75,6 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         twapModel(actions),
     ) as Stream<Reducer<State>>;
 };
+
+const startOrdering = (isValid: (state: State) => boolean) =>
+    (state: State): State => isValid(state) ? { ...state, isOrdering: true } : state;
