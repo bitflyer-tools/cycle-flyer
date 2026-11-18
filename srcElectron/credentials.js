@@ -79,7 +79,7 @@ const createCredentialStore = (file, safeStorage, platform = process.platform) =
     return { api_key: pair.key, nonce, signature: signature(pair.secret, `${timestamp}${nonce}`), timestamp };
   };
 
-  return { save, signRest, signRealtime };
+  return { hasCredentials: () => !!load(), save, signRest, signRealtime };
 };
 
 module.exports = { createCredentialStore };

@@ -7,6 +7,7 @@ const windows = new Set();
 const registerCredentialHandlers = () => {
   const store = createCredentialStore(path.join(app.getPath('userData'), 'bitflyer-credentials.enc'), safeStorage);
   const handlers = {
+    'credentials:has-credentials': store.hasCredentials,
     'credentials:migrate': (pair) => store.save(pair, true),
     'credentials:save': (pair) => store.save(pair),
     'credentials:sign-rest': store.signRest,

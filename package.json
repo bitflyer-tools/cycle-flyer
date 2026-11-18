@@ -10,7 +10,7 @@
     "start:electron": "electron-forge start --inspect-electron",
     "package": "electron-forge package",
     "make": "electron-forge make",
-    "test": "node --test"
+    "test": "esbuild test/orderSubmission.test.ts test/trade-stop-orders.test.js --bundle --platform=node --define:window=undefined --loader:.styl=empty --outdir=out --out-extension:.js=.cjs && node --test test/credentials.test.js test/dev-server.test.js test/release-workflow.test.js out/orderSubmission.test.cjs out/trade-stop-orders.test.cjs"
   },
   "author": "unhappychoice",
   "license": "MIT",

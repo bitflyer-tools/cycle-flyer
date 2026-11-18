@@ -31,7 +31,12 @@ export const marketOrder = (size: number, side: string): RequestInput => {
     return requestInput("market-order", "/v1/me/sendchildorder", "POST", json);
 };
 
-export const twapSliceOrder = (size: number, side: string): RequestInput =>
+export interface TwapSliceRequest extends RequestOptions {
+    isTwapActive?: () => boolean;
+    onSigningFailure?: () => void;
+}
+
+export const twapSliceOrder = (size: number, side: string): TwapSliceRequest =>
     ({ ...(marketOrder(size, side) as RequestOptions), category: "twap-order" });
 
 export const limitOrder = (price: number, size: number, side: string): RequestInput => {

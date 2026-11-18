@@ -19,6 +19,7 @@ const rendererBundle = buildSync({
       export * from './src/drivers/privateChannel';
       export * from './src/http';
       export * from './src/components/trade/order/twapRequest';
+      export * from './src/components/trade/order/twapView';
       export * from './src/components/setting/view';
     `,
     resolveDir: path.join(__dirname, '..'),
@@ -167,6 +168,49 @@ for (const [operation, replacement] of [
     }
   });
 }
+
+test('Electron TWAP readiness controls the buttons and the status explains why TWAP stopped', async () => {
+  let available = false;
+  const renderer = createRenderer(new Map(), {
+    hasCredentials: async () => available,
+    save: async (value) => { available = !!value; },
+  });
+  const state = { size: 0.03, twap: { interval: 1, slices: 3, remaining: 0 } };
+  const section = () => renderer.twapSection(state, renderer.canSignTwap());
+  const chooseButtons = () => section().children[4].children;
+  await renderer.initializeCredentials();
+  assert.ok(chooseButtons().every((button) => button.data.attrs.disabled));
+  await renderer.saveCredentials(pair);
+  assert.ok(chooseButtons().every((button) => !button.data.attrs.disabled));
+
+  await renderer.saveCredentials(null);
+  state.twap.error = 'TWAP stopped because credentials changed.';
+  assert.ok(chooseButtons().every((button) => button.data.attrs.disabled));
+  assert.equal(section().children[3].text, state.twap.error);
+});
+
+test('a missing Electron signature stops the current TWAP before its next slice', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const renderer = createRenderer(new Map(), {
+    hasCredentials: async () => true,
+    signRest: async () => null,
+  });
+  await renderer.initializeCredentials();
+  const buy$ = renderer.Stream.create();
+  const requests = [];
+  const subscription = renderer.twapRequest({
+    onClickTwapBuyButton$: buy$,
+    onClickTwapSellButton$: renderer.Stream.never(),
+    onClickTwapCancelButton$: renderer.Stream.never(),
+  }, renderer.Stream.of({ size: 0.03, twap: { interval: 1, slices: 3 } }))
+    .subscribe({ next: (request) => requests.push(request) });
+  t.after(() => subscription.unsubscribe());
+
+  buy$.shamefullySendNext(null);
+  assert.equal(await renderer.authorizeRequest(requests[0]), null);
+  t.mock.timers.tick(3000);
+  assert.equal(requests.length, 1);
+});
 
 test('TWAP authorization drops requests that overlap an Electron credential update', async () => {
   let finishSigning;

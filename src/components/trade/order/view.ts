@@ -1,5 +1,6 @@
 import {button, div, h4, hr, VNode} from "@cycle/dom";
 import Stream from "xstream";
+import {twapCredentialAvailability} from "../../../credentials";
 import {sideButtons} from "./buttons";
 import {ifdocoSection} from "./ifdocoView";
 import {State} from "./index";
@@ -9,7 +10,7 @@ import {stopSection} from "./stopView";
 import {twapSection} from "./twapView";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
-    state$.map((state) =>
+    Stream.combine(state$, twapCredentialAvailability()).map(([state, canSign]) =>
         div(".order", [
             sizeSection(state),
             hr(),
@@ -19,7 +20,7 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
             hr(),
             stopSection(state),
             hr(),
-            twapSection(state),
+            twapSection(state, canSign),
             hr(),
             clearSection(state),
             hr(),

@@ -1,5 +1,7 @@
 import {Stream} from "xstream";
-import {twapCredentialVersion} from "../../../credentials";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
+import {canSignTwap} from "../../../credentials";
+import {TwapSliceRequest} from "../../../http";
 import {OrderHistory} from "../../../models/orderHistory";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
@@ -12,7 +14,7 @@ export interface TwapActions {
     onClickTwapSellButton$: Stream<null>;
     onTwapIntervalChanged$: Stream<number>;
     onTwapIntervalLoaded$: Stream<number>;
-    onTwapSliceCreated$: Stream<OrderHistory>;
+    onTwapSliceCreated$: Stream<{ history: OrderHistory; isCurrent: boolean }>;
     onTwapSlicesChanged$: Stream<number>;
     onTwapSlicesLoaded$: Stream<number>;
 }
@@ -24,15 +26,18 @@ export const twapStorageKeys = {
 
 export const twapIntent = (sources: Sources): TwapActions => ({
     onClickTwapBuyButton$: clicks(sources.DOM, ".twap-order-buttons", ".buy-button")
-        .filter(() => twapCredentialVersion() !== null),
+        .filter(canSignTwap),
     onClickTwapCancelButton$: clicks(sources.DOM, ".twap-order-buttons", ".cancel-button"),
     onClickTwapSellButton$: clicks(sources.DOM, ".twap-order-buttons", ".sell-button")
-        .filter(() => twapCredentialVersion() !== null),
+        .filter(canSignTwap),
     onTwapIntervalChanged$: numberInputs(sources.DOM, "#twap-interval-input"),
     onTwapIntervalLoaded$: loadNumber(sources.storage, twapStorageKeys.interval),
     onTwapSliceCreated$: sources.HTTP.select("twap-order")
-        .map((stream) => createHistoryStream("TWAP", stream))
-        .flatten(),
+        .map((stream) => createHistoryStream("TWAP", stream).map((history) => ({
+            history,
+            isCurrent: (stream.request as TwapSliceRequest).isTwapActive?.() !== false,
+        })))
+        .compose(flattenConcurrently),
     onTwapSlicesChanged$: numberInputs(sources.DOM, "#twap-slices-input"),
     onTwapSlicesLoaded$: loadNumber(sources.storage, twapStorageKeys.slices),
 });

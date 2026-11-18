@@ -14,6 +14,7 @@ interface RealtimeAuth {
 }
 
 interface CredentialBridge {
+    hasCredentials(): Promise<boolean>;
     migrate(pair: CredentialPair): Promise<void>;
     save(pair: CredentialPair | null): Promise<void>;
     signRest(method: string, path: string, body: string): Promise<Record<string, string> | null>;
@@ -23,11 +24,19 @@ interface CredentialBridge {
 export const credentialsChanged$ = Stream.create<void>();
 export const credentialsChanging$ = Stream.create<void>();
 
-const bridge = (window as Window & { bitFlyerCredentials?: CredentialBridge }).bitFlyerCredentials;
+const bridge = (typeof window === "undefined" ? undefined :
+    (window as Window & { bitFlyerCredentials?: CredentialBridge }).bitFlyerCredentials);
 let sessionPair: CredentialPair | null = null;
 let migration: Promise<boolean> | undefined;
 let credentialVersion = 0;
 let pendingSaves = 0;
+let ready = false;
+const readiness$ = Stream.create<boolean>();
+
+export const canSignTwap = (): boolean => pendingSaves === 0 && ready;
+
+export const twapCredentialAvailability = (): Stream<boolean> =>
+    readiness$.startWith(canSignTwap());
 
 export const twapCredentialVersion = (): number | null =>
     pendingSaves === 0 ? credentialVersion : null;
@@ -35,6 +44,7 @@ export const twapCredentialVersion = (): number | null =>
 export const initializeCredentials = (): Promise<boolean> => {
     if (!migration) {
         migration = migrateLegacyCredentials().then(() => true, () => false);
+        void migration.then(() => refreshReadiness(0));
     }
     return migration;
 };
@@ -42,7 +52,9 @@ export const initializeCredentials = (): Promise<boolean> => {
 export const saveCredentials = async (pair: CredentialPair | null): Promise<void> => {
     credentialVersion += 1;
     pendingSaves += 1;
+    ready = false;
     try {
+        readiness$.shamefullySendNext(false);
         credentialsChanging$.shamefullySendNext(undefined);
         await initializeCredentials();
         if (bridge) {
@@ -53,6 +65,7 @@ export const saveCredentials = async (pair: CredentialPair | null): Promise<void
         migration = Promise.resolve(true);
     } finally {
         pendingSaves -= 1;
+        await refreshReadiness(credentialVersion);
     }
     credentialsChanged$.shamefullySendNext(undefined);
 };
@@ -85,6 +98,21 @@ export const signRealtime = async (): Promise<RealtimeAuth | null> => {
         signature: signature(sessionPair.secret, `${timestamp}${nonce}`),
         timestamp,
     };
+};
+
+const refreshReadiness = async (version: number): Promise<void> => {
+    if (pendingSaves || version !== credentialVersion) { return; }
+    let available = !!sessionPair;
+    if (bridge) {
+        try {
+            available = await bridge.hasCredentials();
+        } catch {
+            available = false;
+        }
+    }
+    if (pendingSaves || version !== credentialVersion) { return; }
+    ready = available;
+    readiness$.shamefullySendNext(ready);
 };
 
 const migrateLegacyCredentials = async (): Promise<void> => {

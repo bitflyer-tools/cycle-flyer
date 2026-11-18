@@ -33,3 +33,20 @@ test('rejects other branches and tags before checkout with a branch error', () =
     assert.match(result.stdout, /::error::Dispatch the release workflow from the master branch\./);
   });
 });
+
+test('limits CI jobs to repository read access', () => {
+  const ciPath = path.join(__dirname, '../.github/workflows/ci.yml');
+  const ci = load(readFileSync(ciPath, 'utf8'));
+  Object.values(ci.jobs).forEach((job) => {
+    assert.deepEqual(job.permissions ?? ci.permissions, { contents: 'read' });
+  });
+});
+
+test('grants release write access only for version bumps and publishing', () => {
+  const release = load(readFileSync(workflowPath, 'utf8'));
+  assert.deepEqual(release.permissions, { contents: 'read' });
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(jobs).map(([name, job]) => [name, job.permissions ?? release.permissions])),
+    { 'bump-version': { contents: 'write' }, build: { contents: 'read' }, publish: { contents: 'write' } },
+  );
+});
