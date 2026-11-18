@@ -10,6 +10,10 @@ Download the latest release from [GitHub Releases](https://github.com/bitflyer-t
 
 ![](./images/looking.png)
 
+## Tests
+
+With Node.js 24, run `npm ci` and then `npm run test:coverage` to run the full test suite and print the coverage report.
+
 ## Author
 
 [@unhappychoice](https://unhappychoice.com)
