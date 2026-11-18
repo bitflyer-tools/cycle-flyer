@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node fuse",
     "lint": "eslint 'src/**/*.ts'",
-    "test": "npm run test:bundle && node --test test/*.test.js out/tests/board.test.cjs out/tests/boardSynchronization.cjs out/tests/clearOrders.test.cjs out/tests/orderSubmission.test.cjs out/tests/parentOrderDetails.test.cjs out/tests/trade-stop-orders.test.cjs",
+    "test": "npm run test:bundle && node --test test/*.test.js test/board.test.mjs out/tests/board.test.cjs out/tests/boardSynchronization.cjs out/tests/clearOrders.test.cjs out/tests/orderSubmission.test.cjs out/tests/parentOrderDetails.test.cjs out/tests/trade-stop-orders.test.cjs",
     "test:bundle": "esbuild test/boardSynchronization.ts test/clearOrders.test.ts test/orderSubmission.test.ts test/parentOrderDetails.test.ts test/trade-stop-orders.test.cjs --bundle --platform=node --define:window=undefined --loader:.styl=empty --outdir=out/tests --out-extension:.js=.cjs && esbuild test/board.test.ts --bundle --platform=node --banner:js=\"globalThis.window = {};\" --outfile=out/tests/board.test.cjs",
     "start": "node fuse.dev",
     "start:electron": "electron-forge start --inspect-electron",
