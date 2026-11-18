@@ -7,11 +7,17 @@ import {StopOrder} from "../../../models/stopOrder";
 import {ceilBy, floorBy} from "../../../util";
 import {State} from "./";
 
-export const view = (state$: Stream<State>) =>
-    state$
+export const view = (state$: Stream<State>) => {
+    const orderTotals = memoizeMarkerTotals(false);
+    const stopTotals = memoizeMarkerTotals(true);
+
+    return state$
         .compose(throttle(100))
-        .map((state) =>
-            div(".board", [
+        .map((state) => {
+            const orders = orderTotals(state.orders, state.groupedSize);
+            const stops = stopTotals(state.stopOrders, state.groupedSize);
+
+            return div(".board", [
                 div(".board-header", [
                     span("Group"),
                     button(".minus", "-"),
@@ -24,8 +30,8 @@ export const view = (state$: Stream<State>) =>
                     div(".ask", { dataset: { price: ask.price } }, [
                         span(".bar", { style: barStyle(ask.size) }),
                         myPosition(state, ask),
-                        myOrder("SELL", state, ask),
-                        myStopOrder("SELL", state, ask),
+                        marker(".my-order", orders.asks.get(ask.price)),
+                        marker(".my-stop-order", stops.asks.get(ask.price)),
                         span(padWithZero(ask.size)),
                         span(ask.price.toLocaleString()),
                     ]),
@@ -35,13 +41,14 @@ export const view = (state$: Stream<State>) =>
                         span(".bar", { style: barStyle(bid.size) } ),
                         span(bid.price.toLocaleString()),
                         span(padWithZero(bid.size)),
-                        myOrder("BUY", state, bid),
-                        myStopOrder("BUY", state, bid),
+                        marker(".my-order", orders.bids.get(bid.price)),
+                        marker(".my-stop-order", stops.bids.get(bid.price)),
                         myPosition(state, bid),
                     ]),
                 )),
-            ]),
-        );
+            ]);
+        });
+};
 
 const padWithZero = (n: number): string => n.toFixed(8).toString();
 
@@ -61,45 +68,37 @@ const myPosition = (state: State, order: BoardOrder): VNode | null => {
     return span(".my-position", "💰");
 };
 
-const myOrder = (side: string, state: State, boardOrder: BoardOrder): VNode | null => {
-    const orders = state.orders.filter((order) => matchOrder(side, order, boardOrder, state.groupedSize));
-    if (orders.length === 0) {
-        return null;
-    } else {
-        return span(".my-order", orders.reduce((acc, order) => acc + order.size, 0).toString());
-    }
+const marker = (selector: string, total: number | undefined): VNode | null =>
+    total === undefined ? null : span(selector, total.toString());
+
+const memoizeMarkerTotals = (isStop: boolean) => {
+    let previousOrders: ReadonlyArray<Order | StopOrder> | undefined;
+    let previousGroupedSize: number | undefined;
+    let totals: ReturnType<typeof groupMarkerTotals>;
+
+    return (orders: ReadonlyArray<Order | StopOrder>, groupedSize: number) => {
+        if (orders !== previousOrders || groupedSize !== previousGroupedSize) {
+            totals = groupMarkerTotals(orders, groupedSize, isStop);
+            previousOrders = orders;
+            previousGroupedSize = groupedSize;
+        }
+        return totals;
+    };
 };
 
-const myStopOrder = (side: string, state: State, order: BoardOrder): VNode | null => {
-    const orders = state.stopOrders.filter((stopOrder) => matchOrderInv(side, stopOrder, order, state.groupedSize));
-    if (orders.length === 0) {
-        return null;
-    } else {
-        return span(".my-stop-order", orders.reduce((acc, o) => acc + o.size, 0).toString());
-    }
-};
+const groupMarkerTotals = (orders: ReadonlyArray<Order | StopOrder>, groupedSize: number, isStop: boolean) => {
+    const asks = new Map<number, number>();
+    const bids = new Map<number, number>();
 
-const matchOrder = (side: string, order: Order | StopOrder, boardOrder: BoardOrder, groupedSize: number): boolean => {
-    if (side === "SELL") {
-        return order.side === "SELL" && ceilBy(order.price, groupedSize) === boardOrder.price;
-    } else if (side === "BUY") {
-        return order.side === "BUY" && floorBy(order.price, groupedSize) === boardOrder.price;
-    } else {
-        return false;
-    }
-};
+    orders.forEach((order) => {
+        const side = order.side;
+        if (side !== "BUY" && side !== "SELL") { return; }
+        const isSell = side === "SELL";
+        const price = isSell ? ceilBy(order.price, groupedSize) : floorBy(order.price, groupedSize);
+        if (Number.isNaN(price)) { return; }
+        const buckets = isSell !== isStop ? asks : bids;
+        buckets.set(price, (buckets.get(price) ?? 0) + order.size);
+    });
 
-const matchOrderInv = (
-    side: string,
-    order: Order | StopOrder,
-    boardOrder: BoardOrder,
-    groupedSize: number,
-): boolean => {
-    if (side === "SELL") {
-        return order.side === "BUY" && floorBy(order.price, groupedSize) === boardOrder.price;
-    } else if (side === "BUY") {
-        return order.side === "SELL" && ceilBy(order.price, groupedSize) === boardOrder.price;
-    } else {
-        return false;
-    }
+    return { asks, bids };
 };
