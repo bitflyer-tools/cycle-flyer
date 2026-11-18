@@ -43,19 +43,32 @@ const createWindow = () => {
   win.loadFile(path.join(__dirname, '../public/index.html'));
 };
 
-app.whenReady().then(() => {
-  registerCredentialHandlers();
-  createWindow();
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
-
-app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+const showWindow = () => {
+  const [win] = BrowserWindow.getAllWindows();
+  if (!win) {
     createWindow();
+    return;
   }
-});
+
+  if (win.isMinimized()) {
+    win.restore();
+  }
+  win.focus();
+};
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  const ready = app.whenReady().then(() => {
+    registerCredentialHandlers();
+    createWindow();
+  });
+
+  app.on('second-instance', () => ready.then(showWindow));
+  app.on('activate', () => ready.then(showWindow));
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+}
