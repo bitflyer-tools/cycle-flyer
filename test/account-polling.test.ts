@@ -10,6 +10,7 @@ const pollers = [
     {
         categories: ["orders", "parent-orders", "positions"],
         requests: () => tradeRequest({
+            onCancelParentOrder$: Stream.never(),
             onExecutionCreated$: Stream.never(),
             onMyExecutionCreated$: Stream.never(),
             onOrdersLoaded$: Stream.never(),
@@ -17,6 +18,7 @@ const pollers = [
             onPositionsLoaded$: Stream.never(),
             onMyOrderChanged$: Stream.never(),
             onParentOrdersLoaded$: Stream.never(),
+            parentOrderRequests$: Stream.never(),
         }),
         interval: 10000,
     },

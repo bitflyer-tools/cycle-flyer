@@ -1,6 +1,6 @@
 import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
-import {getOrders, getParentOrder, getParentOrders, getPositions} from "../../http";
+import {getOrders, getParentOrders, getPositions} from "../../http";
 import {Actions} from "./intent";
 
 export const request = (actions: Actions): Stream<string | RequestInput | null> => {
@@ -12,15 +12,11 @@ export const request = (actions: Actions): Stream<string | RequestInput | null> 
         .map((_) => Stream.fromArray([getOrders(), getParentOrders(), getPositions()]))
         .flatten();
 
-    const parentOrderDetails = actions.onParentOrdersLoaded$
-        .map((os) => Stream.fromArray(os.map((order: any) => getParentOrder(order.parent_order_id))))
-        .flatten();
-
     return Stream.merge(
         orders,
         parentOrders,
         positions,
         refreshes,
-        parentOrderDetails,
+        actions.parentOrderRequests$,
     ) as Stream<string | RequestInput | null>;
 };

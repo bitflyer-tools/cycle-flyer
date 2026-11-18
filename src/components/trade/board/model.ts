@@ -16,7 +16,7 @@ const defaultState: State = {
     stopOrders: [],
 };
 
-export const model = (actions: Actions): Stream<Reducer<State>> => {
+export const model = (actions: Actions, boardReducer$: Stream<Reducer<State>>): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
     const askPriceReducer$ = actions.onClickAsk$
@@ -24,12 +24,6 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
     const bidPriceReducer$ = actions.onClickBid$
         .map((price) => (state: State) => ({ ...state, price: ceilBy(price + 1, state.groupedSize) }));
-
-    const boardReducer$ = actions.onBoardLoaded$
-        .map((board) => (state: State) => ({ ...state, board: state.board.merge(board.asks, board.bids) }));
-
-    const boardSnapshotReducer$ = actions.onBoardSnapshotLoaded$
-        .map((board: Board) => (state: State) => ({ ...state, board }));
 
     const groupedSizePlusReducer$ = actions.onClickGroupSizePlusButton$
         .map((_) => (state: State) => ({ ...state, groupedSize: plusGroupedSizeFor(state.groupedSize) }));
@@ -45,7 +39,6 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         askPriceReducer$,
         bidPriceReducer$,
         boardReducer$,
-        boardSnapshotReducer$,
         groupedSizeLoadedReducer$,
         groupedSizeMinusReducer$,
         groupedSizePlusReducer$,
