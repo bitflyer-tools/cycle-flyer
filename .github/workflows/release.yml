@@ -21,6 +21,13 @@ jobs:
       version: ${{ steps.version.outputs.version }}
 
     steps:
+      - name: Require the master branch
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/master" ]]; then
+            echo "::error::Dispatch the release workflow from the master branch."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
