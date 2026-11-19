@@ -62,6 +62,7 @@ test("leaving Trade stops a partially completed TWAP and restores idle controls"
         socket: {
             board$: Stream.never(),
             childOrderEvent$: Stream.never(),
+            execution$: Stream.never(),
             executionBatch$: Stream.never(),
             parentOrderEvent$: Stream.never(),
             reconnect$: Stream.never(),

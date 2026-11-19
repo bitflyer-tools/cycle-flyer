@@ -42,6 +42,7 @@ function tradeHarness(t) {
     orderRequests: { select: () => Stream.never() },
     socket: {
       board$: Stream.never(),
+      execution$: Stream.never(),
       executionBatch$,
       childOrderEvent$,
       parentOrderEvent$: Stream.never(),
