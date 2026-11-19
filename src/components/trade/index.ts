@@ -43,7 +43,7 @@ export interface Sinks {
 
 export interface State {
     canceledParentOrderIds?: ReadonlySet<string>;
-    currentPrice: number;
+    currentPrice: number | null;
     histories: OrderHistory[];
     orders: Order[];
     parentStopOrders: ParentStopOrders;
@@ -77,7 +77,7 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
         state: {
             get: (state: State) => state.boardComponentState && {
                 ...state.boardComponentState,
-                currentPrice: state.currentPrice,
+                currentPrice: state.currentPrice ?? 0,
                 orders: state.orders,
                 position: state.position,
                 price: state.price,
@@ -95,7 +95,7 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
         state: {
             get: (state: State) => state.orderComponentState && {
                 ...state.orderComponentState,
-                currentPrice: state.currentPrice,
+                currentPrice: state.currentPrice ?? 0,
                 histories: state.histories,
                 orders: state.orders,
                 parentStopOrders: state.parentStopOrders,

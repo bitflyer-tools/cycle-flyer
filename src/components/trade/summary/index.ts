@@ -11,7 +11,7 @@ import {view} from "./view";
 
 export interface State {
     collateral: number;
-    currentPrice: number;
+    currentPrice: number | null;
     histories: OrderHistory[];
     marketState: any;
     position: Position;
