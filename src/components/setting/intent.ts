@@ -21,12 +21,12 @@ export const intent = (sources: Sources): Actions => {
         .take(1);
 
     const onApiKeyInputChanged$ = sources.DOM.select("#api-key-input")
-        .events("keyup")
+        .events("input")
         .map((event) => event.target as HTMLInputElement)
         .map((element) => element.value);
 
     const onApiSecretInputChanged$ = sources.DOM.select("#api-secret-input")
-        .events("keyup")
+        .events("input")
         .map((event) => event.target as HTMLInputElement)
         .map((element) => element.value);
 
