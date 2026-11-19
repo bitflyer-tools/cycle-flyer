@@ -49,41 +49,42 @@ test('discards fractional units and supports scientific notation', () => {
 
 test('schedules all 29 requests at the exact minimum size', (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] });
-  const buy$ = Stream.create();
+  const start$ = Stream.create();
+  const scheduleId = Symbol();
   const requests = [];
   const subscription = twapRequest({
-    onClickTwapBuyButton$: buy$,
-    onClickTwapSellButton$: Stream.never(),
+    onTwapStarted$: start$,
     onClickTwapCancelButton$: Stream.never(),
   }, Stream.of({ size: 0.29, twap })).subscribe({ next: (request) => requests.push(request) });
   t.after(() => subscription.unsubscribe());
 
-  buy$.shamefullySendNext({});
+  start$.shamefullySendNext({ id: scheduleId, side: 'BUY' });
   assert.equal(requests.length, 1);
   for (let index = 1; index < twap.slices; index++) {
     t.mock.timers.tick(1000);
   }
   assert.equal(requests.length, 29);
-  assert.ok(requests.every(({ category, send }) =>
-    category === 'twap-order' && JSON.parse(send).size === 0.01));
+  assert.ok(requests.every(({ category, send, scheduleId: requestScheduleId }) =>
+    category === 'twap-order' && requestScheduleId === scheduleId && JSON.parse(send).size === 0.01));
 });
 
 function setup(t, savedInterval, interval = defaultTwapOrder.interval) {
   const buy$ = Stream.create();
   const sell$ = Stream.create();
-  const dom = { select: () => dom, events: () => Stream.never() };
-  const actions = {
-    ...twapIntent({
-      DOM: dom,
-      HTTP: { select: () => Stream.never() },
-      storage: { local: { getItem: (key) => Stream.of(key === "twap-interval" ? savedInterval : null) } },
-    }),
-    onClickTwapBuyButton$: buy$,
-    onClickTwapSellButton$: sell$,
-  };
   let state = { size: 0.03, twap: { ...defaultTwapOrder, interval, slices: 3 } };
   const state$ = Stream.createWithMemory();
   state$.shamefullySendNext(state);
+  const buttons = { ".buy-button": buy$, ".sell-button": sell$ };
+  const actions = twapIntent({
+    DOM: {
+      select: () => ({
+        events: () => Stream.never(),
+        select: (selector) => ({ events: () => buttons[selector] || Stream.never() }),
+      }),
+    },
+    HTTP: { select: () => Stream.never() },
+    storage: { local: { getItem: (key) => Stream.of(key === "twap-interval" ? savedInterval : null) } },
+  }, state$);
   const modelSubscription = twapModel(actions).subscribe({
     next: (reducer) => {
       state = reducer(state);
@@ -120,7 +121,7 @@ test("invalid saved intervals keep TWAP idle with no order requests", (t) => {
   }
 });
 
-test("the scheduler rejects invalid intervals even when directly supplied in state", (t) => {
+test("TWAP rejects invalid intervals supplied directly in state", (t) => {
   for (const interval of [2147484, Number.MAX_VALUE, Infinity, NaN]) {
     const { buy$, sell$, requests, getState } = setup(t, null, interval);
     buy$.shamefullySendNext(null);

@@ -20,12 +20,12 @@ function setup(t, storedWidth) {
         events: () => events[path.join(" ")] || Stream.never(),
     });
     const storage = { [storageKeys.priceWidth]: storedWidth, [storageKeys.size]: "1" };
+    const state$ = Stream.createWithMemory();
     const actions = intent({
         DOM: dom(),
         HTTP: { select: () => Stream.never() },
         storage: { local: { getItem: (key) => Stream.of(storage[key] ?? null) } },
-    });
-    const state$ = Stream.createWithMemory();
+    }, state$);
     let state;
     const reducers = model(actions, Stream.never()).subscribe({
         next: (reduce) => {
