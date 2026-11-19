@@ -134,7 +134,7 @@ const setup = (t: { after: (cleanup: () => void) => void }) => {
                 return channel;
             },
         },
-        socket: { childOrderEvent$: Stream.never(), execution$: Stream.never(), parentOrderEvent$: events,
+        socket: { childOrderEvent$: Stream.never(), execution$: Stream.never(), executionBatch$: Stream.never(), parentOrderEvent$: events,
             reconnect$: reconnect },
     };
     const actions = intent(sources as unknown as Parameters<typeof intent>[0]);
