@@ -10,22 +10,28 @@ import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
 import {pollResponse} from "./pollResponse";
 
 export interface Actions {
-    onCancelParentOrder$: Stream<string>;
+    onCancelParentOrder$: Stream<{ id: string; sequence: number }>;
     onExecutionBatch$: Stream<Execution[]>;
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
     onMyOrderChanged$: Stream<null>;
     onOrdersLoaded$: Stream<object[]>;
     onParentOrderLoaded$: Stream<ActiveParentOrder>;
-    onParentOrdersLoaded$: Stream<ActiveParentOrder[]>;
+    onParentOrdersLoaded$: Stream<{ orders: ActiveParentOrder[]; sequence: number }>;
     parentOrderRequests$: Stream<RequestOptions>;
     onPositionsLoaded$: Stream<Position>;
 }
+
+// Trade state survives navigation, so request and cancellation ordering must survive it too.
+let parentOrderSequence = 0;
 
 export const intent = (sources: Sources): Actions => {
     const onCancelParentOrder$ = sources.HTTP.select("cancel-parent-order")
         .map((response$) => response$.replaceError(() => Stream.empty()))
         .compose(flattenConcurrently)
-        .map((response) => JSON.parse(response.request.send as string).parent_order_id);
+        .map((response) => ({
+            id: JSON.parse(response.request.send as string).parent_order_id as string,
+            sequence: ++parentOrderSequence,
+        }));
 
     const onMyExecutionCreated$ = sources.socket.childOrderEvent$.filter(isExecution);
 
@@ -41,12 +47,16 @@ export const intent = (sources: Sources): Actions => {
         .map((response) => JSON.parse(response.text));
 
     const onParentOrdersLoaded$ = sources.HTTP.select("parent-orders")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .map((response) => JSON.parse(response.text));
+        .map((response$) => {
+            const sequence = ++parentOrderSequence;
+            return response$.map((response) => ({ orders: JSON.parse(response.text) as ActiveParentOrder[], sequence }))
+                .replaceError(() => Stream.never());
+        })
+        .flatten();
 
     const details = parentOrderDetails(
-        sources.HTTP, onParentOrdersLoaded$, sources.socket.parentOrderEvent$, sources.socket.reconnect$,
+        sources.HTTP, onParentOrdersLoaded$.map(({ orders }) => orders),
+        sources.socket.parentOrderEvent$, sources.socket.reconnect$,
     );
 
     const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json) =>

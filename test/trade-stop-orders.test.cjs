@@ -23,7 +23,7 @@ function setup(t) {
         onMyExecutionCreated$: Stream.never(),
         onOrdersLoaded$: Stream.never(),
         onParentOrderLoaded$: parentOrder$,
-        onParentOrdersLoaded$: parentOrders$,
+        onParentOrdersLoaded$: parentOrders$.map((orders) => ({ orders, sequence: 0 })),
         onPositionsLoaded$: Stream.never(),
     }).subscribe({
         next: (reducer) => {
