@@ -8,7 +8,7 @@ import {State} from "./index";
 import {Actions} from "./intent";
 
 const defaultState: State = {
-    currentPrice: 0,
+    currentPrice: null,
     histories: [],
     orders: [],
     parentStopOrders: {},

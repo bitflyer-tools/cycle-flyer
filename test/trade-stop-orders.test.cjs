@@ -52,7 +52,7 @@ test("a public execution batch prunes the board and updates the price while the 
     assert.deepEqual(board.asks.map(({ price }) => price), [110]);
     assert.equal(snapshots[beforeExecution].stopOrders, snapshots[beforeExecution - 1].stopOrders);
     assert.deepEqual(snapshots.slice(beforeExecution - 1).map(({ price, stops }) => ({ price, stops })), [
-        { price: 0, stops: [110] },
+        { price: null, stops: [110] },
         { price: 108, stops: [110] },
         { price: 108, stops: [110] },
     ]);
