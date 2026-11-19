@@ -1,3 +1,6 @@
+// The helper quits after handling Squirrel.Windows lifecycle events.
+if (require('electron-squirrel-startup')) return;
+
 const { app, BrowserWindow } = require('electron');
 
 const createWindow = () => {
@@ -5,7 +8,9 @@ const createWindow = () => {
     width: 800,
     height: 600,
     webPreferences: {
-      nodeIntegration: true
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true
     }
   });
 
