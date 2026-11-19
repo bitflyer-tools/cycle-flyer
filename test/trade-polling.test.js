@@ -54,7 +54,7 @@ for (const { component, category, first, invalid, next, read, expected } of test
     const actions = components[`${component}_intent`]({
       DOM: dom,
       storage: { local: { getItem: () => idle } },
-      socket: { board$: idle, execution$: idle, childOrderEvent$: idle, parentOrderEvent$: idle, reconnect$: idle },
+      socket: { board$: idle, execution$: idle, executionBatch$: idle, childOrderEvent$: idle, parentOrderEvent$: idle, reconnect$: idle },
       HTTP: { select: (name) => name === category ? responses : idle },
     });
 
