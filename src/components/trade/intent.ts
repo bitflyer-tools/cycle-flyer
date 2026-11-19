@@ -35,15 +35,10 @@ export const intent = (sources: Sources): Actions => {
         sources.socket.reconnect$,
     ).compose(debounce(500));
 
-    const onOrdersLoaded$ = sources.HTTP.select("orders")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .map((response) => JSON.parse(response.text));
-
-    const onParentOrdersLoaded$ = sources.HTTP.select("parent-orders")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .map((response) => JSON.parse(response.text));
+    const onOrdersLoaded$ = pollResponse<object[]>(sources.HTTP.select("orders"), decodeArray);
+    const onParentOrdersLoaded$ = pollResponse<ActiveParentOrder[]>(
+        sources.HTTP.select("parent-orders"), decodeArray,
+    );
 
     const details = parentOrderDetails(
         sources.HTTP, onParentOrdersLoaded$, sources.socket.parentOrderEvent$, sources.socket.reconnect$,
@@ -64,6 +59,8 @@ export const intent = (sources: Sources): Actions => {
         parentOrderRequests$: details.requests$,
     };
 };
+
+const decodeArray = <T>(json: unknown): T[] | undefined => Array.isArray(json) ? json : undefined;
 
 const isPositionList = (positions: unknown): boolean =>
     Array.isArray(positions) && positions.every((position) =>

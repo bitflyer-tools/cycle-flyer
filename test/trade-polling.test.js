@@ -54,7 +54,7 @@ for (const { component, category, first, invalid, next, read, expected } of test
     const actions = components[`${component}_intent`]({
       DOM: dom,
       storage: { local: { getItem: () => idle } },
-      socket: { board$: idle, execution$: idle, childOrderEvent$: idle, parentOrderEvent$: idle, reconnect$: idle },
+      socket: { board$: idle, execution$: idle, executionBatch$: idle, childOrderEvent$: idle, parentOrderEvent$: idle, reconnect$: idle },
       HTTP: { select: (name) => name === category ? responses : idle },
     });
 
@@ -82,5 +82,68 @@ for (const { component, category, first, invalid, next, read, expected } of test
     } finally {
       subscription.unsubscribe();
     }
+  });
+}
+
+const accountPolls = [
+  ['orders', 'onOrdersLoaded$', (price) => [{ price }], (orders) => orders[0].price],
+  ['parent-orders', 'onParentOrdersLoaded$',
+    (id) => [{ parent_order_id: String(id) }], (orders) => Number(orders[0].parent_order_id)],
+  ['positions', 'onPositionsLoaded$',
+    (price) => [{ side: 'BUY', price, size: 1 }], (position) => position.price],
+];
+
+for (const [category, action, payload, read] of accountPolls) {
+  const observe = (t) => {
+    const responses = Stream.create();
+    const idle = Stream.never();
+    const actions = components.trade_intent({
+      socket: { childOrderEvent$: idle, parentOrderEvent$: idle, reconnect$: idle },
+      HTTP: { select: (name) => name === category ? responses : idle },
+    });
+    const values = [];
+    const subscription = actions[action].subscribe({ next: (value) => values.push(read(value)) });
+    t.after(() => subscription.unsubscribe());
+
+    const announce = (value, delay) => {
+      const response = Stream.create();
+      responses.shamefullySendNext(response);
+      setTimeout(() => {
+        response.shamefullySendNext({ text: JSON.stringify(payload(value)) });
+        response.shamefullySendComplete();
+      }, delay);
+    };
+
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    return { values, announce };
+  };
+
+  test(`${category} applies 11-second responses with a 10-second polling interval`, (t) => {
+    const { values, announce } = observe(t);
+    announce(1, 11000);
+    t.mock.timers.tick(10000);
+    announce(2, 11000);
+    t.mock.timers.tick(1000);
+    assert.deepEqual(values, [1]);
+
+    t.mock.timers.tick(9000);
+    announce(3, 11000);
+    t.mock.timers.tick(1000);
+    assert.deepEqual(values, [1, 2]);
+  });
+
+  test(`${category} ignores older responses after applying a newer result`, (t) => {
+    const { values, announce } = observe(t);
+    announce(1, 15000);
+    t.mock.timers.tick(10000);
+    announce(2, 1000);
+    t.mock.timers.tick(1000);
+    assert.deepEqual(values, [2]);
+
+    announce(3, 11000);
+    t.mock.timers.tick(4000);
+    assert.deepEqual(values, [2]);
+    t.mock.timers.tick(7000);
+    assert.deepEqual(values, [2, 3]);
   });
 }
