@@ -5,6 +5,7 @@ import {Reducer, StateSource} from "@cycle/state";
 import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
+import dropRepeats from "xstream/extra/dropRepeats";
 import {SocketIOSource} from "../../drivers/socketIODriver";
 import {Sound} from "../../drivers/soundDriver";
 import {Order} from "../../models/order";
@@ -18,7 +19,6 @@ import {model} from "./model";
 import {OrderComponent, State as OrderComponentState} from "./order";
 import {OrderRequestBatch} from "./order/request";
 import {request} from "./request";
-import {sound} from "./sound";
 import {State as SummaryComponentState} from "./summary";
 import {SummaryComponent} from "./summary";
 import {view} from "./view";
@@ -119,12 +119,23 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
     const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM);
     const request$ = request(actions);
 
+    const priceAlertSound$ = sources.state.stream
+        .map((state) => state?.summaryComponentState?.priceAlert)
+        .compose(dropRepeats())
+        .drop(1)
+        .filter((alert) => alert?.status === "triggered")
+        .mapTo<Sound>("price-alert");
+
     return {
         DOM: view$,
         HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP),
         orderRequests: orderComponent.orderRequests,
         router: Stream.never(),
-        sound: sound(sources.state.stream),
+        sound: Stream.merge(
+            orderComponent.sound,
+            actions.onMyExecutionCreated$.mapTo<Sound>("execution"),
+            priceAlertSound$,
+        ),
         state: Stream.merge(
             reducer$,
             boardComponent.state,

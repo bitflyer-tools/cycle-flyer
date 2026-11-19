@@ -1,6 +1,7 @@
 import {MainDOMSource} from "@cycle/dom";
 import {Stream} from "xstream";
 import {Sources} from "../index";
+import {pollResponse} from "../pollResponse";
 import {parsePriceAlertLevel, PriceAlertLevel} from "../priceAlert";
 
 export interface Actions {
@@ -11,17 +12,11 @@ export interface Actions {
 }
 
 export const intent = (sources: Sources): Actions => {
-    const onCollateralLoaded$ = sources.HTTP.select("collateral")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .filter((response) => !!response)
-        .map((response) => JSON.parse(response.text).collateral);
+    const onCollateralLoaded$ = pollResponse<number>(sources.HTTP.select("collateral"), (json) =>
+        Number.isFinite(json?.collateral) ? json.collateral : undefined);
 
-    const onStateLoaded$ = sources.HTTP.select("status")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .filter((response) => !!response)
-        .map((response) => JSON.parse(response.text));
+    const onStateLoaded$ = pollResponse<object>(sources.HTTP.select("status"), (json) =>
+        typeof json?.health === "string" && typeof json.state === "string" ? json : undefined);
 
     const dom = sources.DOM as MainDOMSource;
     const onPriceAlertSet$ = dom.select(".price-alert-form")

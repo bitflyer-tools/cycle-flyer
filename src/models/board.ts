@@ -1,5 +1,8 @@
 import {ceilBy, floorBy} from "../util";
 import {BoardOrder} from "./boardOrder";
+import {Execution} from "./execution";
+
+const visibleRows = 200;
 
 export class Board {
     public asks: BoardOrder[];
@@ -24,6 +27,20 @@ export class Board {
         }
     }
 
+    public removeExecutions(executions: Execution[]): void {
+        let highestBuy: number | undefined;
+        let lowestSell: number | undefined;
+        executions.forEach(({ side, price }) => {
+            if (side === "BUY") {
+                highestBuy = Math.max(highestBuy ?? price, price);
+            } else {
+                lowestSell = Math.min(lowestSell ?? price, price);
+            }
+        });
+        if (highestBuy !== undefined) { this.remove("BUY", highestBuy); }
+        if (lowestSell !== undefined) { this.remove("SELL", lowestSell); }
+    }
+
     public merge(asks: BoardOrder[], bids: BoardOrder[]): Board {
         const asksToRemove = asks.map((ask) => ask.price);
         const asksToAppend = asks.filter((ask) => ask.size !== 0.0).map((ask) => new BoardOrder(ask));
@@ -44,38 +61,51 @@ export class Board {
     }
 
     public groupedAsks(groupPrice: number): BoardOrder[] {
-        return this.ceilBySize(this.asks, groupPrice).sort((a, b) => a.price < b.price ? -1 : 1);
+        return this.groupBy(this.asks, groupPrice, 1, ceilBy);
     }
 
     public groupedBids(groupPrice: number): BoardOrder[] {
-        return this.floorBySize(this.bids, groupPrice).sort((a, b) => a.price > b.price ? -1 : 1);
+        return this.groupBy(this.bids, groupPrice, -1, floorBy);
     }
 
-    private floorBySize(boardOrders: BoardOrder[], priceSize: number): BoardOrder[] {
-        return this.groupBy(boardOrders, priceSize, (order) => floorBy(order.price, priceSize));
-    }
-
-    private ceilBySize(boardOrders: BoardOrder[], priceSize: number): BoardOrder[] {
-        return this.groupBy(boardOrders, priceSize, (order) => ceilBy(order.price, priceSize));
-    }
-
-    private groupBy(boardOrders: BoardOrder[], priceSize: number, fn: (order: BoardOrder) => number): BoardOrder[] {
-        const prices = boardOrders.reduce((acc: any, boardOrder: BoardOrder) => {
-            const price = fn(boardOrder);
-            acc[price] = (acc[price] || 0) + boardOrder.size;
-            return acc;
-        }, []);
-        return this.mapToBoardOrder(priceSize, prices);
-    }
-
-    private mapToBoardOrder(priceSize: number, prices: any): BoardOrder[] {
-        if (priceSize > 99 && Object.keys(prices).length > 0) {
-            const min = Math.min.apply(null, Object.keys(prices).map((price) => +price));
-            const max = Math.max.apply(null, Object.keys(prices).map((price) => +price));
-            const keys = Array((max - min) / priceSize + 1).fill(priceSize).map((value, index) => min + index * value);
-            return keys.map((key) => new BoardOrder({ price: +key, size: +(prices[key] || 0) }));
+    private groupBy(
+        orders: BoardOrder[],
+        groupPrice: number,
+        direction: number,
+        roundPrice: (price: number, size: number) => number,
+    ): BoardOrder[] {
+        if (orders.length === 0) { return []; }
+        if (groupPrice >= 100) {
+            const best = orders.reduce((price, order) =>
+                direction * order.price < direction * price ? order.price : price, orders[0].price);
+            return this.groupWindow(orders, roundPrice(best, groupPrice), direction * groupPrice, roundPrice);
         }
 
-        return Object.keys(prices).map((key) => new BoardOrder({ price: +key, size: +prices[key] }));
+        const sizes = new Map<number, number>();
+        orders.forEach((order) => {
+            const price = roundPrice(order.price, groupPrice);
+            sizes.set(price, (sizes.get(price) || 0) + order.size);
+        });
+        return Array.from(sizes.keys())
+            .sort((a, b) => direction * (a - b))
+            .slice(0, visibleRows)
+            .map((price) => new BoardOrder({ price, size: sizes.get(price) }));
+    }
+
+    private groupWindow(
+        orders: BoardOrder[],
+        best: number,
+        step: number,
+        roundPrice: (price: number, size: number) => number,
+    ): BoardOrder[] {
+        const sizes: number[] = [];
+        let rows = 0;
+        orders.forEach((order) => {
+            const index = Math.round((roundPrice(order.price, Math.abs(step)) - best) / step);
+            rows = Math.max(rows, Math.min(index + 1, visibleRows));
+            if (index < visibleRows) { sizes[index] = (sizes[index] || 0) + order.size; }
+        });
+        return Array.from({ length: rows }, (_, index) =>
+            new BoardOrder({ price: best + index * step, size: sizes[index] || 0 }));
     }
 }

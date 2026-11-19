@@ -2,15 +2,16 @@ import {RequestOptions} from "@cycle/http";
 import {Stream} from "xstream";
 import debounce from "xstream/extra/debounce";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
-import {PublicExecution} from "../../drivers/socketIODriver";
+import {Execution} from "../../models/execution";
 import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
 import {Sources} from "./index";
 import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
+import {pollResponse} from "./pollResponse";
 
 export interface Actions {
     onCancelParentOrder$: Stream<string>;
-    onExecutionCreated$: Stream<PublicExecution>;
+    onExecutionBatch$: Stream<Execution[]>;
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
     onMyOrderChanged$: Stream<null>;
     onOrdersLoaded$: Stream<object[]>;
@@ -25,8 +26,6 @@ export const intent = (sources: Sources): Actions => {
         .map((response$) => response$.replaceError(() => Stream.empty()))
         .compose(flattenConcurrently)
         .map((response) => JSON.parse(response.request.send as string).parent_order_id);
-
-    const onExecutionCreated$ = sources.socket.execution$;
 
     const onMyExecutionCreated$ = sources.socket.childOrderEvent$.filter(isExecution);
 
@@ -50,15 +49,12 @@ export const intent = (sources: Sources): Actions => {
         sources.HTTP, onParentOrdersLoaded$, sources.socket.parentOrderEvent$, sources.socket.reconnect$,
     );
 
-    const onPositionsLoaded$ = sources.HTTP.select("positions")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .map((response) => JSON.parse(response.text))
-        .map((positions) => new Position(positions));
+    const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json) =>
+        isPositionList(json) ? new Position(json) : undefined);
 
     return {
         onCancelParentOrder$,
-        onExecutionCreated$,
+        onExecutionBatch$: sources.socket.executionBatch$,
         onMyExecutionCreated$,
         onMyOrderChanged$,
         onOrdersLoaded$,
@@ -68,3 +64,8 @@ export const intent = (sources: Sources): Actions => {
         parentOrderRequests$: details.requests$,
     };
 };
+
+const isPositionList = (positions: unknown): boolean =>
+    Array.isArray(positions) && positions.every((position) =>
+        (position?.side === "BUY" || position?.side === "SELL")
+        && Number.isFinite(position.price) && Number.isFinite(position.size) && position.size > 0);

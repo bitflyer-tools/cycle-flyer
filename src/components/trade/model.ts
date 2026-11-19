@@ -1,6 +1,6 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
-import {PublicExecution} from "../../drivers/socketIODriver";
+import {Execution} from "../../models/execution";
 import {Order} from "../../models/order";
 import {createOrderHistory} from "../../models/orderHistory";
 import {putParentOrder, retainActive} from "../../models/parentStopOrders";
@@ -22,10 +22,11 @@ const defaultState: State = {
 export const model = (actions: Actions): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of(startTradeSession);
 
-    const currentPriceReducer$ = actions.onExecutionCreated$
-        .map((execution) => {
+    const currentPriceReducer$ = actions.onExecutionBatch$
+        .filter((executions) => executions.length > 0)
+        .map((executions) => {
             const time = new Date();
-            return (state: State) => applyExecution(state, execution, time);
+            return (state: State) => applyExecutions(state, executions, time);
         });
 
     const myExecutionReducer$ = actions.onMyExecutionCreated$
@@ -76,10 +77,14 @@ const startTradeSession = (state: State = defaultState): State => ({
     summaryComponentState: state.summaryComponentState && { ...state.summaryComponentState, priceAlert: null },
 });
 
-const applyExecution = (state: State, { price, side }: PublicExecution, time: Date): State => {
+const applyExecutions = (state: State, executions: Execution[], time: Date): State => {
+    state.boardComponentState?.board.removeExecutions(executions.filter(({ price }) => isExecutionPrice(price)));
+    return executions.reduce((next, { price }) => applyExecution(next, price, time), state);
+};
+
+const applyExecution = (state: State, price: number, time: Date): State => {
     if (!isExecutionPrice(price)) { return { ...state, lastExecutionPrice: 0 }; }
 
-    state.boardComponentState?.board.remove(side, price);
     const summary = state.summaryComponentState;
     const priceAlert = summary && checkPriceAlert(summary.priceAlert, state.lastExecutionPrice, price, time);
     return {

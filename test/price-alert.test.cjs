@@ -21,7 +21,7 @@ function setup(t) {
     });
     const submit$ = Stream.create();
     const dismiss$ = Stream.create();
-    const execution$ = Stream.create();
+    const executionBatch$ = Stream.create();
     const history$ = Stream.createWithMemory();
     history$.shamefullySendNext({ pathname: "/" });
     const state$ = Stream.createWithMemory();
@@ -40,7 +40,7 @@ function setup(t) {
         socket: {
             board$: Stream.never(),
             childOrderEvent$: Stream.never(),
-            execution$,
+            executionBatch$,
             parentOrderEvent$: Stream.never(),
             reconnect$: Stream.never(),
         },
@@ -61,7 +61,7 @@ function setup(t) {
     return {
         get alert() { return state.trade.summaryComponentState.priceAlert; },
         dismiss: () => dismiss$.shamefullySendNext({}),
-        execute: (price) => execution$.shamefullySendNext({ price, side: "BUY" }),
+        execute: (...prices) => executionBatch$.shamefullySendNext(prices.map((price) => ({ price, side: "BUY" }))),
         navigate: (pathname) => history$.shamefullySendNext({ pathname }),
         set: (threshold, direction) => submit$.shamefullySendNext({ target: { elements: {
             namedItem: (name) => name === "threshold" ? { valueAsNumber: threshold } : { value: direction },
@@ -85,7 +85,7 @@ test("an upward touch disarms the alert and emits one sound", (t) => {
     trade.set(110, "up");
     assert.deepEqual(trade.alert, { threshold: 100, direction: "up", status: "active" });
 
-    trade.execute(100);
+    trade.execute(100, 99);
     const triggered = trade.alert;
     assert.equal(triggered.status, "triggered");
     assert.equal(triggered.price, 100);
