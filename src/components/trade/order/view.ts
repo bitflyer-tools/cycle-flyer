@@ -8,6 +8,7 @@ import {numberInput} from "./numberInput";
 import {sizeSection} from "./sizeView";
 import {stopSection} from "./stopView";
 import {twapSection} from "./twapView";
+import {isValidLimitOrder, isValidMarketOrder} from "./validation";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
     state$.compose(dropRepeats(sameViewInputs)).map((state) =>
@@ -45,7 +46,7 @@ const sameViewInputs = (previous: State, next: State): boolean =>
 const marketSection = (state: State): VNode =>
     div([
         h4(".sub-title", "Market"),
-        div(".market-order-buttons.order-buttons", sideButtons(orderButtonDisabled(state))),
+        div(".market-order-buttons.order-buttons", sideButtons(state.isOrdering || !isValidMarketOrder(state))),
     ]);
 
 const limitSection = (state: State): VNode =>
@@ -53,7 +54,7 @@ const limitSection = (state: State): VNode =>
         h4(".sub-title", "Limit"),
         div(".limit-order-buttons.order-buttons", [
             numberInput("#price-input", state.price),
-            ...sideButtons(orderButtonDisabled(state)),
+            ...sideButtons(state.isOrdering || !isValidLimitOrder(state)),
         ]),
     ]);
 
@@ -69,9 +70,6 @@ const clearSection = (state: State): VNode =>
             button(".clear-order-button", { attrs: { disabled: clearOrderButtonDisabled(state) } }, "Clear Orders"),
         ]),
     ]);
-
-const orderButtonDisabled = (state: State): boolean =>
-    state.isOrdering || state.size === 0;
 
 const clearOrderButtonDisabled = (state: State): boolean =>
     state.isOrdering || (state.orders.length + Object.keys(state.parentStopOrders).length) === 0;

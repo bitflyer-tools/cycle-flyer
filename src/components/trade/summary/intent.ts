@@ -1,6 +1,7 @@
 import {Stream} from "xstream";
 import {OrderHistory} from "../../../models/orderHistory";
 import {Sources} from "../index";
+import {pollResponse} from "../pollResponse";
 
 export interface Actions {
     onCollateralLoaded$: Stream<number>;
@@ -10,17 +11,11 @@ export interface Actions {
 }
 
 export const intent = (sources: Sources): Actions => {
-    const onCollateralLoaded$ = sources.HTTP.select("collateral")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .filter((response) => !!response)
-        .map((response) => JSON.parse(response.text).collateral);
+    const onCollateralLoaded$ = pollResponse<number>(sources.HTTP.select("collateral"), (json) =>
+        Number.isFinite(json?.collateral) ? json.collateral : undefined);
 
-    const onStateLoaded$ = sources.HTTP.select("status")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .filter((response) => !!response)
-        .map((response) => JSON.parse(response.text));
+    const onStateLoaded$ = pollResponse<object>(sources.HTTP.select("status"), (json) =>
+        typeof json?.health === "string" && typeof json.state === "string" ? json : undefined);
 
     return {
         onCollateralLoaded$,
