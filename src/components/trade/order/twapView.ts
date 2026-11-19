@@ -14,7 +14,7 @@ export const twapSection = (state: State): VNode =>
             label(".label", "Interval (sec)"),
             numberInput("#twap-interval-input", state.twap.interval),
         ]),
-        p(".twap-status", `Enter an interval greater than 0 and up to ${maximumTwapInterval} seconds.`),
+        p(".twap-interval-hint", `Enter an interval greater than 0 and up to ${maximumTwapInterval} seconds.`),
         p(".twap-status", twapStatus(state)),
         div(".twap-order-buttons.order-buttons", twapButtons(state)),
     ]);
