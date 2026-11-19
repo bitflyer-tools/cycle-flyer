@@ -11,8 +11,8 @@
     "test:coverage": "npm run test:bundle && node --enable-source-maps --test --experimental-test-coverage --test-coverage-exclude=\"**/node_modules/**\" --test-coverage-include=\"{src/**/*.ts,out/tests/*.cjs}\" \"test/*.test.js\" \"test/*.test.mjs\" test/position.test.cjs \"out/tests/*.test.cjs\" out/tests/boardSynchronization.cjs",
     "start": "node fuse.dev",
     "start:electron": "npm run build && electron-forge start --inspect-electron",
-    "package": "electron-forge package",
-    "make": "electron-forge make"
+    "package": "npm run build && electron-forge package",
+    "make": "npm run build && electron-forge make"
   },
   "author": "unhappychoice",
   "license": "MIT",

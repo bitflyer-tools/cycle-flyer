@@ -38,6 +38,9 @@ const checkRenderer = async () => {
     `document.querySelector(${JSON.stringify(selector)}).click()`
   );
   await waitFor(() => visible('.content .trade'), 'Trade on startup');
+  assert.equal(await contents.executeJavaScript(
+    "getComputedStyle(document.querySelector('.content .trade')).display"
+  ), 'grid', 'Trade uses the bundled stylesheet');
   assert.deepEqual(await contents.executeJavaScript(
     '[typeof require, typeof process, typeof module, typeof Buffer]'
   ), ['undefined', 'undefined', 'undefined', 'undefined']);
