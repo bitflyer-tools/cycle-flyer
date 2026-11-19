@@ -112,8 +112,8 @@ function clearOrders(ids: string[], lastDetailPending = false) {
         },
         storage: { local: { getItem: () => Stream.never() } },
     } as unknown as Parameters<typeof intent>[0];
-    const actions = intent(sources);
     const state$ = Stream.createWithMemory<State>();
+    const actions = intent(sources, state$);
     let currentState: State & TradeState;
     model(actions, Stream.of(false)).addListener({
         next: (reducer) => {

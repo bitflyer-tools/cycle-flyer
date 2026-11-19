@@ -55,6 +55,19 @@ test("records a canceled schedule's response without advancing its replacement",
         ["SELL / 0.01 / MARKET", "SELL / 0.01 / MARKET", "BUY / 0.01 / MARKET"]);
 });
 
+test("ignores a new start while a schedule is waiting for responses", (context) => {
+    const twap = createTwap(context);
+    twap.buy.shamefullySendNext(null);
+    context.mock.timers.tick(1000);
+    twap.requests[0].succeed();
+    twap.sell.shamefullySendNext(null);
+
+    strictEqual(twap.state.twap.remaining, 1);
+    strictEqual(twap.requests.length, 2);
+    twap.requests[1].succeed();
+    strictEqual(isRunning(twap.state.twap), false);
+});
+
 const createTwap = (context: TestContext) => {
     context.mock.timers.enable({ apis: ["setInterval"] });
     const buy = Stream.create<null>();
@@ -75,8 +88,8 @@ const createTwap = (context: TestContext) => {
         storage: { local: { getItem: () => Stream.never() } },
     } as unknown as Sources;
 
-    const actions = intent(sources);
     const state$ = Stream.createWithMemory<State>();
+    const actions = intent(sources, state$);
     let state: State | undefined;
     const reducer = model(actions, Stream.never()).subscribe({
         next: (reduce) => {
