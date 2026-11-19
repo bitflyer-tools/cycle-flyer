@@ -28,6 +28,12 @@ test('allows a master branch dispatch and builds from the new version tag', () =
   assert.equal(checkout.with.ref, 'v${{ needs.bump-version.outputs.version }}');
 });
 
+test('keeps the checkout credentials and full history for pushing the version tag', () => {
+  const checkout = jobs['bump-version'].steps.find(({ uses }) => uses?.startsWith('actions/checkout@'));
+  assert.equal(checkout.with['fetch-depth'], 0);
+  assert.equal(checkout.with['persist-credentials'], true);
+});
+
 test('rejects other branches and tags before checkout with a branch error', () => {
   ['refs/heads/feature', 'refs/tags/master'].forEach((ref) => {
     const result = runFirstStep(ref);

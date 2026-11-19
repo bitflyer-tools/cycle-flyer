@@ -35,7 +35,7 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
     const parentOrders$ = Stream.create();
     const idle = Stream.never();
     const actions = components.trade_intent({
-      socket: { reconnect$, childOrderEvent$: idle, parentOrderEvent$: idle },
+      socket: { reconnect$, childOrderEvent$: idle, executionBatch$: idle, parentOrderEvent$: idle },
       HTTP: { select: (category) => category === 'parent-orders' ? parentOrders$ : idle },
     });
     const categories = [];
@@ -64,6 +64,37 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
     assert.deepEqual(takeCategories(), authenticated ? ['parent-order'] : []);
   });
 }
+
+test('loads active orders with their outstanding size and recovers after a failed poll', () => {
+  const responses = Stream.create();
+  const idle = Stream.never();
+  const actions = components.trade_intent({
+    socket: { childOrderEvent$: idle, executionBatch$: idle, parentOrderEvent$: idle, reconnect$: idle },
+    HTTP: { select: (category) => category === 'orders' ? responses : idle },
+  });
+  let state;
+  const subscription = components.trade_model(actions).subscribe({
+    next: (reduce) => { state = reduce(state); },
+    error: (error) => { throw error; },
+  });
+  const respond = (orders) => responses.shamefullySendNext(Stream.of({ text: JSON.stringify(orders) }));
+
+  try {
+    respond([{ side: 'BUY', price: 50000, size: 0.05, outstanding_size: 0.02 }]);
+    assert.deepEqual(Array.from(state.orders, (order) => ({ ...order })), [
+      { side: 'BUY', price: 50000, size: 0.02 },
+    ]);
+    const lastValidState = state;
+
+    responses.shamefullySendNext(Stream.throw(new Error('Order poll failed')));
+    assert.equal(state, lastValidState);
+
+    respond([]);
+    assert.equal(state.orders.length, 0);
+  } finally {
+    subscription.unsubscribe();
+  }
+});
 
 const tests = [
   {
