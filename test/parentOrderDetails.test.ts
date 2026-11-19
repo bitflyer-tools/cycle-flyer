@@ -11,6 +11,55 @@ import {request} from "../src/components/trade/request";
 import {ParentOrderEvent} from "../src/models/orderEvent";
 import {flattenStopOrders} from "../src/models/parentStopOrders";
 
+test("retires a canceled parent only after a fresh list omits it", (t) => {
+    const trade = setup(t);
+    const state = observeState(t, trade.actions);
+    trade.list(["a"]);
+    const detail$ = Stream.create<Response>();
+    trade.send(trade.requests[0], detail$);
+    const oldList$ = trade.startList();
+    const latestOldList$ = trade.startList();
+
+    trade.cancel("a");
+    latestOldList$.shamefullySendNext({ text: "[]" } as Response);
+    deepStrictEqual(Array.from(state().canceledParentOrderIds!.keys()), ["a"]);
+    trade.list(["a", "b"]);
+    deepStrictEqual(state().parentStopOrders, { b: [] });
+    deepStrictEqual(Array.from(state().canceledParentOrderIds!.keys()), ["a"]);
+
+    trade.list(["b"]);
+    oldList$.shamefullySendNext({ text: '[{"parent_order_id":"a"}]' } as Response);
+    detail$.shamefullySendNext({ text: '{"parent_order_id":"a","parameters":[]}' } as Response);
+    deepStrictEqual(state().parentStopOrders, { b: [] });
+    strictEqual(state().canceledParentOrderIds?.size, 0);
+    deepStrictEqual(trade.loaded, []);
+});
+
+test("confirming refreshes retire each of 1,000 distinct cancellation IDs", (t) => {
+    const trade = setup(t);
+    const state = observeState(t, trade.actions);
+    Array.from({ length: 1000 }, (_, index) => `parent-${index}`).forEach((id) => {
+        trade.cancel(id);
+        deepStrictEqual(Array.from(state().canceledParentOrderIds!.keys()), [id]);
+        trade.list([]);
+        strictEqual(state().canceledParentOrderIds?.size, 0);
+    });
+    deepStrictEqual(state().parentStopOrders, {});
+});
+
+test("a list started between two cancellations confirms only the earlier cancellation", (t) => {
+    const trade = setup(t);
+    const state = observeState(t, trade.actions);
+    trade.cancel("a");
+    const list$ = trade.startList();
+    trade.cancel("b");
+
+    list$.shamefullySendNext({ text: "[]" } as Response);
+    deepStrictEqual(Array.from(state().canceledParentOrderIds!.keys()), ["b"]);
+    trade.list([]);
+    strictEqual(state().canceledParentOrderIds?.size, 0);
+});
+
 test("reuses 20 loaded details and coalesces duplicate IDs while they are pending", (t) => {
     const trade = setup(t);
     const ids = Array.from({ length: 20 }, (_, index) => `parent-${index}`);
@@ -118,6 +167,13 @@ test("reconciles on reconnect and ignores responses for removed parents", async 
     deepStrictEqual(trade.requestedIds(), ["a", "b", "a", "b"]);
 });
 
+const observeState = (t: { after: (cleanup: () => void) => void }, actions: ReturnType<typeof intent>) => {
+    let state: State | undefined;
+    const subscription = model(actions).subscribe({ next: (reducer) => { state = reducer(state); } });
+    t.after(() => subscription.unsubscribe());
+    return () => state!;
+};
+
 const setup = (t: { after: (cleanup: () => void) => void }) => {
     const storage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", {
@@ -165,6 +221,10 @@ const setup = (t: { after: (cleanup: () => void) => void }) => {
 
     return {
         actions,
+        cancel: (id: string) => {
+            const input = { category: "cancel-parent-order", url: "", send: JSON.stringify({ parent_order_id: id }) };
+            send(input, Stream.of({ request: input } as Response));
+        },
         complete: (input: RequestOptions) => respond(input, { parent_order_id: requestedId(input), parameters: [] }),
         events,
         fail: (input: RequestOptions) => send(input, Stream.throw(new Error("Request failed"))),
@@ -179,5 +239,10 @@ const setup = (t: { after: (cleanup: () => void) => void }) => {
         requestedIds: () => requests.map(requestedId),
         requests,
         send,
+        startList: () => {
+            const response$ = Stream.create<Response>();
+            send(listRequests[listRequests.length - 1], response$);
+            return response$;
+        },
     };
 };

@@ -7,6 +7,8 @@ export const getBoard = (): RequestInput =>
 export const getState = (): RequestInput =>
     requestInput("status", "/v1/getboardstate", "GET");
 
+export const hasApiCredentials = (): boolean => getApiKeys().every(Boolean);
+
 export const getCollateral = (): RequestInput =>
     requestInput("collateral", "/v1/me/getcollateral", "GET");
 
