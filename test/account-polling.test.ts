@@ -11,7 +11,7 @@ const pollers = [
         categories: ["orders", "parent-orders", "positions"],
         requests: () => tradeRequest({
             onCancelParentOrder$: Stream.never(),
-            onExecutionCreated$: Stream.never(),
+            onExecutionBatch$: Stream.never(),
             onMyExecutionCreated$: Stream.never(),
             onOrdersLoaded$: Stream.never(),
             onParentOrderLoaded$: Stream.never(),

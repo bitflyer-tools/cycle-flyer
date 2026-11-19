@@ -14,7 +14,7 @@ export const twapModel = (actions: TwapActions): Stream<Reducer<State>> => {
     const startReducer$ = Stream.merge(actions.onClickTwapBuyButton$, actions.onClickTwapSellButton$)
         .map((_) => updateTwap((twap) => ({ ...twap, remaining: twap.slices })));
 
-    const sliceReducer$ = actions.onTwapSliceCreated$
+    const sliceReducer$ = actions.onTwapSliceOutcome$
         .map((_) => updateTwap((twap) => ({ ...twap, remaining: Math.max(twap.remaining - 1, 0) })));
 
     const cancelReducer$ = actions.onClickTwapCancelButton$

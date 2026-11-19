@@ -32,7 +32,7 @@ export const view = (state$: Stream<State>) =>
             ]),
             div(".collateral", [
                 span(".label", "Collateral"),
-                span(".number", collateralString(state)),
+                span(".number", state.collateral.toLocaleString()),
                 span(".unit", "JPY"),
             ]),
             hr(),
@@ -58,12 +58,6 @@ export const view = (state$: Stream<State>) =>
                 ),
             ),
         ]));
-
-const collateralString = (state: State): string => {
-    if (!state.position.price) { return state.collateral.toLocaleString(); }
-    const profit = state.position.profit(state.currentPrice);
-    return (state.collateral + profit).toLocaleString();
-};
 
 const profitClass = (state: State): string => {
     if (!state.position.price) { return ".number"; }

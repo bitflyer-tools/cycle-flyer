@@ -53,6 +53,21 @@ test("continues with realtime updates and later snapshots after a request fails"
     assert.deepEqual(asks(), [[101, 2]]);
 });
 
+test("keeps the last valid board and replays deltas after malformed snapshots", () => {
+    const {request, update, asks} = setup();
+    request()([{ price: 100, size: 1 }]);
+
+    request()([], "upstream unavailable");
+    request()([], JSON.stringify({ asks: [] }));
+    request()([], JSON.stringify({ asks: [{ price: 102 }], bids: [] }));
+    assert.deepEqual(asks(), [[100, 1]]);
+
+    const respond = request();
+    update(102, 3);
+    respond([{ price: 101, size: 2 }, { price: 102, size: 1 }]);
+    assert.deepEqual(asks(), [[101, 2], [102, 3]]);
+});
+
 const setup = () => {
     const updates$ = Stream.create<object>();
     const responses$$ = Stream.create<Stream<Response>>();
@@ -66,8 +81,8 @@ const setup = () => {
         request: () => {
             const response$ = Stream.create<Response>();
             responses$$.shamefullySendNext(response$);
-            return (asks: Array<{price: number; size: number}>) => {
-                response$.shamefullySendNext({ text: JSON.stringify({ asks, bids: [] }) } as Response);
+            return (asks: Array<{price: number; size: number}>, text = JSON.stringify({ asks, bids: [] })) => {
+                response$.shamefullySendNext({ text } as Response);
                 response$.shamefullySendComplete();
             };
         },
