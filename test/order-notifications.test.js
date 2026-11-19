@@ -33,7 +33,7 @@ function tradeHarness(t) {
     if (!responses.has(category)) responses.set(category, Stream.create());
     return responses.get(category);
   };
-  const execution$ = Stream.create();
+  const executionBatch$ = Stream.create();
   const childOrderEvent$ = Stream.create();
   const state$ = Stream.createWithMemory();
   const trade = Trade({
@@ -42,7 +42,7 @@ function tradeHarness(t) {
     orderRequests: { select: () => Stream.never() },
     socket: {
       board$: Stream.never(),
-      execution$,
+      executionBatch$,
       childOrderEvent$,
       parentOrderEvent$: Stream.never(),
       reconnect$: Stream.never(),
@@ -65,7 +65,7 @@ function tradeHarness(t) {
   });
 
   return {
-    execution$,
+    executionBatch$,
     childOrderEvent$,
     sounds,
     histories: () => state.histories,
@@ -91,7 +91,7 @@ test('notifies for each other submission and private execution', (t) => {
   trade.submit(limitOrder(100, 0.01, 'BUY')).accept();
   trade.submit(stopOrder(90, 0.01, 'SELL')).accept();
   trade.submit(twapSliceOrder(0.01, 'SELL')).reject();
-  trade.execution$.shamefullySendNext({ price: 100 });
+  trade.executionBatch$.shamefullySendNext([{ side: 'BUY', price: 100 }]);
   trade.childOrderEvent$.shamefullySendNext({ event_type: 'ORDER' });
 
   const execution = { event_type: 'EXECUTION', side: 'BUY', price: 100, size: 0.01 };
