@@ -8,6 +8,32 @@ import {Board} from "../src/models/board";
 import {Position} from "../src/models/position";
 import {StopOrder} from "../src/models/stopOrder";
 
+test("renders a spread only when both sides have a quote", () => {
+    const ask = { price: 110, size: 1 };
+    const bid = { price: 100, size: 1 };
+    const cases = [
+        { asks: [], bids: [], spread: undefined, displayedSpread: "—" },
+        { asks: [], bids: [bid], spread: undefined, displayedSpread: "—" },
+        { asks: [ask], bids: [], spread: undefined, displayedSpread: "—" },
+        { asks: [ask], bids: [bid], spread: 10, displayedSpread: "10" },
+        { asks: [bid], bids: [bid], spread: 0, displayedSpread: "0" },
+    ];
+
+    cases.forEach(({ asks, bids, spread, displayedSpread }) => {
+        const board = new Board({ asks, bids });
+        deepStrictEqual(board.spread(), spread);
+        const renderedSpreads: Array<string | undefined> = [];
+        view(Stream.of({ ...boardState(), board, groupedSize: 100 })).addListener({
+            next: (rendered) => {
+                const [header] = rendered.children as VNode[];
+                const spreadNode = (header.children as VNode[]).find((node) => node.sel === "span.spread");
+                renderedSpreads.push(spreadNode?.text);
+            },
+        });
+        deepStrictEqual(renderedSpreads, [displayedSpread]);
+    });
+});
+
 test("renders summed active and stop markers on their display sides", () => {
     const state = boardState();
     const orders = [
