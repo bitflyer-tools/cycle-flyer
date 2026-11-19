@@ -1,9 +1,10 @@
 import {div, hr, li, span, ul} from "@cycle/dom";
 import Stream from "xstream";
+import dropRepeats from "xstream/extra/dropRepeats";
 import {State} from "./index";
 
 export const view = (state$: Stream<State>) =>
-    state$.map((state) =>
+    state$.compose(dropRepeats(sameViewInputs)).map((state) =>
         div(".summary", [
             div(".current-price", [
                 span(".label", "Current price"),
@@ -58,6 +59,16 @@ export const view = (state$: Stream<State>) =>
                 ),
             ),
         ]));
+
+const sameViewInputs = (previous: State, next: State): boolean =>
+    Object.is(previous.currentPrice, next.currentPrice)
+    && Object.is(previous.collateral, next.collateral)
+    && Object.is(previous.position.price, next.position.price)
+    && Object.is(previous.position.size, next.position.size)
+    && previous.position.side === next.position.side
+    && previous.marketState.health === next.marketState.health
+    && previous.marketState.state === next.marketState.state
+    && previous.histories === next.histories;
 
 const profitClass = (state: State): string => {
     if (state.currentPrice === null || !state.position.price) { return ".number"; }
