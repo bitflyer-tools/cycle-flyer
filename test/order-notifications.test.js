@@ -43,6 +43,7 @@ function tradeHarness(t) {
     socket: {
       board$: Stream.never(),
       execution$,
+      executionBatch$: Stream.never(),
       childOrderEvent$,
       parentOrderEvent$: Stream.never(),
       reconnect$: Stream.never(),
