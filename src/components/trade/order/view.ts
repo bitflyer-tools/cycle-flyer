@@ -8,7 +8,7 @@ import {numberInput} from "./numberInput";
 import {sizeSection} from "./sizeView";
 import {stopSection} from "./stopView";
 import {twapSection} from "./twapView";
-import {isValidLimitOrder, isValidMarketOrder} from "./validation";
+import {canClearPosition, isValidLimitOrder, isValidMarketOrder} from "./validation";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
     state$.compose(dropRepeats(sameViewInputs)).map((state) =>
@@ -32,7 +32,7 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
 const sameViewInputs = (previous: State, next: State): boolean =>
     Object.is(previous.currentPrice, next.currentPrice)
     && previous.isOrdering === next.isOrdering
-    && Object.is(previous.position.size, next.position.size)
+    && canClearPosition(previous) === canClearPosition(next)
     && Object.is(previous.price, next.price)
     && Object.is(previous.size, next.size)
     && Object.is(previous.triggerPrice, next.triggerPrice)
@@ -64,7 +64,7 @@ const clearSection = (state: State): VNode =>
         div(".order-buttons", [
             button(
                 ".clear-button",
-                { attrs: { disabled: state.isOrdering || state.position.size === 0 } },
+                { attrs: { disabled: !canClearPosition(state) } },
                 "Clear Position",
             ),
             button(".clear-order-button", { attrs: { disabled: clearOrderButtonDisabled(state) } }, "Clear Orders"),

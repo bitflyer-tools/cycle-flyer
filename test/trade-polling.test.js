@@ -63,7 +63,7 @@ for (const { component, category, first, invalid, next, read, expected } of test
       next: (reduce) => { state = reduce(state); },
       error: (error) => { throw error; },
     });
-    const respond = (text) => responses.shamefullySendNext(Stream.of({ text }));
+    const respond = (text) => responses.shamefullySendNext(Object.assign(Stream.of({ text }), { request: { category } }));
 
     try {
       respond(JSON.stringify(first));

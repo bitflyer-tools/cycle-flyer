@@ -6,21 +6,24 @@ import sampleCombine from "xstream/extra/sampleCombine";
 import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
-import {isValidLimitOrder, isValidMarketOrder} from "./validation";
+import {canClearPosition, isValidLimitOrder, isValidMarketOrder} from "./validation";
 
 export interface OrderRequestBatch {
     requests: RequestInput[];
     _namespace?: string[];
+    closePositionSize?: number;
 }
 
 interface Submission extends RequestOptions {
     submissionId: symbol;
+    closePositionSize?: number;
 }
 
 export const submissions = (requests$: Stream<OrderRequestBatch>, http: HTTPSource): Stream<Submission[] | null> => {
-    const requested$ = requests$.map(({ requests, _namespace }) => requests.map((request) => ({
+    const requested$ = requests$.map(({ requests, _namespace, closePositionSize }) => requests.map((request) => ({
         ...request as RequestOptions,
         _namespace,
+        closePositionSize,
         submissionId: Symbol(),
     })));
 
@@ -64,7 +67,12 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
         withState(actions.onClickStopSellButton$, (state) => stopOrder(state.triggerPrice, state.size, "SELL")),
         withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),
         withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder),
-        withState(actions.onClickClearButton$, clearPositionOrder),
+        actions.onClickClearButton$.compose(sampleCombine(state$))
+            .filter(([_, state]) => canClearPosition(state))
+            .map(([_, { position }]) => ({
+                closePositionSize: position.size,
+                requests: [marketOrder(position.size, position.side === "BUY" ? "SELL" : "BUY")],
+            })),
         actions.onClickClearOrderButton$.compose(sampleCombine(state$))
             .map(([_, state]) => ({
                 requests: [cancelOrders(), ...Object.keys(state.parentStopOrders).map(cancelParentOrder)],
@@ -87,6 +95,3 @@ const ifdocoSellOrder = (state: State): RequestInput =>
         state.size,
         "SELL",
     );
-
-const clearPositionOrder = (state: State): RequestInput =>
-    marketOrder(state.position.size, state.position.side === "BUY" ? "SELL" : "BUY");

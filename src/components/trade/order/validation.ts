@@ -1,5 +1,8 @@
 import {State} from "./index";
 
+export const canClearPosition = (state: State): boolean =>
+    !state.isOrdering && !state.positionClosePending && state.position.size !== 0;
+
 export const isValidMarketOrder = (state: State): boolean =>
     isPositiveFinite(state.size);
 

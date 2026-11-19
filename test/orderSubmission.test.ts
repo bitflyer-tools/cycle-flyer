@@ -140,6 +140,76 @@ test("dispatches every Clear Orders request and stays locked until they all sett
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
 
+test("keeps Clear Position disabled until a full fill is confirmed", (t) => {
+    const order = setup(t);
+    const position = [{ side: "BUY", size: 0.08, price: 40000 }];
+    order.respondTo(order.positionRequests[0]).succeed(position);
+    equal(order.tradeState.position.size, 0.08);
+
+    order.clearPosition();
+    order.clearPosition();
+    equal(order.requests.length, 1);
+    const { side, size, child_order_type } = JSON.parse(order.requests[0].send as string);
+    deepEqual({ side, size, child_order_type }, { side: "SELL", size: 0.08, child_order_type: "MARKET" });
+
+    order.respondTo(order.requests[0]).succeed();
+    equal(order.state.isOrdering, false);
+    equal(!!order.tradeState.positionClose, true);
+    order.clearPosition();
+    equal(order.requests.length, 1);
+
+    equal(order.positionRequests.length, 2);
+    order.respondTo(order.positionRequests[1]).succeed([]);
+    equal(order.tradeState.position.size, 0);
+    equal(order.tradeState.positionClose, undefined);
+    order.clearPosition();
+    equal(order.requests.length, 1);
+});
+
+test("uses only the confirmed short remainder after a partial close", (t) => {
+    t.mock.timers.enable({ apis: ["setInterval"] });
+    const order = setup(t);
+    const position = { side: "SELL", size: 0.08, price: 40000 };
+    const initialPoll = order.positionRequests[0];
+    order.respondTo(initialPoll).succeed([position]);
+    order.clearPosition();
+    order.respondTo(order.requests[0]).succeed();
+
+    const refresh = order.positionRequests.at(-1)!;
+    order.respondTo(initialPoll).succeed([{ ...position, size: 0.04 }]);
+    equal(!!order.tradeState.positionClose, true);
+    order.respondTo(refresh).succeed([position]);
+    equal(!!order.tradeState.positionClose, true);
+    order.clearPosition();
+    equal(order.requests.length, 1);
+
+    t.mock.timers.tick(10000);
+    order.respondTo(order.positionRequests.at(-1)!).succeed([{ ...position, size: 0.03 }]);
+    equal(order.tradeState.positionClose, undefined);
+    order.clearPosition();
+    equal(order.requests.length, 2);
+    const { side, size } = JSON.parse(order.requests[1].send as string);
+    deepEqual({ side, size }, { side: "BUY", size: 0.03 });
+});
+
+test("waits for position reconciliation after an ambiguous submission failure", (t) => {
+    const order = setup(t);
+    const position = [{ side: "BUY", size: 0.08, price: 40000 }];
+    order.respondTo(order.positionRequests[0]).succeed(position);
+    order.clearPosition();
+
+    order.navigate("/setting");
+    order.respondTo(order.requests[0]).fail();
+    order.navigate("/");
+    order.clearPosition();
+    equal(order.requests.length, 1);
+
+    order.respondTo(order.positionRequests.at(-1)!).succeed([]);
+    equal(order.tradeState.positionClose, undefined);
+    order.clearPosition();
+    equal(order.requests.length, 1);
+});
+
 function setup(t: TestContext) {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
@@ -154,13 +224,14 @@ function setup(t: TestContext) {
     const buyIFDOCO$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
+    const clearPosition$ = Stream.create<null>();
     const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
-        ".order-buttons": { ".clear-order-button": { click: clearOrders$ } },
+        ".order-buttons": { ".clear-order-button": { click: clearOrders$ }, ".clear-button": { click: clearPosition$ } },
         ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buyIFDOCO$ },
@@ -195,8 +266,10 @@ function setup(t: TestContext) {
         },
     });
     const requests: RequestOptions[] = [];
+    const positionRequests: RequestOptions[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
+        if (options.category === "positions") { positionRequests.push(options); }
         if (["ifdoco-order", "market-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
             requests.push(options);
         }
@@ -212,6 +285,8 @@ function setup(t: TestContext) {
     return {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
+        clearPosition: () => clearPosition$.shamefullySendNext(null),
+        positionRequests,
         clearOrders: () => clearOrders$.shamefullySendNext(null),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),

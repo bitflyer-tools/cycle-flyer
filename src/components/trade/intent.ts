@@ -8,6 +8,7 @@ import {Position} from "../../models/position";
 import {Sources} from "./index";
 import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
 import {pollResponse} from "./pollResponse";
+import {PositionRequest} from "./request";
 
 export interface Actions {
     onCancelParentOrder$: Stream<string>;
@@ -18,7 +19,7 @@ export interface Actions {
     onParentOrderLoaded$: Stream<ActiveParentOrder>;
     onParentOrdersLoaded$: Stream<ActiveParentOrder[]>;
     parentOrderRequests$: Stream<RequestOptions>;
-    onPositionsLoaded$: Stream<Position>;
+    onPositionsLoaded$: Stream<{ position: Position; positionCloseId: symbol | undefined }>;
 }
 
 export const intent = (sources: Sources): Actions => {
@@ -49,8 +50,8 @@ export const intent = (sources: Sources): Actions => {
         sources.HTTP, onParentOrdersLoaded$, sources.socket.parentOrderEvent$, sources.socket.reconnect$,
     );
 
-    const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json) =>
-        isPositionList(json) ? new Position(json) : undefined);
+    const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json, request: PositionRequest) =>
+        isPositionList(json) ? { position: new Position(json), positionCloseId: request.positionCloseId } : undefined);
 
     return {
         onCancelParentOrder$,

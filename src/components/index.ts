@@ -60,6 +60,20 @@ export const Root = (sources: Sources): Sinks => {
 
     const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<OrderRequestBatch>()).flatten();
     const pending$ = submissions(orderRequests$, sources.HTTP);
+    const positionCloseReducer$ = pending$.map((pending) => (state: TradeState | undefined) => {
+        if (!state) return state;
+
+        const submission = pending?.find(({ closePositionSize }) => closePositionSize !== undefined);
+        if (submission?.closePositionSize !== undefined) {
+            return { ...state, positionClose: {
+                id: submission.submissionId, size: submission.closePositionSize, settled: false,
+            } };
+        }
+        if (!pending && state.positionClose && !state.positionClose.settled) {
+            return { ...state, positionClose: { ...state.positionClose, settled: true } };
+        }
+        return state;
+    });
     const isOrdering$ = pending$.map((pending) => pending !== null);
     const ifdocoOutcome$ = sources.HTTP.select("ifdoco-order")
         .map(createParentOrderOutcome)
@@ -99,6 +113,7 @@ export const Root = (sources: Sources): Sinks => {
         ),
         state: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
+            sources.state.isolateSink(positionCloseReducer$, tradeScope),
             sources.state.isolateSink(ifdocoHistoryReducer$, tradeScope),
         ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),

@@ -5,6 +5,7 @@ import {Reducer, StateSource} from "@cycle/state";
 import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
+import dropRepeats from "xstream/extra/dropRepeats";
 import {SocketIOSource} from "../../drivers/socketIODriver";
 import {Sound} from "../../drivers/soundDriver";
 import {Order} from "../../models/order";
@@ -48,6 +49,7 @@ export interface State {
     orders: Order[];
     parentStopOrders: ParentStopOrders;
     position: Position;
+    positionClose?: { id: symbol; size: number; settled: boolean };
     price: number;
     boardComponentState?: BoardComponentState;
     orderComponentState?: OrderComponentState;
@@ -101,6 +103,7 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
                 parentStopOrders: state.parentStopOrders,
                 position: state.position,
                 price: state.price,
+                positionClosePending: !!state.positionClose,
             },
             set: (state: State, orderComponentState: OrderComponentState) => ({
                 ...state,
@@ -115,7 +118,12 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
     const actions = intent(sources);
     const reducer$ = model(actions);
     const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM);
-    const request$ = request(actions);
+    const settledCloseId$ = sources.state.stream
+        .map((state) => state?.positionClose?.settled ? state.positionClose.id : undefined)
+        .startWith(undefined)
+        .compose(dropRepeats())
+        .remember();
+    const request$ = request(actions, settledCloseId$);
 
     return {
         DOM: view$,
