@@ -42,6 +42,7 @@ function tradeHarness(t) {
     orderRequests: { select: () => Stream.never() },
     socket: {
       board$: Stream.never(),
+      execution$: Stream.never(),
       executionBatch$,
       childOrderEvent$,
       parentOrderEvent$: Stream.never(),
@@ -91,7 +92,7 @@ test('notifies for each other submission and private execution', (t) => {
   trade.submit(limitOrder(100, 0.01, 'BUY')).accept();
   trade.submit(stopOrder(90, 0.01, 'SELL')).accept();
   trade.submit(twapSliceOrder(0.01, 'SELL', Symbol())).reject();
-  trade.executionBatch$.shamefullySendNext([{ price: 100 }]);
+  trade.executionBatch$.shamefullySendNext([{ side: 'BUY', price: 100 }]);
   trade.childOrderEvent$.shamefullySendNext({ event_type: 'ORDER' });
 
   const execution = { event_type: 'EXECUTION', side: 'BUY', price: 100, size: 0.01 };

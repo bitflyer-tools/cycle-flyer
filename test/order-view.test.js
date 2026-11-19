@@ -112,3 +112,51 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
   const { side, size } = JSON.parse(orderRequest.send);
   assert.deepEqual({ side, size }, { side: 'BUY', size: 0.1 });
 });
+
+test('the summary waits for a public execution before valuing an open position', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const executionBatch$ = Stream.create();
+  const positions$ = Stream.create();
+  const collateral$ = Stream.create();
+  const state$ = Stream.createWithMemory();
+  const never = () => Stream.never();
+  const dom = { select: () => dom, events: never };
+  const sinks = Trade({
+    DOM: dom,
+    HTTP: { select: (category) => ({ positions: positions$, collateral: collateral$ })[category] || never() },
+    orderRequests: { select: never },
+    socket: { board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
+    state: new StateSource(state$, 'state'),
+    storage: { local: { getItem: never } },
+  }, Stream.of(false));
+  let state;
+  let summary;
+  const stateSubscription = sinks.state.subscribe({
+    next: (reduce) => state$.shamefullySendNext(state = reduce(state)),
+  });
+  const domSubscription = sinks.DOM.subscribe({ next: (node) => { [summary] = node.children; } });
+  t.after(() => {
+    domSubscription.unsubscribe();
+    stateSubscription.unsubscribe();
+  });
+
+  const value = (selector) => {
+    const field = summary.children.find((node) => node.sel === selector).children[1];
+    return [field.sel, field.text];
+  };
+
+  collateral$.shamefullySendNext(Stream.of({ text: JSON.stringify({ collateral: 2_000_000 }) }));
+  positions$.shamefullySendNext(Stream.of({ text: JSON.stringify([{ side: 'BUY', price: 10_000_000, size: 0.1 }]) }));
+  assert.deepEqual(value('div.current-price'), ['span.number', 'Pending']);
+  assert.deepEqual(value('div.position'), ['span.number', (10_000_000).toLocaleString()]);
+  assert.deepEqual(value('div.position-size'), ['span.number', '0.1']);
+  assert.deepEqual(value('div.position-diff'), ['span.number', 'Pending']);
+  assert.deepEqual(value('div.profit'), ['span.number', 'Pending']);
+  assert.deepEqual(value('div.collateral'), ['span.number', (2_000_000).toLocaleString()]);
+
+  executionBatch$.shamefullySendNext([{ side: 'BUY', price: 10_100_000 }]);
+  assert.deepEqual(value('div.current-price'), ['span.number', (10_100_000).toLocaleString()]);
+  assert.deepEqual(value('div.position-diff'), ['span.number.plus', (100_000).toLocaleString()]);
+  assert.deepEqual(value('div.profit'), ['span.number.plus', (10_000).toLocaleString()]);
+  assert.deepEqual(value('div.collateral'), ['span.number', (2_000_000).toLocaleString()]);
+});
