@@ -2,11 +2,10 @@ import {Stream} from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {canSignTwap} from "../../../credentials";
 import {TwapSliceRequest} from "../../../http";
-import {OrderHistory} from "../../../models/orderHistory";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
 import {clicks, numberInputs} from "./events";
-import {createHistoryStream} from "./history";
+import {createChildOrderOutcome, OrderOutcome} from "./history";
 
 export interface TwapActions {
     onClickTwapBuyButton$: Stream<null>;
@@ -14,7 +13,7 @@ export interface TwapActions {
     onClickTwapSellButton$: Stream<null>;
     onTwapIntervalChanged$: Stream<number>;
     onTwapIntervalLoaded$: Stream<number>;
-    onTwapSliceCreated$: Stream<{ history: OrderHistory; isCurrent: boolean }>;
+    onTwapSliceOutcome$: Stream<OrderOutcome & { isCurrent: boolean }>;
     onTwapSlicesChanged$: Stream<number>;
     onTwapSlicesLoaded$: Stream<number>;
 }
@@ -32,9 +31,9 @@ export const twapIntent = (sources: Sources): TwapActions => ({
         .filter(canSignTwap),
     onTwapIntervalChanged$: numberInputs(sources.DOM, "#twap-interval-input"),
     onTwapIntervalLoaded$: loadNumber(sources.storage, twapStorageKeys.interval),
-    onTwapSliceCreated$: sources.HTTP.select("twap-order")
-        .map((stream) => createHistoryStream("TWAP", stream).map((history) => ({
-            history,
+    onTwapSliceOutcome$: sources.HTTP.select("twap-order")
+        .map((stream) => createChildOrderOutcome("TWAP", stream).map((outcome) => ({
+            ...outcome,
             isCurrent: (stream.request as TwapSliceRequest).isTwapActive?.() !== false,
         })))
         .compose(flattenConcurrently),

@@ -7,6 +7,7 @@ import {deepEqual, equal} from "node:assert/strict";
 import {test, TestContext} from "node:test";
 import switchPath from "switch-path";
 import Stream, {MemoryStream} from "xstream";
+import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
 import {currentCredentialVersion, saveCredentials} from "../src/credentials";
@@ -53,9 +54,15 @@ test("accepts a single IFDOCO submission until its delayed success", (t) => {
 
     deepEqual(order.requests.map(({ category }) => category), ["ifdoco-order"]);
     equal(order.state.isOrdering, true);
+    deepEqual(order.sounds, []);
 
-    order.respondTo(order.requests[0]).succeed();
+    const response = order.respondTo(order.requests[0]);
+    response.progress();
+    deepEqual(order.sounds, []);
+    deepEqual(order.histories, []);
+    response.succeed();
     equal(order.state.isOrdering, false);
+    deepEqual(order.sounds, ["success"]);
     deepEqual(order.histories.map(({ status }) => status), ["success", "success", "success"]);
 
     order.sellIFDOCO();
@@ -96,6 +103,7 @@ test("releases a failed IFDOCO and keeps a later market order locked through sta
 
 for (const outcome of ["succeed", "fail"] as const) {
     const status = outcome === "succeed" ? "success" : "failed";
+    const sound = outcome === "succeed" ? "success" : "failure";
     const expectedHistories = ["Stop", "Limit", "Market"].map((name) => ({ name, status }));
 
     test(`keeps IFDOCO pending after returning from settings until the original request settles (${outcome})`, (t) => {
@@ -109,7 +117,9 @@ for (const outcome of ["succeed", "fail"] as const) {
         order.sellIFDOCO();
         equal(order.requests.length, 1);
 
+        deepEqual(order.sounds, []);
         response[outcome]();
+        deepEqual(order.sounds, [sound]);
         equal(order.state.isOrdering, false);
         deepEqual(order.histories.map(({ name, status }) => ({ name, status })), expectedHistories);
         order.sellIFDOCO();
@@ -121,9 +131,12 @@ for (const outcome of ["succeed", "fail"] as const) {
         order.buyIFDOCO();
 
         order.navigate("/setting");
+        deepEqual(order.sounds, []);
         order.respondTo(order.requests[0])[outcome]();
+        deepEqual(order.sounds, [sound]);
         deepEqual(order.histories.map(({ name, status }) => ({ name, status })), expectedHistories);
         order.navigate("/");
+        deepEqual(order.sounds, [sound]);
         equal(order.state.isOrdering, false);
         deepEqual(order.histories.map(({ name, status }) => ({ name, status })), expectedHistories);
         order.sellIFDOCO();
@@ -154,6 +167,7 @@ test("dispatches every Clear Orders request and stays locked until they all sett
 
     order.respondTo(order.requests[2]).fail();
     equal(order.state.isOrdering, false);
+    deepEqual(order.sounds, []);
     order.clearOrders();
     deepEqual(order.requests.slice(3).map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
@@ -323,6 +337,7 @@ function setup(t: TestContext) {
             board$: Stream.never(),
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
+            executionBatch$: Stream.never(),
             parentOrderEvent$: Stream.never(),
             reconnect$: Stream.never(),
         },
@@ -350,8 +365,11 @@ function setup(t: TestContext) {
     } });
     let vNode: VNode;
     const dom = main.DOM.subscribe({ next: (node) => { vNode = node; } });
+    const sounds: Sound[] = [];
+    const audio = main.sound!.subscribe({ next: (sound) => sounds.push(sound) });
     t.after(() => {
         dom.unsubscribe();
+        audio.unsubscribe();
         http.unsubscribe();
         reducers.unsubscribe();
     });
@@ -366,12 +384,14 @@ function setup(t: TestContext) {
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         requests,
+        sounds,
         respondTo(input: AccountRequest) {
             const request = { credentialVersion: currentCredentialVersion() ?? undefined, ...input };
             const response$ = Object.assign(Stream.createWithMemory<Response>(), { request });
             responses$.shamefullySendNext(response$);
             return {
                 fail: () => response$.shamefullySendError(new Error("Network failure")),
+                progress: () => response$.shamefullySendNext({ request } as Response),
                 succeed: (body?: unknown) => {
                     response$.shamefullySendNext({ request, text: JSON.stringify(body) } as unknown as Response);
                     response$.shamefullySendComplete();

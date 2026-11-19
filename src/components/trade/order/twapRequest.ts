@@ -11,6 +11,8 @@ export const twapSigningFailed$ = Stream.create<void>();
 
 let activeRun: symbol | null = null;
 
+export const stopTwap = (): void => { activeRun = null; };
+
 export const twapRequest = (actions: TwapActions, state$: Stream<State>): Stream<RequestInput> => {
     const start$ = Stream.merge(
         actions.onClickTwapBuyButton$.mapTo("BUY"),
@@ -21,7 +23,7 @@ export const twapRequest = (actions: TwapActions, state$: Stream<State>): Stream
     return Stream.merge(start$, stop$.mapTo(null))
         .map((start) => {
             if (!start) {
-                activeRun = null;
+                stopTwap();
                 return Stream.never<RequestInput>();
             }
 

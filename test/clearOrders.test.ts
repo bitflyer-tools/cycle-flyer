@@ -106,6 +106,7 @@ function clearOrders(ids: string[], lastDetailPending = false) {
         socket: {
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
+            executionBatch$: Stream.never(),
             parentOrderEvent$: Stream.never(),
             reconnect$: Stream.never(),
         },

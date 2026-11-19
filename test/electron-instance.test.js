@@ -3,7 +3,7 @@ const { EventEmitter } = require('node:events');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { test } = require('node:test');
-const { runInNewContext } = require('node:vm');
+const { compileFunction } = require('node:vm');
 
 const entry = path.resolve(__dirname, '../srcElectron/index.js');
 
@@ -34,6 +34,7 @@ const launch = (hasLock) => {
   };
   const electron = { app, BrowserWindow, ipcMain: { handle() {} } };
   const load = (name) => {
+    if (name === 'electron-squirrel-startup') return false;
     if (name === 'electron') return electron;
     if (name === './credentials') {
       return { createCredentialStore: () => { calls.push('credentials'); return {}; } };
@@ -41,7 +42,7 @@ const launch = (hasLock) => {
     return require(name);
   };
 
-  runInNewContext(readFileSync(entry, 'utf8'), { require: load, __dirname: path.dirname(entry) });
+  compileFunction(readFileSync(entry, 'utf8'), ['require', '__dirname'])(load, path.dirname(entry));
   return { app, calls, markReady, windows };
 };
 

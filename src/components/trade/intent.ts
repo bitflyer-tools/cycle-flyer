@@ -3,14 +3,16 @@ import {Stream} from "xstream";
 import debounce from "xstream/extra/debounce";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {AccountRequest, isCurrentAccountRequest} from "../../drivers/httpDriver";
+import {Execution} from "../../models/execution";
 import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
 import {Sources} from "./index";
 import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
+import {pollResponse} from "./pollResponse";
 
 export interface Actions {
     onCancelParentOrder$: Stream<string>;
-    onExecutionCreated$: Stream<object>;
+    onExecutionBatch$: Stream<Execution[]>;
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
     onMyOrderChanged$: Stream<null>;
     onOrdersLoaded$: Stream<object[]>;
@@ -28,8 +30,6 @@ export const intent = (sources: Sources): Actions => {
         .compose(flattenConcurrently)
         .filter(isCurrent)
         .map((response) => JSON.parse(response.request.send as string).parent_order_id);
-
-    const onExecutionCreated$ = sources.socket.execution$;
 
     const onMyExecutionCreated$ = sources.socket.childOrderEvent$.filter(isExecution);
 
@@ -55,23 +55,15 @@ export const intent = (sources: Sources): Actions => {
         sources.HTTP, onParentOrdersLoaded$, sources.socket.parentOrderEvent$, sources.socket.reconnect$,
     );
 
-    const onPositionsLoaded$ = sources.HTTP.select("positions")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .filter(isCurrent)
-        .map((response) => ({
-            positions: JSON.parse(response.text),
-            credentialVersion: (response.request as AccountRequest).credentialVersion,
-        }))
-        .filter(({ positions }) => Array.isArray(positions))
-        .map(({ positions, credentialVersion }) => ({
-            position: new Position(positions),
-            positionCredentialVersion: credentialVersion!,
-        }));
+    const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json, response) =>
+        isCurrent(response) && isPositionList(json) ? {
+            position: new Position(json),
+            positionCredentialVersion: (response.request as AccountRequest).credentialVersion!,
+        } : undefined);
 
     return {
         onCancelParentOrder$,
-        onExecutionCreated$,
+        onExecutionBatch$: sources.socket.executionBatch$,
         onMyExecutionCreated$,
         onMyOrderChanged$,
         onOrdersLoaded$,
@@ -81,3 +73,8 @@ export const intent = (sources: Sources): Actions => {
         parentOrderRequests$: details.requests$,
     };
 };
+
+const isPositionList = (positions: unknown): boolean =>
+    Array.isArray(positions) && positions.every((position) =>
+        (position?.side === "BUY" || position?.side === "SELL")
+        && Number.isFinite(position.price) && Number.isFinite(position.size) && position.size > 0);

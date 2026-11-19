@@ -9,13 +9,12 @@ import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {credentialsChanging$} from "../credentials";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
-import {OrderHistory} from "../models/orderHistory";
 import {Position} from "../models/position";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
-import {createParentOrderHistoryStream} from "./trade/order/history";
+import {createParentOrderOutcome} from "./trade/order/history";
 import {OrderRequestBatch, submissions, unsignedSubmissions$} from "./trade/order/request";
-import {twapSigningFailed$} from "./trade/order/twapRequest";
+import {stopTwap, twapSigningFailed$} from "./trade/order/twapRequest";
 
 export interface Sources {
     DOM: DOMSource;
@@ -42,17 +41,23 @@ interface RootState {
 const tradeScope = "trade";
 
 export const Root = (sources: Sources): Sinks => {
+    const trade = isolate(Trade, { "*": tradeScope });
     const routes$: Stream<Sinks & { orderRequests?: Stream<OrderRequestBatch> }> = sources.router
         .define({
-            "/": isolate(Trade, { "*": tradeScope }),
+            "/": trade,
             "/setting": isolate(Setting, { "*": "setting" }),
         })
-        .map((route: any) => route.value({
-            ...sources,
-            // Tag order batches with the same HTTP scopes as the other requests.
-            orderRequests: sources.HTTP,
-            router: sources.router.path(route.path),
-        }, isOrdering$))
+        .map((route: any) => {
+            const sinks = route.value({
+                ...sources,
+                // Tag order batches with the same HTTP scopes as the other requests.
+                orderRequests: sources.HTTP,
+                router: sources.router.path(route.path),
+            }, isOrdering$);
+            if (route.value === trade) { return sinks; }
+            stopTwap();
+            return { ...sinks, state: sinks.state.startWith(resetTwap()) };
+        })
         .remember();
 
     const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<OrderRequestBatch>()).flatten();
@@ -66,12 +71,14 @@ export const Root = (sources: Sources): Sinks => {
     );
     const orderSigningReducer$ = orderSigningError$.map<Reducer<TradeState>>((orderSigningError) =>
         (state) => state && { ...state, orderSigningError });
-    const ifdocoHistories$: Stream<OrderHistory> = sources.HTTP.select("ifdoco-order")
-        .map(createParentOrderHistoryStream)
+    const ifdocoOutcome$ = sources.HTTP.select("ifdoco-order")
+        .map(createParentOrderOutcome)
         .compose(flattenConcurrently);
-    const ifdocoHistoryReducer$ = ifdocoHistories$
-        .map<Reducer<TradeState>>((history) => (state) =>
-            state && { ...state, histories: [history].concat(state.histories) });
+    const ifdocoHistoryReducer$ = ifdocoOutcome$
+        .map<Reducer<TradeState>>(({ histories }) => (state) => state && ({
+            ...state,
+            histories: histories.slice().reverse().concat(state.histories),
+        }));
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>
@@ -96,7 +103,10 @@ export const Root = (sources: Sources): Sinks => {
                 .compose(flattenConcurrently),
         ),
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
-        sound: routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
+        sound: Stream.merge(
+            routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
+            ifdocoOutcome$.map(({ status }): Sound => status === "success" ? "success" : "failure"),
+        ),
         state: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
             credentialsChanging$.mapTo(resetAccount),
@@ -131,10 +141,10 @@ const resetAccount: Reducer<RootState> = (state) => {
     };
 };
 
-const resetTwap = (error: string): Reducer<RootState> => (state) => {
+const resetTwap = (error?: string): Reducer<RootState> => (state) => {
     const trade = state?.trade;
     const order = trade?.orderComponentState;
     if (!trade || !order || !order.twap.remaining) { return state; }
-    const orderComponentState = { ...order, twap: { ...order.twap, remaining: 0, error } };
+    const orderComponentState = { ...order, twap: { ...order.twap, remaining: 0, error: error ?? order.twap.error } };
     return { ...state, trade: { ...trade, orderComponentState } };
 };
