@@ -16,7 +16,7 @@ export const twapModel = (actions: TwapActions): Stream<Reducer<State>> => {
             ? { ...state, twap: { ...state.twap, remaining: state.twap.slices } }
             : state);
 
-    const sliceReducer$ = actions.onTwapSliceCreated$
+    const sliceReducer$ = actions.onTwapSliceOutcome$
         .map((_) => updateTwap((twap) => ({ ...twap, remaining: Math.max(twap.remaining - 1, 0) })));
 
     const cancelReducer$ = actions.onClickTwapCancelButton$

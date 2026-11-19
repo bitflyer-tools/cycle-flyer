@@ -21,7 +21,7 @@ const { Trade } = tradeModule.exports;
 test('board deltas reuse the order form and refreshed markers show open quantities', (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] });
   const board$ = Stream.create();
-  const execution$ = Stream.create();
+  const executionBatch$ = Stream.create();
   const sizeInput$ = Stream.create();
   const marketBuy$ = Stream.create();
   const orders$ = Stream.create();
@@ -40,7 +40,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
     DOM: dom,
     HTTP: { select: (category) => category === 'orders' ? orders$ : never() },
     orderRequests: { select: never },
-    socket: { board$, execution$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
+    socket: { board$, executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
   }, Stream.of(false));
@@ -70,7 +70,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
     sinks.state.removeListener(stateListener);
   });
 
-  execution$.shamefullySendNext({ side: 'BUY', price: 100000 });
+  executionBatch$.shamefullySendNext([{ side: 'BUY', price: 100000 }]);
   const initialRenders = orderRenders;
   const initialTrade = tradeNode;
   assert.ok(initialRenders > 0);
@@ -89,7 +89,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
   sizeInput$.shamefullySendNext({ target: { value: '0.1' } });
   assert.equal(orderRenders, initialRenders + 1);
 
-  execution$.shamefullySendNext({ side: 'BUY', price: 100001 });
+  executionBatch$.shamefullySendNext([{ side: 'BUY', price: 100001 }]);
   assert.equal(orderRenders, initialRenders + 2);
 
   t.mock.timers.tick(100);
