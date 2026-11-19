@@ -192,23 +192,62 @@ test("uses only the confirmed short remainder after a partial close", (t) => {
     deepEqual({ side, size }, { side: "BUY", size: 0.03 });
 });
 
-test("waits for position reconciliation after an ambiguous submission failure", (t) => {
+test("allows retry after a definite rejection and a fresh unchanged position", (t) => {
+    t.mock.timers.enable({ apis: ["setInterval"] });
     const order = setup(t);
     const position = [{ side: "BUY", size: 0.08, price: 40000 }];
-    order.respondTo(order.positionRequests[0]).succeed(position);
+    const initialPoll = order.positionRequests[0];
+    order.respondTo(initialPoll).succeed(position);
     order.clearPosition();
 
-    order.navigate("/setting");
-    order.respondTo(order.requests[0]).fail();
-    order.navigate("/");
+    order.respondTo(order.requests[0]).reject(400);
+    equal(order.state.isOrdering, false);
+    equal(order.positionRequests.length, 2);
+    order.respondTo(initialPoll).succeed(position);
     order.clearPosition();
     equal(order.requests.length, 1);
 
-    order.respondTo(order.positionRequests.at(-1)!).succeed([]);
+    order.respondTo(order.positionRequests[1]).succeed({ error_message: "Position unavailable" });
+    order.clearPosition();
+    equal(order.requests.length, 1);
+
+    t.mock.timers.tick(10000);
+    order.respondTo(order.positionRequests.at(-1)!).succeed(position);
     equal(order.tradeState.positionClose, undefined);
     order.clearPosition();
-    equal(order.requests.length, 1);
+    equal(order.requests.length, 2);
+    const { side, size } = JSON.parse(order.requests[1].send as string);
+    deepEqual({ side, size }, { side: "SELL", size: 0.08 });
 });
+
+for (const failure of ["network", "server"] as const) {
+    test(`waits for position reconciliation after an ambiguous ${failure} failure`, (t) => {
+        t.mock.timers.enable({ apis: ["setInterval"] });
+        const order = setup(t);
+        const position = [{ side: "BUY", size: 0.08, price: 40000 }];
+        order.respondTo(order.positionRequests[0]).succeed(position);
+        order.clearPosition();
+
+        order.navigate("/setting");
+        const response = order.respondTo(order.requests[0]);
+        if (failure === "network") response.fail();
+        else response.reject(503);
+        order.navigate("/");
+        order.clearPosition();
+        equal(order.requests.length, 1);
+
+        order.respondTo(order.positionRequests.at(-1)!).succeed(position);
+        equal(!!order.tradeState.positionClose, true);
+        order.clearPosition();
+        equal(order.requests.length, 1);
+
+        t.mock.timers.tick(10000);
+        order.respondTo(order.positionRequests.at(-1)!).succeed([]);
+        equal(order.tradeState.positionClose, undefined);
+        order.clearPosition();
+        equal(order.requests.length, 1);
+    });
+}
 
 function setup(t: TestContext) {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
@@ -297,6 +336,9 @@ function setup(t: TestContext) {
             responses$.shamefullySendNext(response$);
             return {
                 fail: () => response$.shamefullySendError(new Error("Network failure")),
+                reject: (status: number) => response$.shamefullySendError({
+                    response: { status, text: JSON.stringify({ status: -1, error_message: "Order rejected" }) },
+                }),
                 progress: () => response$.shamefullySendNext({ request } as Response),
                 succeed: (body?: unknown) => {
                     response$.shamefullySendNext({ request, text: JSON.stringify(body) } as Response);

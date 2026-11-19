@@ -49,7 +49,7 @@ export interface State {
     orders: Order[];
     parentStopOrders: ParentStopOrders;
     position: Position;
-    positionClose?: { id: symbol; size: number; settled: boolean };
+    positionClose?: { id: symbol; size: number; settled: boolean; rejected?: boolean };
     price: number;
     boardComponentState?: BoardComponentState;
     orderComponentState?: OrderComponentState;

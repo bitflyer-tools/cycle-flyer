@@ -38,7 +38,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map(({ position, positionCloseId }) => (state: State) => {
             const close = state.positionClose;
             const reconciled = close?.settled && close.id === positionCloseId
-                && (position.size === 0 || (Math.sign(position.size) === Math.sign(close.size)
+                && (close.rejected || position.size === 0 || (Math.sign(position.size) === Math.sign(close.size)
                     && Math.abs(position.size) < Math.abs(close.size)));
             return { ...state, position, positionClose: reconciled ? undefined : close };
         });

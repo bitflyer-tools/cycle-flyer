@@ -11,7 +11,7 @@ import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
 import {createParentOrderOutcome} from "./trade/order/history";
-import {OrderRequestBatch, submissions} from "./trade/order/request";
+import {closePositionOutcomes, OrderRequestBatch, submissions} from "./trade/order/request";
 
 interface RootState {
     trade?: TradeState;
@@ -69,11 +69,14 @@ export const Root = (sources: Sources): Sinks => {
                 id: submission.submissionId, size: submission.closePositionSize, settled: false,
             } };
         }
-        if (!pending && state.positionClose && !state.positionClose.settled) {
-            return { ...state, positionClose: { ...state.positionClose, settled: true } };
-        }
         return state;
     });
+    const closeOutcomeReducer$ = closePositionOutcomes(sources.HTTP)
+        .map(({ id, rejected }) => (state: TradeState | undefined) => {
+            const close = state?.positionClose;
+            if (!close || close.id !== id || close.settled) return state;
+            return { ...state, positionClose: { ...close, settled: true, rejected } };
+        });
     const isOrdering$ = pending$.map((pending) => pending !== null);
     const ifdocoOutcome$ = sources.HTTP.select("ifdoco-order")
         .map(createParentOrderOutcome)
@@ -114,6 +117,7 @@ export const Root = (sources: Sources): Sinks => {
         state: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
             sources.state.isolateSink(positionCloseReducer$, tradeScope),
+            sources.state.isolateSink(closeOutcomeReducer$, tradeScope),
             sources.state.isolateSink(ifdocoHistoryReducer$, tradeScope),
         ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
