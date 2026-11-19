@@ -19,7 +19,6 @@ import {model} from "./model";
 import {OrderComponent, State as OrderComponentState} from "./order";
 import {OrderRequestBatch} from "./order/request";
 import {request} from "./request";
-import {sound} from "./sound";
 import {State as SummaryComponentState} from "./summary";
 import {SummaryComponent} from "./summary";
 import {view} from "./view";
@@ -130,7 +129,7 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
             executionsComponent.HTTP),
         orderRequests: orderComponent.orderRequests,
         router: Stream.never(),
-        sound: sound(sources.state.stream),
+        sound: Stream.merge(orderComponent.sound, actions.onMyExecutionCreated$.mapTo<Sound>("execution")),
         state: Stream.merge(
             reducer$,
             boardComponent.state,
