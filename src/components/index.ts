@@ -13,6 +13,10 @@ import {State as TradeState, Trade} from "./trade";
 import {createParentOrderOutcome} from "./trade/order/history";
 import {OrderRequestBatch, submissions} from "./trade/order/request";
 
+interface RootState {
+    trade?: TradeState;
+}
+
 export interface Sources {
     DOM: DOMSource;
     HTTP: HTTPSource;
@@ -34,17 +38,24 @@ export interface Sinks {
 const tradeScope = "trade";
 
 export const Root = (sources: Sources): Sinks => {
+    const trade = isolate(Trade, { "*": tradeScope });
     const routes$: Stream<Sinks & { orderRequests?: Stream<OrderRequestBatch> }> = sources.router
         .define({
-            "/": isolate(Trade, { "*": tradeScope }),
+            "/": trade,
             "/setting": isolate(Setting, { "*": "setting" }),
         })
-        .map((route: any) => route.value({
-            ...sources,
-            // Tag order batches with the same HTTP scopes as the other requests.
-            orderRequests: sources.HTTP,
-            router: sources.router.path(route.path),
-        }, isOrdering$))
+        .map((route: any) => {
+            const sinks = route.value({
+                ...sources,
+                // Tag order batches with the same HTTP scopes as the other requests.
+                orderRequests: sources.HTTP,
+                router: sources.router.path(route.path),
+            }, isOrdering$);
+            return route.value === trade ? sinks : {
+                ...sinks,
+                state: sinks.state.startWith(clearTwapProgress),
+            };
+        })
         .remember();
 
     const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<OrderRequestBatch>()).flatten();
@@ -91,5 +102,19 @@ export const Root = (sources: Sources): Sinks => {
             sources.state.isolateSink(ifdocoHistoryReducer$, tradeScope),
         ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
+    };
+};
+
+const clearTwapProgress: Reducer<RootState> = (state) => {
+    const trade = state?.trade;
+    const order = trade?.orderComponentState;
+    if (!trade || !order?.twap.remaining) return state;
+
+    return {
+        ...state,
+        trade: {
+            ...trade,
+            orderComponentState: { ...order, twap: { ...order.twap, remaining: 0 } },
+        },
     };
 };
