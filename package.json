@@ -44,7 +44,7 @@
     "electron": "^45.3.2",
     "esbuild": "^0.28.2",
     "eslint": "^10.15.0",
-    "http-proxy-middleware": "^4.2.1",
+    "http-proxy-middleware": "^4.2.2",
     "js-yaml": "^5.5.0",
     "serve": "latest",
     "typescript": "^6.0.3",
