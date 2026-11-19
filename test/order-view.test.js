@@ -21,7 +21,7 @@ const { Trade } = tradeModule.exports;
 test('board deltas reuse the order form and refreshed markers show open quantities', (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] });
   const board$ = Stream.create();
-  const execution$ = Stream.create();
+  const executionBatch$ = Stream.create();
   const sizeInput$ = Stream.create();
   const marketBuy$ = Stream.create();
   const orders$ = Stream.create();
@@ -40,7 +40,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
     DOM: dom,
     HTTP: { select: (category) => category === 'orders' ? orders$ : never() },
     orderRequests: { select: never },
-    socket: { board$, execution$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
+    socket: { board$, executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
   }, Stream.of(false));
@@ -70,7 +70,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
     sinks.state.removeListener(stateListener);
   });
 
-  execution$.shamefullySendNext({ side: 'BUY', price: 100000 });
+  executionBatch$.shamefullySendNext([{ side: 'BUY', price: 100000 }]);
   const initialRenders = orderRenders;
   const initialTrade = tradeNode;
   assert.ok(initialRenders > 0);
@@ -89,7 +89,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
   sizeInput$.shamefullySendNext({ target: { value: '0.1' } });
   assert.equal(orderRenders, initialRenders + 1);
 
-  execution$.shamefullySendNext({ side: 'BUY', price: 100001 });
+  executionBatch$.shamefullySendNext([{ side: 'BUY', price: 100001 }]);
   assert.equal(orderRenders, initialRenders + 2);
 
   t.mock.timers.tick(100);
@@ -115,7 +115,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
 
 test('the summary waits for a public execution before valuing an open position', (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] });
-  const execution$ = Stream.create();
+  const executionBatch$ = Stream.create();
   const positions$ = Stream.create();
   const collateral$ = Stream.create();
   const state$ = Stream.createWithMemory();
@@ -125,7 +125,7 @@ test('the summary waits for a public execution before valuing an open position',
     DOM: dom,
     HTTP: { select: (category) => ({ positions: positions$, collateral: collateral$ })[category] || never() },
     orderRequests: { select: never },
-    socket: { board$: never(), execution$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
+    socket: { board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
   }, Stream.of(false));
@@ -154,9 +154,9 @@ test('the summary waits for a public execution before valuing an open position',
   assert.deepEqual(value('div.profit'), ['span.number', 'Pending']);
   assert.deepEqual(value('div.collateral'), ['span.number', (2_000_000).toLocaleString()]);
 
-  execution$.shamefullySendNext({ side: 'BUY', price: 10_100_000 });
+  executionBatch$.shamefullySendNext([{ side: 'BUY', price: 10_100_000 }]);
   assert.deepEqual(value('div.current-price'), ['span.number', (10_100_000).toLocaleString()]);
   assert.deepEqual(value('div.position-diff'), ['span.number.plus', (100_000).toLocaleString()]);
   assert.deepEqual(value('div.profit'), ['span.number.plus', (10_000).toLocaleString()]);
-  assert.deepEqual(value('div.collateral'), ['span.number', (2_010_000).toLocaleString()]);
+  assert.deepEqual(value('div.collateral'), ['span.number', (2_000_000).toLocaleString()]);
 });

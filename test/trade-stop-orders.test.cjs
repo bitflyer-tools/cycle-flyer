@@ -11,15 +11,15 @@ const parentOrder = {
 };
 
 function setup(t) {
-    const execution$ = Stream.create();
+    const executionBatch$ = Stream.create();
     const parentOrder$ = Stream.create();
     const parentOrders$ = Stream.create();
-    const board = new Board({ asks: [{ price: 110, size: 2 }], bids: [] });
+    const board = new Board({ asks: [{ price: 109, size: 2 }, { price: 110, size: 2 }], bids: [] });
     let state;
     const snapshots = [];
     const subscription = model({
         onCancelParentOrder$: Stream.never(),
-        onExecutionCreated$: execution$,
+        onExecutionBatch$: executionBatch$,
         onMyExecutionCreated$: Stream.never(),
         onOrdersLoaded$: Stream.never(),
         onParentOrderLoaded$: parentOrder$,
@@ -40,21 +40,21 @@ function setup(t) {
     t.after(() => subscription.unsubscribe());
     parentOrders$.shamefullySendNext([parentOrder]);
     parentOrder$.shamefullySendNext(parentOrder);
-    return { board, execution$, parentOrder$, parentOrders$, snapshots };
+    return { board, executionBatch$, parentOrder$, parentOrders$, snapshots };
 }
 
-test("a public execution updates the market price while the active stop stays visible", (t) => {
-    const { board, execution$, parentOrder$, snapshots } = setup(t);
+test("a public execution batch prunes the board and updates the price while the active stop stays visible", (t) => {
+    const { board, executionBatch$, parentOrder$, snapshots } = setup(t);
     const beforeExecution = snapshots.length;
-    execution$.shamefullySendNext({ side: "BUY", price: 110 });
+    executionBatch$.shamefullySendNext([{ side: "BUY", price: 110 }, { side: "SELL", price: 108 }]);
     parentOrder$.shamefullySendNext(parentOrder);
 
-    assert.equal(board.asks[0].price, 110);
+    assert.deepEqual(board.asks.map(({ price }) => price), [110]);
     assert.equal(snapshots[beforeExecution].stopOrders, snapshots[beforeExecution - 1].stopOrders);
     assert.deepEqual(snapshots.slice(beforeExecution - 1).map(({ price, stops }) => ({ price, stops })), [
         { price: null, stops: [110] },
-        { price: 110, stops: [110] },
-        { price: 110, stops: [110] },
+        { price: 108, stops: [110] },
+        { price: 108, stops: [110] },
     ]);
 });
 
