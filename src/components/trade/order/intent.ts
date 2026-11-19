@@ -7,7 +7,6 @@ import {createChildOrderOutcome, createParentOrderOutcome, OrderOutcome} from ".
 import {TwapActions, twapIntent} from "./twapIntent";
 
 export interface Actions extends TwapActions {
-    onCancelOrders$: Stream<null>;
     onClickClearButton$: Stream<null>;
     onClickClearOrderButton$: Stream<null>;
     onClickIFDOCOBuyButton$: Stream<null>;
@@ -37,11 +36,6 @@ export const storageKeys = {
 };
 
 export const intent = (sources: Sources): Actions => {
-    const onCancelOrders$ = sources.HTTP.select("cancel-orders")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .mapTo(null);
-
     const onOrderOutcome$ = Stream.merge(
         sources.HTTP.select("market-order").map((stream) => createChildOrderOutcome("Market", stream)),
         sources.HTTP.select("limit-order").map((stream) => createChildOrderOutcome("Limit", stream)),
@@ -50,7 +44,6 @@ export const intent = (sources: Sources): Actions => {
 
     return {
         ...twapIntent(sources),
-        onCancelOrders$,
         onClickClearButton$: clicks(sources.DOM, ".order-buttons", ".clear-button"),
         onClickClearOrderButton$: clicks(sources.DOM, ".order-buttons", ".clear-order-button"),
         onClickIFDOCOBuyButton$: clicks(sources.DOM, ".ranged-ifdoco-order-buttons", ".buy-button"),

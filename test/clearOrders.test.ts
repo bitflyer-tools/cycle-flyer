@@ -5,6 +5,7 @@ import Stream from "xstream";
 import {State as TradeState} from "../src/components/trade";
 import {intent as tradeIntent} from "../src/components/trade/intent";
 import {model as tradeModel} from "../src/components/trade/model";
+import {request as tradeRequest} from "../src/components/trade/request";
 import {State} from "../src/components/trade/order";
 import {intent} from "../src/components/trade/order/intent";
 import {model} from "../src/components/trade/order/model";
@@ -80,11 +81,64 @@ test("A late active list and its details cannot restore a canceled stop", () => 
     deepStrictEqual(flattenStopOrders(state().parentStopOrders).map(({price}) => price), [200, 300]);
 });
 
+test("Clear Orders discards an in-flight child-order poll and requests a fresh list", () => {
+    const {childResponses, orderLists, startPolling, state} = clearOrders([]);
+    const {polls, subscription} = startPolling();
+    const stalePoll$ = Stream.create<unknown>();
+    const freshPoll$ = Stream.create<unknown>();
+
+    try {
+        orderLists.shamefullySendNext(Stream.of<unknown>(childOrderList(100)));
+        orderLists.shamefullySendNext(stalePoll$);
+        deepStrictEqual(state().orders.map(({price}) => price), [100]);
+        strictEqual(polls.length, 1);
+
+        childResponses.shamefullySendNext(Stream.of<unknown>({}));
+        deepStrictEqual(state().orders, []);
+        strictEqual(polls.length, 2);
+
+        stalePoll$.shamefullySendNext(childOrderList(100));
+        deepStrictEqual(state().orders, []);
+
+        orderLists.shamefullySendNext(freshPoll$);
+        freshPoll$.shamefullySendNext(childOrderList(200));
+        deepStrictEqual(state().orders.map(({price}) => price), [200]);
+    } finally {
+        subscription.unsubscribe();
+    }
+});
+
+test("A failed child-order cancellation leaves the in-flight poll active", () => {
+    const {childResponses, orderLists, startPolling, state} = clearOrders([]);
+    const {polls, subscription} = startPolling();
+    const pendingPoll$ = Stream.create<unknown>();
+    const cancellation$ = Stream.create<unknown>();
+
+    try {
+        orderLists.shamefullySendNext(Stream.of<unknown>(childOrderList(100)));
+        orderLists.shamefullySendNext(pendingPoll$);
+        childResponses.shamefullySendNext(cancellation$);
+        cancellation$.shamefullySendError(new Error("Cancellation failed"));
+        deepStrictEqual(state().orders.map(({price}) => price), [100]);
+        strictEqual(polls.length, 1);
+
+        pendingPoll$.shamefullySendNext(childOrderList(200));
+        deepStrictEqual(state().orders.map(({price}) => price), [200]);
+    } finally {
+        subscription.unsubscribe();
+    }
+});
+
+function childOrderList(price: number) {
+    return { text: JSON.stringify([{ price, side: "BUY", outstanding_size: 1 }]) };
+}
+
 function clearOrders(ids: string[], lastDetailPending = false) {
     const clicks$ = Stream.create();
     const childResponses = Stream.create<Stream<unknown>>();
     const parentResponses = Stream.create<Stream<unknown>>();
     const details = Stream.create<Stream<unknown>>();
+    const orderLists = Stream.create<Stream<unknown>>();
     const lists = Stream.create<Stream<unknown>>();
     const sources = {
         DOM: {
@@ -100,6 +154,7 @@ function clearOrders(ids: string[], lastDetailPending = false) {
                     "cancel-parent-order": parentResponses,
                     "parent-order": details,
                     "parent-orders": lists,
+                    orders: orderLists,
                 }[category] || Stream.never();
             },
         },
@@ -164,5 +219,14 @@ function clearOrders(ids: string[], lastDetailPending = false) {
     orderRequests(actions, state$).addListener({ next: (batch) => requests.push(...batch.requests as typeof requests) });
     clicks$.shamefullySendNext(null);
 
-    return { childResponses, sendParentDetail, lists, parentResponses, requests, state: () => currentState };
+    const startPolling = () => {
+        const polls: RequestOptions[] = [];
+        const subscription = tradeRequest(tradeActions).subscribe({
+            next: (request) => {
+                if (request && typeof request !== "string" && request.category === "orders") polls.push(request);
+            },
+        });
+        return { polls, subscription };
+    };
+    return { childResponses, sendParentDetail, lists, orderLists, parentResponses, requests, startPolling, state: () => currentState };
 }

@@ -14,6 +14,7 @@ export const request = (actions: Actions): Stream<string | RequestInput | null> 
 
     return Stream.merge(
         orders,
+        actions.onCancelOrders$.map(getOrders),
         parentOrders,
         positions,
         refreshes,

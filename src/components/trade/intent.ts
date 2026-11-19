@@ -10,6 +10,7 @@ import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
 import {pollResponse} from "./pollResponse";
 
 export interface Actions {
+    onCancelOrders$: Stream<null>;
     onCancelParentOrder$: Stream<string>;
     onExecutionBatch$: Stream<Execution[]>;
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
@@ -35,10 +36,19 @@ export const intent = (sources: Sources): Actions => {
         sources.socket.reconnect$,
     ).compose(debounce(500));
 
-    const onOrdersLoaded$ = sources.HTTP.select("orders")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .map((response) => JSON.parse(response.text));
+    const ordersCanceled = Symbol("ordersCanceled");
+    type OrderList = object[] | typeof ordersCanceled;
+    const cancelOrders$ = sources.HTTP.select("cancel-orders")
+        .map((response$) => response$.replaceError(() => Stream.empty()))
+        .compose(flattenConcurrently)
+        .map((): Stream<OrderList> => Stream.never<OrderList>().startWith(ordersCanceled));
+
+    const orderLists$ = Stream.merge<Stream<OrderList>>(
+        sources.HTTP.select("orders")
+            .map((response$) => response$.replaceError(() => Stream.never())
+                .map((response): OrderList => JSON.parse(response.text))),
+        cancelOrders$,
+    ).flatten();
 
     const onParentOrdersLoaded$ = sources.HTTP.select("parent-orders")
         .map((response$) => response$.replaceError(() => Stream.never()))
@@ -53,11 +63,12 @@ export const intent = (sources: Sources): Actions => {
         isPositionList(json) ? new Position(json) : undefined);
 
     return {
+        onCancelOrders$: orderLists$.filter((orders) => orders === ordersCanceled).mapTo(null),
         onCancelParentOrder$,
         onExecutionBatch$: sources.socket.executionBatch$,
         onMyExecutionCreated$,
         onMyOrderChanged$,
-        onOrdersLoaded$,
+        onOrdersLoaded$: orderLists$.map<object[]>((orders) => orders === ordersCanceled ? [] : orders),
         onParentOrderLoaded$: details.loaded$,
         onParentOrdersLoaded$,
         onPositionsLoaded$,
