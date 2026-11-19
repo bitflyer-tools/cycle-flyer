@@ -4,36 +4,41 @@ import {createOrderHistory, OrderHistory} from "../../../models/orderHistory";
 
 type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 
-export const createHistoryStream = (name: string, stream$: HTTPResponse$): Stream<OrderHistory> =>
-    stream$
-        .mapTo("success")
-        .replaceError(() => Stream.of("failed"))
-        .map((status) => childOrderHistory(name, stream$.request.send as string, status));
+type OrderStatus = "success" | "failed";
 
-export const createParentOrderHistoryStream = (stream$: HTTPResponse$): Stream<OrderHistory> =>
-    stream$
-        .mapTo("success")
-        .replaceError(() => Stream.of("failed"))
-        .map((status) => parentOrderHistories(stream$.request.send as string, status))
-        .flatten();
+export interface OrderOutcome {
+    status: OrderStatus;
+    histories: OrderHistory[];
+}
 
-const childOrderHistory = (name: string, body: string, status: string): OrderHistory => {
-    const send = JSON.parse(body);
-    return createOrderHistory(name, send.side, send.size, send.price, status);
-};
+export const createChildOrderOutcome = (name: string, stream$: HTTPResponse$): Stream<OrderOutcome> =>
+    createOutcome(stream$, (body, status) => {
+        const send = JSON.parse(body);
+        return [createOrderHistory(name, send.side, send.size, send.price, status)];
+    });
 
-const parentOrderHistories = (body: string, status: string): Stream<OrderHistory> => {
-    const histories = JSON.parse(body).parameters.map((order: any) =>
-        createOrderHistory(
-            orderName(order.condition_type),
-            order.side,
-            order.size,
-            order.price || order.trigger_price,
-            status,
+export const createParentOrderOutcome = (stream$: HTTPResponse$): Stream<OrderOutcome> =>
+    createOutcome(stream$, (body, status) =>
+        JSON.parse(body).parameters.map((order: any) =>
+            createOrderHistory(
+                orderName(order.condition_type),
+                order.side,
+                order.size,
+                order.price || order.trigger_price,
+                status,
+            ),
         ),
     );
-    return Stream.fromArray(histories as OrderHistory[]);
-};
+
+const createOutcome = (
+    stream$: HTTPResponse$,
+    createHistories: (body: string, status: OrderStatus) => OrderHistory[],
+): Stream<OrderOutcome> =>
+    stream$
+        .last()
+        .mapTo<OrderStatus>("success")
+        .replaceError(() => Stream.of<OrderStatus>("failed"))
+        .map((status) => ({ status, histories: createHistories(stream$.request.send as string, status) }));
 
 const orderNames: { [conditionType: string]: string } = {
     LIMIT: "Limit",

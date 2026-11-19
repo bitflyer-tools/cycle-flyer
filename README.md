@@ -30,6 +30,10 @@ You can view the order book without an API key.
 
 Prepare a release from an up-to-date `master`. Run `npm version patch -m 'chore: release v%s'` to update both manifests and create the version commit and tag. Use `minor` or `major` for the corresponding version bump. Push the version commit to `master`, then push the matching `vMAJOR.MINOR.PATCH` tag. The tag starts the desktop builds and publishes their artifacts and generated notes to GitHub Releases.
 
+## Tests
+
+With Node.js 24, run `npm ci` and then `npm run test:coverage` to run the full test suite and print the coverage report.
+
 ## Author
 
 [@unhappychoice](https://unhappychoice.com)

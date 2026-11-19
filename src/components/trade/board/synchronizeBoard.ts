@@ -33,7 +33,7 @@ const reconcileSnapshot = (response$: Stream<Response>, deltas$: Stream<Board>):
     });
     const snapshot$ = response$.map((response) => (pending: PendingSnapshot) => ({
         ...pending,
-        board: pending.deltas.reduce(mergeDelta, new Board(JSON.parse(response.text))),
+        board: pending.deltas.reduce(mergeDelta, decodeSnapshot(response.text)),
     }));
 
     return Stream.merge(updates$, snapshot$)
@@ -45,3 +45,15 @@ const reconcileSnapshot = (response$: Stream<Response>, deltas$: Stream<Board>):
 };
 
 const mergeDelta = (board: Board, delta: Board): Board => board.merge(delta.asks, delta.bids);
+
+const decodeSnapshot = (text: string): Board => {
+    const snapshot = JSON.parse(text);
+    if (!isBoardSide(snapshot?.asks) || !isBoardSide(snapshot?.bids)) {
+        throw new Error("Invalid board snapshot");
+    }
+    return new Board(snapshot);
+};
+
+const isBoardSide = (orders: unknown): boolean =>
+    Array.isArray(orders) && orders.every((order) =>
+        Number.isFinite(order?.price) && Number.isFinite(order?.size));
