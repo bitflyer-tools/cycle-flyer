@@ -55,6 +55,8 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
             .filter(([_, state]) => isValid(state))
             .map(([_, state]) => ({ requests: [toRequest(state)] }));
 
+    const isValidIFDOCOOrder = (state: State) => state.ifdocoOrder.hasValidWidth();
+
     return Stream.merge(
         withState(actions.onClickMarketBuyButton$, (state) => marketOrder(state.size, "BUY"), isValidMarketOrder),
         withState(actions.onClickMarketSellButton$, (state) => marketOrder(state.size, "SELL"), isValidMarketOrder),
@@ -62,8 +64,8 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
         withState(actions.onClickLimitSellButton$, (state) => limitOrder(state.price, state.size, "SELL"), isValidLimitOrder),
         withState(actions.onClickStopBuyButton$, (state) => stopOrder(state.triggerPrice, state.size, "BUY")),
         withState(actions.onClickStopSellButton$, (state) => stopOrder(state.triggerPrice, state.size, "SELL")),
-        withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),
-        withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder),
+        withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder, isValidIFDOCOOrder),
+        withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder, isValidIFDOCOOrder),
         withState(actions.onClickClearButton$, clearPositionOrder),
         actions.onClickClearOrderButton$.compose(sampleCombine(state$))
             .map(([_, state]) => ({

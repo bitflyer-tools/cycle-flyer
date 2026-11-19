@@ -10,6 +10,20 @@ import Stream, {MemoryStream} from "xstream";
 import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
+import {storageKeys} from "../src/components/trade/order/intent";
+
+test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
+    const order = setup(t, "-10000");
+
+    order.buyIFDOCO();
+    order.sellIFDOCO();
+    deepEqual(order.requests, []);
+    equal(order.state.isOrdering, false);
+
+    order.buyMarket();
+    deepEqual(order.requests.map(({ category }) => category), ["market-order"]);
+    equal(order.state.isOrdering, true);
+});
 
 test("accepts a single IFDOCO submission until its delayed success", (t) => {
     const order = setup(t);
@@ -140,7 +154,7 @@ test("dispatches every Clear Orders request and stays locked until they all sett
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
 
-function setup(t: TestContext) {
+function setup(t: TestContext, width = "0.01") {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
     t.after(() => {
@@ -182,7 +196,7 @@ function setup(t: TestContext) {
             reconnect$: Stream.never(),
         },
         state: new StateSource(state$, "state"),
-        storage: { local: { getItem: () => Stream.of("0.01") } },
+        storage: { local: { getItem: (key: string) => Stream.of(key === storageKeys.priceWidth ? width : "0.01") } },
     } as unknown as Omit<Sources, "router"> & { history: typeof history$ });
 
     let state: { trade?: TradeState } | undefined;

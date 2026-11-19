@@ -2,9 +2,13 @@ import {ResponseCollection, StorageRequest, StorageSource} from "@cycle/storage"
 import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
 
-export const loadNumber = (storage: StorageSource, key: string): Stream<number> =>
+export const loadNumber = (
+    storage: StorageSource,
+    key: string,
+    accept: (value: string) => boolean = (value) => value !== "" && !isNaN(+value),
+): Stream<number> =>
     loadStoredValue(storage, key)
-        .filter((value) => value !== "" && !isNaN(+value))
+        .filter(accept)
         .map((value) => +value)
         .take(1);
 
