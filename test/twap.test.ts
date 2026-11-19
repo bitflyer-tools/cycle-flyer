@@ -3,7 +3,7 @@ import {test} from "node:test";
 import Stream from "xstream";
 import type {RequestInput} from "@cycle/http";
 import type {State} from "../src/components/trade/order";
-import type {OrderHistory} from "../src/models/orderHistory";
+import type {OrderOutcome} from "../src/components/trade/order/history";
 import {IFDOCOrder} from "../src/models/ifdocoOrder";
 import {Position} from "../src/models/position";
 import {twapModel} from "../src/components/trade/order/twapModel";
@@ -24,7 +24,7 @@ test("TWAP progress and requests use the starting schedule after inputs change",
         onClickTwapSellButton$: Stream.create<null>(),
         onTwapIntervalChanged$: Stream.create<number>(),
         onTwapIntervalLoaded$: Stream.never<number>(),
-        onTwapSliceCreated$: Stream.create<OrderHistory>(),
+        onTwapSliceOutcome$: Stream.create<OrderOutcome>(),
         onTwapSlicesChanged$: Stream.create<number>(),
         onTwapSlicesLoaded$: Stream.never<number>(),
     };
@@ -55,8 +55,8 @@ test("TWAP progress and requests use the starting schedule after inputs change",
     });
     const status = () => (twapSection(state).children ?? [])
         .flatMap((node) => typeof node === "object" && node?.sel === "p.twap-status" ? [node.text] : []);
-    const completeSlice = () => actions.onTwapSliceCreated$.shamefullySendNext({
-        createdAt: new Date(), description: "", name: "TWAP", status: "success",
+    const completeSlice = () => actions.onTwapSliceOutcome$.shamefullySendNext({
+        status: "success", histories: [],
     });
 
     actions.onClickTwapBuyButton$.shamefullySendNext(null);
