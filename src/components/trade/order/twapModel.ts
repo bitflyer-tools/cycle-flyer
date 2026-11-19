@@ -14,10 +14,10 @@ export const twapModel = (actions: TwapActions): Stream<Reducer<State>> => {
     const startReducer$ = actions.onTwapStarted$
         .map(({id}) => updateTwap((twap) => ({ ...twap, remaining: twap.slices, scheduleId: id })));
 
-    const sliceReducer$ = actions.onTwapSliceCreated$
-        .map<Reducer<State>>(({history, scheduleId}) => (state) => state && ({
+    const sliceReducer$ = actions.onTwapSliceOutcome$
+        .map<Reducer<State>>(({histories, scheduleId}) => (state) => state && ({
             ...state,
-            histories: [history].concat(state.histories),
+            histories: histories.slice().reverse().concat(state.histories),
             twap: state.twap.scheduleId === scheduleId
                 ? { ...state.twap, remaining: Math.max(state.twap.remaining - 1, 0) }
                 : state.twap,

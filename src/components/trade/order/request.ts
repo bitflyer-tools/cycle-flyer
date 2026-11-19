@@ -6,6 +6,7 @@ import sampleCombine from "xstream/extra/sampleCombine";
 import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
+import {isValidLimitOrder, isValidMarketOrder} from "./validation";
 
 export interface OrderRequestBatch {
     requests: RequestInput[];
@@ -45,14 +46,20 @@ export const submissions = (requests$: Stream<OrderRequestBatch>, http: HTTPSour
 };
 
 export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<OrderRequestBatch> => {
-    const withState = (click$: Stream<null>, toRequest: (state: State) => RequestInput) =>
-        click$.compose(sampleCombine(state$)).map(([_, state]) => ({ requests: [toRequest(state)] }));
+    const withState = (
+        click$: Stream<null>,
+        toRequest: (state: State) => RequestInput,
+        isValid: (state: State) => boolean = () => true,
+    ) =>
+        click$.compose(sampleCombine(state$))
+            .filter(([_, state]) => isValid(state))
+            .map(([_, state]) => ({ requests: [toRequest(state)] }));
 
     return Stream.merge(
-        withState(actions.onClickMarketBuyButton$, (state) => marketOrder(state.size, "BUY")),
-        withState(actions.onClickMarketSellButton$, (state) => marketOrder(state.size, "SELL")),
-        withState(actions.onClickLimitBuyButton$, (state) => limitOrder(state.price, state.size, "BUY")),
-        withState(actions.onClickLimitSellButton$, (state) => limitOrder(state.price, state.size, "SELL")),
+        withState(actions.onClickMarketBuyButton$, (state) => marketOrder(state.size, "BUY"), isValidMarketOrder),
+        withState(actions.onClickMarketSellButton$, (state) => marketOrder(state.size, "SELL"), isValidMarketOrder),
+        withState(actions.onClickLimitBuyButton$, (state) => limitOrder(state.price, state.size, "BUY"), isValidLimitOrder),
+        withState(actions.onClickLimitSellButton$, (state) => limitOrder(state.price, state.size, "SELL"), isValidLimitOrder),
         withState(actions.onClickStopBuyButton$, (state) => stopOrder(state.triggerPrice, state.size, "BUY")),
         withState(actions.onClickStopSellButton$, (state) => stopOrder(state.triggerPrice, state.size, "SELL")),
         withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),

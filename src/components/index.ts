@@ -8,11 +8,14 @@ import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
-import {OrderHistory} from "../models/orderHistory";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
-import {createParentOrderHistoryStream} from "./trade/order/history";
+import {createParentOrderOutcome} from "./trade/order/history";
 import {OrderRequestBatch, submissions} from "./trade/order/request";
+
+interface RootState {
+    trade?: TradeState;
+}
 
 export interface Sources {
     DOM: DOMSource;
@@ -35,27 +38,37 @@ export interface Sinks {
 const tradeScope = "trade";
 
 export const Root = (sources: Sources): Sinks => {
+    const trade = isolate(Trade, { "*": tradeScope });
     const routes$: Stream<Sinks & { orderRequests?: Stream<OrderRequestBatch> }> = sources.router
         .define({
-            "/": isolate(Trade, { "*": tradeScope }),
+            "/": trade,
             "/setting": isolate(Setting, { "*": "setting" }),
         })
-        .map((route: any) => route.value({
-            ...sources,
-            // Tag order batches with the same HTTP scopes as the other requests.
-            orderRequests: sources.HTTP,
-            router: sources.router.path(route.path),
-        }, isOrdering$))
+        .map((route: any) => {
+            const sinks = route.value({
+                ...sources,
+                // Tag order batches with the same HTTP scopes as the other requests.
+                orderRequests: sources.HTTP,
+                router: sources.router.path(route.path),
+            }, isOrdering$);
+            return route.value === trade ? sinks : {
+                ...sinks,
+                state: sinks.state.startWith(clearTwapProgress),
+            };
+        })
         .remember();
 
     const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<OrderRequestBatch>()).flatten();
     const pending$ = submissions(orderRequests$, sources.HTTP);
     const isOrdering$ = pending$.map((pending) => pending !== null);
-    const ifdocoHistories$: Stream<OrderHistory> = sources.HTTP.select("ifdoco-order")
-        .map(createParentOrderHistoryStream)
+    const ifdocoOutcome$ = sources.HTTP.select("ifdoco-order")
+        .map(createParentOrderOutcome)
         .compose(flattenConcurrently);
-    const ifdocoHistoryReducer$ = ifdocoHistories$
-        .map((history) => (state: TradeState) => ({ ...state, histories: [history].concat(state.histories) }));
+    const ifdocoHistoryReducer$ = ifdocoOutcome$
+        .map(({ histories }) => (state: TradeState) => ({
+            ...state,
+            histories: histories.slice().reverse().concat(state.histories),
+        }));
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>
@@ -80,11 +93,28 @@ export const Root = (sources: Sources): Sinks => {
                 .compose(flattenConcurrently),
         ),
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
-        sound: routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
+        sound: Stream.merge(
+            routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
+            ifdocoOutcome$.map(({ status }): Sound => status === "success" ? "success" : "failure"),
+        ),
         state: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
             sources.state.isolateSink(ifdocoHistoryReducer$, tradeScope),
         ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
+    };
+};
+
+const clearTwapProgress: Reducer<RootState> = (state) => {
+    const trade = state?.trade;
+    const order = trade?.orderComponentState;
+    if (!trade || !order?.twap.remaining) return state;
+
+    return {
+        ...state,
+        trade: {
+            ...trade,
+            orderComponentState: { ...order, twap: { ...order.twap, remaining: 0, scheduleId: undefined } },
+        },
     };
 };
