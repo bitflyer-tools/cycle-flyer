@@ -1,21 +1,16 @@
 import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
-import {getOrders, getParentOrders, getPositions} from "../../http";
+import {getOrders, getParentOrders, getPositions, hasApiCredentials} from "../../http";
 import {Actions} from "./intent";
 
 export const request = (actions: Actions): Stream<string | RequestInput | null> => {
-    const orders = Stream.periodic(10000).startWith(0).map(getOrders);
-    const parentOrders = Stream.periodic(10000).startWith(0).map(getParentOrders);
-    const positions = Stream.periodic(10000).startWith(0).map(getPositions);
-
-    const refreshes = actions.onMyOrderChanged$
-        .map((_) => Stream.fromArray([getOrders(), getParentOrders(), getPositions()]))
+    const refreshes = Stream.merge(Stream.periodic(10000), actions.onMyOrderChanged$)
+        .startWith(null)
+        .filter(hasApiCredentials)
+        .map(() => Stream.of(getOrders(), getParentOrders(), getPositions()))
         .flatten();
 
     return Stream.merge(
-        orders,
-        parentOrders,
-        positions,
         refreshes,
         actions.parentOrderRequests$,
     ) as Stream<string | RequestInput | null>;

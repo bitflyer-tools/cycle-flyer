@@ -65,7 +65,7 @@ export const intent = (sources: Sources): Actions => {
         onOrderOutcome$,
         onPriceChanged$: numberInputs(sources.DOM, "#price-input"),
         onPriceWidthChanged$: numberInputs(sources.DOM, "#price-width-input"),
-        onPriceWidthLoaded$: loadNumber(sources.storage, storageKeys.priceWidth),
+        onPriceWidthLoaded$: loadNumber(sources.storage, storageKeys.priceWidth, () => true),
         onRatioChanged$: numberInputs(sources.DOM, "#ratio-input"),
         onRatioLoaded$: loadNumber(sources.storage, storageKeys.ratio),
         onSizeChanged$: numberInputs(sources.DOM, "#size-input"),
