@@ -2,7 +2,7 @@ import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {IFDOCOrder} from "../../../models/ifdocoOrder";
 import {Order} from "../../../models/order";
-import {prependOrderHistory} from "../../../models/orderHistory";
+import {prependOrderHistories} from "../../../models/orderHistory";
 import {Position} from "../../../models/position";
 import {defaultTwapOrder} from "../../../models/twapOrder";
 import {State} from "./index";
@@ -29,8 +29,11 @@ export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Re
     const cancelOrdersReducer$ = actions.onCancelOrders$
         .map((_) => (state: State) => ({ ...state, orders: [] as Order[] }));
 
-    const historyReducer$ = Stream.merge(actions.onHistoryCreated$, actions.onTwapSliceCreated$)
-        .map((history) => (state: State) => ({ ...state, histories: prependOrderHistory(state.histories, history)}));
+    const historyReducer$ = Stream.merge(actions.onOrderOutcome$, actions.onTwapSliceOutcome$)
+        .map(({ histories }) => (state: State) => ({
+            ...state,
+            histories: prependOrderHistories(state.histories, histories),
+        }));
 
     const isOrderingReducer$ = isOrdering$
         .map((isOrdering) => (state: State) => ({ ...state, isOrdering }));

@@ -5,11 +5,12 @@ import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {Actions as TradeActions} from "../src/components/trade/intent";
 import {model as tradeModel} from "../src/components/trade/model";
-import {State as OrderState} from "../src/components/trade/order";
+import {OrderOutcome} from "../src/components/trade/order/history";
 import {Actions as OrderActions} from "../src/components/trade/order/intent";
 import {model as orderModel} from "../src/components/trade/order/model";
 import {State as SummaryState} from "../src/components/trade/summary";
 import {view} from "../src/components/trade/summary/view";
+import {Execution} from "../src/models/execution";
 import {ChildOrderEvent} from "../src/models/orderEvent";
 import {createOrderHistory, HISTORY_LIMIT} from "../src/models/orderHistory";
 
@@ -29,18 +30,24 @@ const child = (node: VNode, selector: string): VNode => {
 };
 
 test("Order results and TWAP slices retain only the newest history entries", () => {
-    const orders$ = Stream.create<OrderState["histories"][number]>();
-    const slices$ = Stream.create<OrderState["histories"][number]>();
+    const orders$ = Stream.create<OrderOutcome>();
+    const slices$ = Stream.create<OrderOutcome>();
     const state = collectState(orderModel(withIdleActions<OrderActions>({
-        onHistoryCreated$: orders$,
-        onTwapSliceCreated$: slices$,
+        onOrderOutcome$: orders$,
+        onTwapSliceOutcome$: slices$,
     }), Stream.of(false)));
 
     const entries = Array.from({ length: HISTORY_LIMIT * 2 + 2 }, (_, index) =>
         createOrderHistory("Order", "BUY", index, 0, "success"),
     );
-    entries.forEach((entry, index) => (index % 2 ? slices$ : orders$).shamefullySendNext(entry));
+    const parentOrderEntries = entries.slice(1, -1);
+    slices$.shamefullySendNext({ status: "success", histories: entries.slice(0, 1) });
+    orders$.shamefullySendNext({ status: "success", histories: parentOrderEntries });
 
+    assert.deepEqual(state().histories, entries.slice(-HISTORY_LIMIT - 1, -1).reverse());
+    assert.deepEqual(parentOrderEntries, entries.slice(1, -1));
+
+    slices$.shamefullySendNext({ status: "success", histories: entries.slice(-1) });
     assert.deepEqual(state().histories, entries.slice(-HISTORY_LIMIT).reverse());
 });
 
@@ -53,9 +60,9 @@ test("Private executions cap rendered rows and public executions reuse the histo
         product_code: "FX_BTC_JPY",
     };
     const privateExecutions$ = Stream.create<ChildOrderEvent>();
-    const publicExecutions$ = Stream.create<object>();
+    const publicExecutions$ = Stream.create<Execution[]>();
     const state = collectState(tradeModel(withIdleActions<TradeActions>({
-        onExecutionCreated$: publicExecutions$,
+        onExecutionBatch$: publicExecutions$,
         onMyExecutionCreated$: privateExecutions$,
     })));
 
@@ -77,7 +84,7 @@ test("Private executions cap rendered rows and public executions reuse the histo
     const render = () => summary$.shamefullySendNext({ ...state(), collateral: 0, marketState: {} });
 
     render();
-    publicExecutions$.shamefullySendNext({ price: 42 });
+    publicExecutions$.shamefullySendNext([{ side: "BUY", price: 41 }, { side: "SELL", price: 42 }]);
     render();
 
     const list = child(rendered[0], "ul.histories");

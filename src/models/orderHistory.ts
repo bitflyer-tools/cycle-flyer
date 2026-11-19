@@ -7,8 +7,17 @@ export interface OrderHistory {
 
 export const HISTORY_LIMIT = 100;
 
-export const prependOrderHistory = (histories: readonly OrderHistory[], history: OrderHistory): OrderHistory[] =>
-    [history, ...histories.slice(0, HISTORY_LIMIT - 1)];
+export const prependOrderHistory = (histories: readonly OrderHistory[], history: OrderHistory): readonly OrderHistory[] =>
+    prependOrderHistories(histories, [history]);
+
+export const prependOrderHistories = (
+    histories: readonly OrderHistory[],
+    incoming: readonly OrderHistory[],
+): readonly OrderHistory[] => {
+    if (incoming.length === 0 && histories.length <= HISTORY_LIMIT) return histories;
+    const newest = incoming.slice(-HISTORY_LIMIT).reverse();
+    return newest.concat(histories.slice(0, HISTORY_LIMIT - newest.length));
+};
 
 export const createOrderHistory = (
     name: string,
