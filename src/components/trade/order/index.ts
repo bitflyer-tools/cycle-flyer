@@ -1,5 +1,6 @@
 import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
+import {Sound} from "../../../drivers/soundDriver";
 import {IFDOCOrder} from "../../../models/ifdocoOrder";
 import {Order} from "../../../models/order";
 import {OrderHistory} from "../../../models/orderHistory";
@@ -31,6 +32,7 @@ export interface State {
 
 export const OrderComponent = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
     orderRequests: Stream<OrderRequestBatch>;
+    sound: Stream<Sound>;
 } => {
     const state$ = sources.state.stream as any as Stream<State>;
     const actions = intent(sources);
@@ -42,6 +44,8 @@ export const OrderComponent = (sources: Sources, isOrdering$: Stream<boolean>): 
         HTTP: twapRequest(actions, state$).map<RequestInput | null>((input) => input),
         orderRequests: orderRequests(actions, state$),
         router: Stream.never(),
+        sound: Stream.merge(actions.onOrderOutcome$, actions.onTwapSliceOutcome$)
+            .map(({ status }): Sound => status === "success" ? "success" : "failure"),
         state: reducer$ as any,
         storage: storage(state$),
     };
