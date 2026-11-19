@@ -42,7 +42,7 @@ export interface Sinks {
 }
 
 export interface State {
-    canceledParentOrderIds?: ReadonlySet<string>;
+    canceledParentOrderIds?: ReadonlyMap<string, number>;
     currentPrice: number | null;
     histories: OrderHistory[];
     orders: Order[];
