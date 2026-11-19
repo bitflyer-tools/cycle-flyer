@@ -10,7 +10,7 @@ import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
-import {createParentOrderOutcome} from "./trade/order/history";
+import {submittedOrderOutcomes} from "./trade/order/history";
 import {OrderRequestBatch, submissions} from "./trade/order/request";
 
 interface RootState {
@@ -61,10 +61,8 @@ export const Root = (sources: Sources): Sinks => {
     const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<OrderRequestBatch>()).flatten();
     const pending$ = submissions(orderRequests$, sources.HTTP);
     const isOrdering$ = pending$.map((pending) => pending !== null);
-    const ifdocoOutcome$ = sources.HTTP.select("ifdoco-order")
-        .map(createParentOrderOutcome)
-        .compose(flattenConcurrently);
-    const ifdocoHistoryReducer$ = ifdocoOutcome$
+    const orderOutcome$ = submittedOrderOutcomes(sources.HTTP);
+    const orderHistoryReducer$ = orderOutcome$
         .map(({ histories }) => (state: TradeState) => ({
             ...state,
             histories: histories.slice().reverse().concat(state.histories),
@@ -95,11 +93,11 @@ export const Root = (sources: Sources): Sinks => {
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
         sound: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
-            ifdocoOutcome$.map(({ status }): Sound => status === "success" ? "success" : "failure"),
+            orderOutcome$.map(({ status }): Sound => status === "success" ? "success" : "failure"),
         ),
         state: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
-            sources.state.isolateSink(ifdocoHistoryReducer$, tradeScope),
+            sources.state.isolateSink(orderHistoryReducer$, tradeScope),
         ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
     };

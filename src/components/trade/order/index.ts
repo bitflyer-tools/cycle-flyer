@@ -44,7 +44,7 @@ export const OrderComponent = (sources: Sources, isOrdering$: Stream<boolean>): 
         HTTP: twapRequest(actions, state$).map<RequestInput | null>((input) => input),
         orderRequests: orderRequests(actions, state$),
         router: Stream.never(),
-        sound: Stream.merge(actions.onOrderOutcome$, actions.onTwapSliceOutcome$)
+        sound: actions.onTwapSliceOutcome$
             .map(({ status }): Sound => status === "success" ? "success" : "failure"),
         state: reducer$ as any,
         storage: storage(state$),

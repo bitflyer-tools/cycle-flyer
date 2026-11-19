@@ -5,6 +5,7 @@ import {StateSource} from "@cycle/state";
 import {routerify} from "cyclic-router";
 import {deepEqual, equal} from "node:assert/strict";
 import {test, TestContext} from "node:test";
+import {setImmediate as flush} from "node:timers/promises";
 import switchPath from "switch-path";
 import Stream, {MemoryStream} from "xstream";
 import {Sound} from "../src/drivers/soundDriver";
@@ -14,10 +15,10 @@ import {State as TradeState} from "../src/components/trade";
 test("accepts a single IFDOCO submission until its delayed success", (t) => {
     const order = setup(t);
 
-    order.buyIFDOCO();
-    order.buyIFDOCO();
+    order.buy("ifdoco");
+    order.buy("ifdoco");
     order.sellIFDOCO();
-    order.buyMarket();
+    order.buy("market");
 
     deepEqual(order.requests.map(({ category }) => category), ["ifdoco-order"]);
     equal(order.state.isOrdering, true);
@@ -47,24 +48,24 @@ test("accepts a single IFDOCO submission until its delayed success", (t) => {
 test("releases a failed IFDOCO and keeps a later market order locked through stale responses", (t) => {
     const order = setup(t);
 
-    order.buyIFDOCO();
+    order.buy("ifdoco");
     order.respondTo(order.requests[0]).fail();
     equal(order.state.isOrdering, false);
     deepEqual(order.histories.map(({ status }) => status), ["failed", "failed", "failed"]);
 
-    order.buyMarket();
+    order.buy("market");
     const marketResponse = order.respondTo(order.requests[1]);
     const staleResponse = order.respondTo(order.requests[0]);
     staleResponse.succeed();
     equal(order.histories.length, 6);
     equal(order.state.isOrdering, true);
-    order.buyIFDOCO();
+    order.buy("ifdoco");
     equal(order.requests.length, 2);
 
     marketResponse.succeed();
     equal(order.state.isOrdering, false);
     equal(order.histories[0].name, "Market");
-    order.buyIFDOCO();
+    order.buy("ifdoco");
     equal(order.requests.length, 3);
 });
 
@@ -75,7 +76,7 @@ for (const outcome of ["succeed", "fail"] as const) {
 
     test(`keeps IFDOCO pending after returning from settings until the original request settles (${outcome})`, (t) => {
         const order = setup(t);
-        order.buyIFDOCO();
+        order.buy("ifdoco");
         const response = order.respondTo(order.requests[0]);
 
         order.navigate("/setting");
@@ -93,22 +94,38 @@ for (const outcome of ["succeed", "fail"] as const) {
         equal(order.requests.length, 2);
     });
 
-    test(`unlocks IFDOCO when the original request settles in settings (${outcome})`, (t) => {
-        const order = setup(t);
-        order.buyIFDOCO();
+    for (const [category, names] of [
+        ["market", ["Market"]],
+        ["limit", ["Limit"]],
+        ["stop", ["Stop"]],
+        ["ifdoco", ["Stop", "Limit", "Market"]],
+    ] as const) {
+        test(`records a pending ${category} order that settles in settings (${outcome})`, async (t) => {
+            const order = setup(t);
+            order.buy(category);
+            deepEqual(order.requests.map(({ category }) => category), [`${category}-order`]);
+            const response = order.respondTo(order.requests[0]);
 
-        order.navigate("/setting");
-        deepEqual(order.sounds, []);
-        order.respondTo(order.requests[0])[outcome]();
-        deepEqual(order.sounds, [sound]);
-        deepEqual(order.histories.map(({ name, status }) => ({ name, status })), expectedHistories);
-        order.navigate("/");
-        deepEqual(order.sounds, [sound]);
-        equal(order.state.isOrdering, false);
-        deepEqual(order.histories.map(({ name, status }) => ({ name, status })), expectedHistories);
-        order.sellIFDOCO();
-        equal(order.requests.length, 2);
-    });
+            order.navigate("/setting");
+            await flush();
+            response.progress();
+            deepEqual(order.sounds, []);
+            deepEqual(order.histories, []);
+
+            response[outcome]();
+            deepEqual(order.sounds, [sound]);
+            const histories = names.map((name) => ({ name, status }));
+            deepEqual(order.histories.map(({ name, status }) => ({ name, status })), histories);
+
+            order.navigate("/");
+            await flush();
+            deepEqual(order.sounds, [sound]);
+            equal(order.state.isOrdering, false);
+            deepEqual(order.histories.map(({ name, status }) => ({ name, status })), histories);
+            order.buy(category);
+            equal(order.requests.length, 2);
+        });
+    }
 }
 
 test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
@@ -127,7 +144,7 @@ test("dispatches every Clear Orders request and stays locked until they all sett
 
     order.respondTo(order.requests[0]).succeed();
     order.respondTo(order.requests[1]).succeed();
-    order.buyMarket();
+    order.buy("market");
     equal(order.requests.length, 3);
     equal(order.state.isOrdering, true);
     deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-failure"]);
@@ -151,19 +168,27 @@ function setup(t: TestContext) {
         }
     });
 
-    const buyIFDOCO$ = Stream.create<null>();
+    const buy$ = {
+        ifdoco: Stream.create<null>(),
+        limit: Stream.create<null>(),
+        market: Stream.create<null>(),
+        stop: Stream.create<null>(),
+    };
     const sellIFDOCO$ = Stream.create<null>();
-    const buyMarket$ = Stream.create<null>();
     const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
+        "#price-input": { input: Stream.of({ target: { value: "100000" } }) },
+        "#trigger-price-input": { input: Stream.of({ target: { value: "110000" } }) },
         ".order-buttons": { ".clear-order-button": { click: clearOrders$ } },
-        ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
+        ".limit-order-buttons": { ".buy-button": { click: buy$.limit } },
+        ".market-order-buttons": { ".buy-button": { click: buy$.market } },
+        ".stop-order-buttons": { ".buy-button": { click: buy$.stop } },
         ".ranged-ifdoco-order-buttons": {
-            ".buy-button": { click: buyIFDOCO$ },
+            ".buy-button": { click: buy$.ifdoco },
             ".sell-button": { click: sellIFDOCO$ },
         },
     };
@@ -197,7 +222,7 @@ function setup(t: TestContext) {
     const requests: RequestOptions[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
-        if (["ifdoco-order", "market-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
+        if (["ifdoco-order", "market-order", "limit-order", "stop-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
             requests.push(options);
         }
     } });
@@ -210,8 +235,7 @@ function setup(t: TestContext) {
     });
 
     return {
-        buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
-        buyMarket: () => buyMarket$.shamefullySendNext(null),
+        buy: (category: keyof typeof buy$) => buy$[category].shamefullySendNext(null),
         clearOrders: () => clearOrders$.shamefullySendNext(null),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
