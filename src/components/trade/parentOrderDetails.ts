@@ -1,7 +1,7 @@
 import {HTTPSource, RequestOptions} from "@cycle/http";
 import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
-import {getParentOrder} from "../../http";
+import {getParentOrder, hasApiCredentials} from "../../http";
 import {ParentOrderEvent} from "../../models/orderEvent";
 
 export interface ActiveParentOrder {
@@ -36,7 +36,7 @@ export const parentOrderDetails = (
     const pending = new Map<string, PendingDetail>();
 
     const load = (id: string, entry: ActiveDetail): RequestOptions[] => {
-        if (entry.loaded || pending.has(id)) { return []; }
+        if (entry.loaded || pending.has(id) || !hasApiCredentials()) { return []; }
         const requestId = Symbol();
         const request: DetailRequest = { ...getParentOrder(id), parentOrderDetailRequestId: requestId };
         pending.set(id, { entry, requestId });

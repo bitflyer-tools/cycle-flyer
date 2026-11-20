@@ -4,7 +4,7 @@ import {test} from "node:test";
 import Stream from "xstream";
 import {State} from "../src/components/trade/board";
 import {synchronizeBoard} from "../src/components/trade/board/synchronizeBoard";
-import {Board} from "../src/models/board";
+import {Board, BoardLevels} from "../src/models/board";
 
 test("replays realtime changes over a delayed snapshot", () => {
     const {request, update, asks} = setup();
@@ -16,6 +16,21 @@ test("replays realtime changes over a delayed snapshot", () => {
     respond([{ price: 100, size: 1 }, { price: 101, size: 4 }, { price: 102, size: 1 }]);
 
     assert.deepEqual(asks(), [[101, 4], [102, 3]]);
+});
+
+test("keeps both sides best first after replaying a one-sided delta", () => {
+    const {request, update, board} = setup();
+    const respond = request();
+
+    update(110, 3);
+    respond([], JSON.stringify({
+        asks: [{ price: 130, size: 1 }, { price: 120, size: 2 }],
+        bids: [{ price: 90, size: 1 }, { price: 100, size: 2 }],
+    }));
+
+    assert.deepEqual(board().asks.map(({price}) => price), [110, 120, 130]);
+    assert.deepEqual(board().bids.map(({price}) => price), [100, 90]);
+    assert.equal(board().spread(), 10);
 });
 
 test("initializes from a fresh snapshot and applies subsequent realtime updates", () => {
@@ -69,7 +84,7 @@ test("keeps the last valid board and replays deltas after malformed snapshots", 
 });
 
 const setup = () => {
-    const updates$ = Stream.create<object>();
+    const updates$ = Stream.create<BoardLevels>();
     const responses$$ = Stream.create<Stream<Response>>();
     let state = { board: new Board({ asks: [], bids: [] }) } as State;
     synchronizeBoard(updates$, responses$$).addListener({
@@ -77,6 +92,7 @@ const setup = () => {
     });
 
     return {
+        board: () => state.board,
         asks: () => state.board.asks.map(({price, size}) => [price, size]),
         request: () => {
             const response$ = Stream.create<Response>();

@@ -3,6 +3,7 @@ import {deepStrictEqual} from "node:assert/strict";
 import {test} from "node:test";
 import Stream from "xstream";
 import {State} from "../src/components/trade/board";
+import {model} from "../src/components/trade/board/model";
 import {view} from "../src/components/trade/board/view";
 import {Board} from "../src/models/board";
 import {Position} from "../src/models/position";
@@ -34,6 +35,35 @@ test("renders a spread only when both sides have a quote", () => {
     });
 });
 
+test("renders the final grouping and price rows after two Group + clicks", (context) => {
+    context.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
+    const plus$ = Stream.create<null>();
+    const reducers$ = model({
+        onClickAsk$: Stream.never(),
+        onClickBid$: Stream.never(),
+        onClickGroupSizePlusButton$: plus$,
+        onClickGroupSizeMinusButton$: Stream.never(),
+        onGroupSizeLoaded$: Stream.never(),
+    }, Stream.never());
+    const state$ = reducers$.fold((state, reducer) => reducer(state)!, { ...boardState(), groupedSize: 1 }).drop(1);
+    const rendered: VNode[] = [];
+    const subscription = view(state$).subscribe({ next: (board) => rendered.push(board) });
+
+    plus$.shamefullySendNext(null);
+    plus$.shamefullySendNext(null);
+    context.mock.timers.tick(99);
+    deepStrictEqual(rendered.map(groupingAndPrices), [["1", [105, 115], [105, 95]]]);
+    context.mock.timers.tick(1);
+    deepStrictEqual(rendered.map(groupingAndPrices), [
+        ["1", [105, 115], [105, 95]],
+        ["100", [200], [100, 0]],
+    ]);
+    context.mock.timers.tick(100);
+    deepStrictEqual(rendered.length, 2);
+    subscription.unsubscribe();
+    context.mock.timers.tick(0);
+});
+
 test("renders summed active and stop markers on their display sides", () => {
     const state = boardState();
     const orders = [
@@ -61,7 +91,7 @@ test("renders summed active and stop markers on their display sides", () => {
 });
 
 test("reuses marker totals until their order list or group size changes", (context) => {
-    context.mock.timers.enable({ apis: ["setInterval"] });
+    context.mock.timers.enable({ apis: ["setTimeout"] });
     const reads = { active: 0, stop: 0 };
     const orders = [{
         side: "SELL",
@@ -102,6 +132,13 @@ test("reuses marker totals until their order list or group size changes", (conte
     deepStrictEqual(markers(rendered[4])[0], ["div.ask", 105, [["span.my-order", "1"]]]);
     state$.shamefullySendComplete();
 });
+
+function groupingAndPrices(board: VNode) {
+    const [header, asks, bids] = board.children as VNode[];
+    const grouping = (header.children as VNode[]).find((child) => child.sel === "span.grouped-size");
+    const prices = (side: VNode) => (side.children as VNode[]).map((row) => row.data?.dataset?.price);
+    return [grouping?.text, prices(asks), prices(bids)];
+}
 
 function boardState(): State {
     return {
