@@ -5,6 +5,8 @@ import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {getParentOrders, hasApiCredentials, parentOrdersPageSize} from "../../http";
 import {ActiveParentOrder} from "./parentOrderDetails";
 
+const pageTimeoutMs = 15000;
+
 interface ParentOrderList {
     orders: ActiveParentOrder[];
     sequence: number;
@@ -49,7 +51,15 @@ export const parentOrderPages = (http: HTTPSource, nextSequence: () => number) =
 };
 
 const readPage = (response$: Stream<Response> & { request?: RequestOptions },
-                  previous: ParentOrderList) => concat(
+                  previous: ParentOrderList) => {
+    const failure: PageResult = { list: previous, failed: true };
+    return Stream.merge(
+        Stream.periodic(pageTimeoutMs).mapTo(failure),
+        concat(parsePage(response$, previous).replaceError(() => Stream.empty<PageResult>()), Stream.of(failure)),
+    ).take(1);
+};
+
+const parsePage = (response$: Stream<Response> & { request?: RequestOptions }, previous: ParentOrderList) =>
     response$.map((response): PageResult => {
         const page = JSON.parse(response.text) as Array<ActiveParentOrder & { id: number }>;
         if (!Array.isArray(page) || page.some((order) => typeof order?.parent_order_id !== "string")) {
@@ -64,6 +74,4 @@ const readPage = (response$: Stream<Response> & { request?: RequestOptions },
             return { list: previous, failed: true };
         }
         return { before, list: { ...previous, orders: previous.orders.concat(page) } };
-    }).replaceError(() => Stream.empty<PageResult>()),
-    Stream.of<PageResult>({ list: previous, failed: true }),
-).take(1);
+    });

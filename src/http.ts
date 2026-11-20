@@ -21,12 +21,15 @@ export const getOrders = (): RequestInput =>
 export const parentOrdersPageSize = 100;
 
 export const getParentOrders = (before?: number): RequestOptions =>
-    requestInput(before === undefined ? "parent-orders" : "parent-orders-page",
-        "/v1/me/getparentorders", "GET", undefined, {
-            parent_order_state: "ACTIVE",
-            count: parentOrdersPageSize,
-            ...(before === undefined ? {} : { before }),
-        });
+    ({
+        ...requestInput(before === undefined ? "parent-orders" : "parent-orders-page",
+            "/v1/me/getparentorders", "GET", undefined, {
+                parent_order_state: "ACTIVE",
+                count: parentOrdersPageSize,
+                ...(before === undefined ? {} : { before }),
+            }),
+        lazy: true,
+    });
 
 export const getParentOrder = (parentOrderId: string): RequestOptions =>
     requestInput("parent-order", "/v1/me/getparentorder", "GET", undefined, { parent_order_id: parentOrderId });

@@ -204,6 +204,37 @@ test("coalesces periodic and order-event refreshes until all parent order pages 
     strictEqual(trade.listRequests.length, 4);
 });
 
+["first", "later"].forEach((stalledPage) => {
+    test(`recovers when the ${stalledPage} parent order page times out`, (t) => {
+        t.mock.timers.enable({apis: ["setInterval"]});
+        const trade = setup(t);
+        const state = observeState(t, trade.actions);
+        trade.list(["old"]);
+        t.mock.timers.tick(10000);
+        const firstPage$ = trade.startList();
+        const stalled$ = Stream.create<Response>();
+        if (stalledPage === "later") {
+            const orders = Array.from({length: 100}, (_, index) => ({
+                id: index + 2, parent_order_id: `partial-${index}`,
+            }));
+            firstPage$.shamefullySendNext({text: JSON.stringify(orders)} as Response);
+            trade.send(trade.pageRequests[0], stalled$);
+        }
+
+        t.mock.timers.tick(14999);
+        strictEqual(trade.listRequests.length, 2);
+        t.mock.timers.tick(1);
+        strictEqual(trade.listRequests.length, 3);
+        deepStrictEqual(Object.keys(state().parentStopOrders), ["old"]);
+
+        const late$ = stalledPage === "later" ? stalled$ : firstPage$;
+        late$.shamefullySendNext({text: '[{"parent_order_id":"late"}]'} as Response);
+        deepStrictEqual(Object.keys(state().parentStopOrders), ["old"]);
+        trade.startList().shamefullySendNext({text: '[{"parent_order_id":"new"}]'} as Response);
+        deepStrictEqual(Object.keys(state().parentStopOrders), ["new"]);
+    });
+});
+
 const observeState = (t: { after: (cleanup: () => void) => void }, actions: ReturnType<typeof intent>) => {
     let state: State | undefined;
     const subscription = model(actions).subscribe({ next: (reducer) => { state = reducer(state); } });
