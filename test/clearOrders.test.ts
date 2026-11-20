@@ -1,5 +1,4 @@
 import {RequestOptions} from "@cycle/http";
-import {RequestOptions} from "@cycle/http";
 import {deepStrictEqual, strictEqual} from "node:assert/strict";
 import {test} from "node:test";
 import Stream from "xstream";

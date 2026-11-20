@@ -25,6 +25,7 @@ export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Re
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
     const historyReducer$ = actions.onOrderOutcome$
+        .filter(({ status }) => status !== "unconfirmed")
         .map(({ histories }) => (state: State) => ({
             ...state,
             histories: histories.slice().reverse().concat(state.histories),
