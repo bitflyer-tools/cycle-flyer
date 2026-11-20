@@ -102,7 +102,7 @@ test('ignores events from the previous account until the new socket authenticate
   assert.deepEqual(events, ['a', 'b']);
 });
 
-test('initializes from REST and preserves WebSocket deltas during a refresh', () => {
+test('initializes from REST and preserves WebSocket deltas and execution pruning during a refresh', () => {
   const socket = makeSocket();
   const responses = Stream.create();
   const dom = { select: () => dom, events: () => Stream.never() };
@@ -140,10 +140,12 @@ test('initializes from REST and preserves WebSocket deltas during a refresh', ()
 
     const refresh = Stream.create();
     responses.shamefullySendNext(refresh);
+    socket.receive(executionChannel, [{ side: 'SELL', price: 99 }]);
     socket.receive(boardChannel, { asks: [{ price: 102, size: 4 }], bids: [] });
     refresh.shamefullySendNext({ text: JSON.stringify(snapshot) });
     refresh.shamefullySendComplete();
     assert.equal(state.board.asks[0].size, 4);
+    assert.equal(state.board.bids.length, 0);
   } finally {
     subscription.unsubscribe();
   }

@@ -190,16 +190,18 @@ test("dispatches every Clear Orders request and stays locked until they all sett
 test("clears cached account data and ignores late private responses after switching credentials", (t) => {
     const trade = setup(t, "0.01", { apiKey: "account-a" });
     const positionRequest = () => trade.polls.filter(({ category }) => category === "positions").at(-1)!;
+    const ordersRequest = () => trade.polls.filter(({ category }) => category === "orders").at(-1)!;
     const accountA = positionRequest();
+    const accountAOrders = ordersRequest();
     trade.respondTo(accountA).succeed([{ side: "BUY", size: 0.25, price: 100 }]);
     trade.respondTo(trade.polls.find(({ category }) => category === "collateral")!)
         .succeed({ collateral: 1000 });
-    trade.respondTo(trade.polls.find(({ category }) => category === "orders")!)
-        .succeed([{ side: "BUY", size: 0.1, price: 100 }]);
+    trade.respondTo(accountAOrders).succeed([{ side: "BUY", size: 0.1, price: 100 }]);
     equal(trade.tradeState.position.size, 0.25);
     equal(trade.tradeState.summaryComponentState!.collateral, 1000);
     equal(trade.tradeState.orders.length, 1);
     const alreadySubscribed = trade.respondTo(accountA);
+    const pendingOrders = trade.respondTo(accountAOrders);
 
     trade.navigate("/setting");
     trade.writeCredential("api-key", "account-b");
@@ -216,7 +218,9 @@ test("clears cached account data and ignores late private responses after switch
     alreadySubscribed.succeed([{ side: "BUY", size: 0.25, price: 100 }]);
     const fresh = trade.respondTo(accountB);
     trade.respondTo(accountA).succeed([{ side: "BUY", size: 0.25, price: 100 }]);
+    pendingOrders.succeed([{ side: "BUY", size: 0.1, price: 100 }]);
     equal(trade.tradeState.position.size, 0);
+    deepEqual(trade.tradeState.orders, []);
     trade.clearPosition();
     equal(trade.requests.length, 0);
 
@@ -428,8 +432,8 @@ function setup(t: TestContext, width = "0.01", { apiKey = "test", writeOrigin }:
         DOM: mockDOMSource({ ".___trade": new Proxy({}, { get: (_, selector) =>
             typeof selector === "string" && selector.startsWith(".___cycle") ? orderEvents : undefined,
         }), ".___setting": {
-            "#api-key-input": { keyup: apiKeyInput$ },
-            "#api-secret-input": { keyup: apiSecretInput$ },
+            "#api-key-input": { input: apiKeyInput$ },
+            "#api-secret-input": { input: apiSecretInput$ },
         } }),
         HTTP: source,
         history: history$,
