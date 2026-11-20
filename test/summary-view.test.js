@@ -25,9 +25,48 @@ compileFunction(outputFiles[0].text, ['module', 'require', 'window'])(summary, r
 const { Board, Position, synchronizeBoard, view } = summary.exports;
 
 function rowValue(summaryNode, selector) {
-  return summaryNode.children.find((row) => row.sel === selector)
-    .children.find((cell) => cell.sel?.startsWith('span.number')).text;
+  return rowNumber(summaryNode, selector).text;
 }
+
+function rowNumber(summaryNode, selector) {
+  return summaryNode.children.find((row) => row.sel === selector)
+    .children.find((cell) => cell.sel?.startsWith('span.number'));
+}
+
+test('uses the displayed P&L to color gains and keeps zero neutral for both sides', () => {
+  const states = [
+    { side: 'BUY', currentPrice: 40001 },
+    { side: 'SELL', currentPrice: 40000 },
+  ].flatMap(({ side, currentPrice }) => {
+    const position = new Position([
+      { side, size: 1, price: 40000 },
+      { side, size: 1, price: 40001 },
+    ]);
+    return [
+      { position, currentPrice },
+      { position, currentPrice: 40000.5 },
+      { position: new Position([{ side, size: 0.5, price: 40000 }]),
+        currentPrice: side === 'BUY' ? 40001 : 39999 },
+    ];
+  }).map((state) => ({
+    collateral: 0,
+    histories: [],
+    marketState: { health: 'NORMAL', state: 'RUNNING' },
+    ...state,
+  }));
+  const rendered = [];
+  view(Stream.fromArray(states)).addListener({
+    next: (node) => {
+      const { sel, text } = rowNumber(node, 'div.profit');
+      rendered.push([sel, text]);
+    },
+  });
+
+  assert.deepEqual(rendered, [
+    ['span.number.plus', '1'], ['span.number', '0'], ['span.number', '0'],
+    ['span.number.plus', '1'], ['span.number', '0'], ['span.number', '0'],
+  ]);
+});
 
 test('renders once across 100 board-only deltas and updates for each summary input', () => {
   const initialSummary = {

@@ -8,6 +8,7 @@ import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
+import {prependOrderHistories} from "../models/orderHistory";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
 import {createParentOrderOutcome} from "./trade/order/history";
@@ -67,7 +68,7 @@ export const Root = (sources: Sources): Sinks => {
     const ifdocoHistoryReducer$ = ifdocoOutcome$
         .map(({ histories }) => (state: TradeState) => ({
             ...state,
-            histories: histories.slice().reverse().concat(state.histories),
+            histories: prependOrderHistories(state.histories, histories),
         }));
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
@@ -114,7 +115,7 @@ const clearTwapProgress: Reducer<RootState> = (state) => {
         ...state,
         trade: {
             ...trade,
-            orderComponentState: { ...order, twap: { ...order.twap, remaining: 0 } },
+            orderComponentState: { ...order, twap: { ...order.twap, remaining: 0, scheduleId: undefined } },
         },
     };
 };

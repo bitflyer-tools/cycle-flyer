@@ -13,6 +13,10 @@ export class IFDOCOrder {
         }
     }
 
+    public hasValidWidth(): boolean {
+        return Number.isFinite(this.width) && this.width > 0;
+    }
+
     public buyProfitLine(currentPrice: number): number {
         return currentPrice + this.profitDifference();
     }

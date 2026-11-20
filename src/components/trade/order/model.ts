@@ -29,7 +29,7 @@ export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Re
     const cancelOrdersReducer$ = actions.onCancelOrders$
         .map((_) => (state: State) => ({ ...state, orders: [] as Order[] }));
 
-    const historyReducer$ = Stream.merge(actions.onOrderOutcome$, actions.onTwapSliceOutcome$)
+    const historyReducer$ = actions.onOrderOutcome$
         .map(({ histories }) => (state: State) => ({
             ...state,
             histories: prependOrderHistories(state.histories, histories),
