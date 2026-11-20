@@ -3,14 +3,16 @@ import {BoardOrder} from "./boardOrder";
 import {Execution} from "./execution";
 
 const visibleRows = 200;
+const ascendingPrice = (a: BoardOrder, b: BoardOrder): number => a.price - b.price;
+const descendingPrice = (a: BoardOrder, b: BoardOrder): number => b.price - a.price;
 
 export class Board {
     public asks: BoardOrder[];
     public bids: BoardOrder[];
 
     constructor(json: any) {
-        this.asks = json.asks.map((ask: object) => new BoardOrder(ask));
-        this.bids = json.bids.map((bid: object) => new BoardOrder(bid));
+        this.asks = json.asks.map((ask: object) => new BoardOrder(ask)).sort(ascendingPrice);
+        this.bids = json.bids.map((bid: object) => new BoardOrder(bid)).sort(descendingPrice);
     }
 
     public spread(): number {
@@ -50,12 +52,12 @@ export class Board {
         this.asks = this.asks
             .filter((ask) => !asksToRemove.has(ask.price))
             .concat(asksToAppend)
-            .sort((a, b) => a.price < b.price ? -1 : 1);
+            .sort(ascendingPrice);
 
         this.bids = this.bids
             .filter((bid) => !bidsToRemove.has(bid.price))
             .concat(bidsToAppend)
-            .sort((a, b) => a.price > b.price ? -1 : 1);
+            .sort(descendingPrice);
 
         return this;
     }
@@ -82,14 +84,12 @@ export class Board {
         }
 
         const sizes = new Map<number, number>();
-        orders.forEach((order) => {
+        for (const order of orders) {
             const price = roundPrice(order.price, groupPrice);
+            if (sizes.size === visibleRows && !sizes.has(price)) { break; }
             sizes.set(price, (sizes.get(price) || 0) + order.size);
-        });
-        return Array.from(sizes.keys())
-            .sort((a, b) => direction * (a - b))
-            .slice(0, visibleRows)
-            .map((price) => new BoardOrder({ price, size: sizes.get(price) }));
+        }
+        return Array.from(sizes, ([price, size]) => new BoardOrder({ price, size }));
     }
 
     private groupWindow(
