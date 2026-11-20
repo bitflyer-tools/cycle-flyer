@@ -41,6 +41,7 @@ const sameViewInputs = (previous: State, next: State): boolean =>
     && Object.is(previous.twap.slices, next.twap.slices)
     && Object.is(previous.twap.interval, next.twap.interval)
     && Object.is(previous.twap.remaining, next.twap.remaining)
+    && Object.is(previous.twap.totalSlices, next.twap.totalSlices)
     && clearOrderButtonDisabled(previous) === clearOrderButtonDisabled(next);
 
 const marketSection = (state: State): VNode =>
