@@ -4,6 +4,7 @@ import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {isWriteDeadlineError} from "../../../drivers/httpDriver";
 import {TwapSliceRequest} from "../../../http";
 import {createOrderHistory, OrderHistory} from "../../../models/orderHistory";
+import {isCurrentResponse, privateResponses} from "../privateResponses";
 
 type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 
@@ -20,14 +21,14 @@ export interface TwapSliceOutcome extends OrderOutcome {
 
 export const submittedOrderOutcomes = (http: HTTPSource): Stream<OrderOutcome> =>
     Stream.merge(
-        http.select("market-order").map((response$) => createChildOrderOutcome("Market", response$)),
-        http.select("limit-order").map((response$) => createChildOrderOutcome("Limit", response$)),
-        http.select("stop-order").map(createParentOrderOutcome),
-        http.select("ifdoco-order").map(createParentOrderOutcome),
+        privateResponses(http, "market-order").map((response$) => createChildOrderOutcome("Market", response$)),
+        privateResponses(http, "limit-order").map((response$) => createChildOrderOutcome("Limit", response$)),
+        privateResponses(http, "stop-order").map(createParentOrderOutcome),
+        privateResponses(http, "ifdoco-order").map(createParentOrderOutcome),
     ).compose(flattenConcurrently);
 
 export const twapOutcomes = (http: HTTPSource): Stream<TwapSliceOutcome> =>
-    http.select("twap-order")
+    privateResponses(http, "twap-order")
         .map((response$) => {
             const {scheduleId} = response$.request as TwapSliceRequest;
             return createChildOrderOutcome("TWAP", response$).map((outcome) => ({ ...outcome, scheduleId }));
@@ -75,6 +76,7 @@ const createOutcome = (
         .last()
         .mapTo<OrderStatus>("success")
         .replaceError((error) => Stream.of<OrderStatus>(isWriteDeadlineError(error) ? "unconfirmed" : "failed"))
+        .filter(() => isCurrentResponse(stream$))
         .map((status) => ({ status, histories: createHistories(stream$.request.send as string, status) }));
 
 const orderNames: { [conditionType: string]: string } = {

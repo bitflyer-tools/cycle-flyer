@@ -3,6 +3,7 @@ import {Stream} from "xstream";
 import {Sources} from "../index";
 import {pollResponse} from "../pollResponse";
 import {parsePriceAlertLevel, PriceAlertLevel} from "../priceAlert";
+import {privateResponses} from "../privateResponses";
 
 export interface Actions {
     onCollateralLoaded$: Stream<number>;
@@ -12,7 +13,7 @@ export interface Actions {
 }
 
 export const intent = (sources: Sources): Actions => {
-    const onCollateralLoaded$ = pollResponse<number>(sources.HTTP.select("collateral"), (json) =>
+    const onCollateralLoaded$ = pollResponse<number>(privateResponses(sources.HTTP, "collateral"), (json) =>
         Number.isFinite(json?.collateral) ? json.collateral : undefined);
 
     const onStateLoaded$ = pollResponse<object>(sources.HTTP.select("status"), (json) =>
