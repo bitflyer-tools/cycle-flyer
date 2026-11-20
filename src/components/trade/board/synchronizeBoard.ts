@@ -20,7 +20,7 @@ export const synchronizeBoard = <T extends Stream<Response>>(
     const snapshotReducer$ = responses$$
         .map((response$) => reconcileSnapshot(response$, deltas$))
         .flatten()
-        .map<Reducer<State>>((board) => (state) => state && ({ ...state, board }));
+        .map<Reducer<State>>((board) => (state) => state && ({ ...state, board, hasBoardSnapshot: true }));
 
     return Stream.merge(liveReducer$, snapshotReducer$);
 };

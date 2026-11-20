@@ -4,6 +4,7 @@ import dropRepeats from "xstream/extra/dropRepeats";
 import {sideButtons} from "./buttons";
 import {ifdocoSection} from "./ifdocoView";
 import {State} from "./index";
+import {marketFillPreview, sameMarketFills} from "./marketFillView";
 import {numberInput} from "./numberInput";
 import {sizeSection} from "./sizeView";
 import {stopSection} from "./stopView";
@@ -32,6 +33,7 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
 const sameViewInputs = (previous: State, next: State): boolean =>
     Object.is(previous.currentPrice, next.currentPrice)
     && previous.isOrdering === next.isOrdering
+    && sameMarketFills(previous.marketFills, next.marketFills)
     && Object.is(previous.position.size, next.position.size)
     && Object.is(previous.price, next.price)
     && Object.is(previous.size, next.size)
@@ -46,6 +48,7 @@ const sameViewInputs = (previous: State, next: State): boolean =>
 const marketSection = (state: State): VNode =>
     div([
         h4(".sub-title", "Market"),
+        ...(state.marketFills ? [marketFillPreview(state.marketFills)] : []),
         div(".market-order-buttons.order-buttons", sideButtons(state.isOrdering || !isValidMarketOrder(state))),
     ]);
 

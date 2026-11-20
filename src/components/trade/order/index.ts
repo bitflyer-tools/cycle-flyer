@@ -2,6 +2,7 @@ import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
 import {Sound} from "../../../drivers/soundDriver";
 import {IFDOCOrder} from "../../../models/ifdocoOrder";
+import {MarketFills} from "../../../models/marketFill";
 import {Order} from "../../../models/order";
 import {OrderHistory} from "../../../models/orderHistory";
 import {ParentStopOrders} from "../../../models/parentStopOrders";
@@ -21,6 +22,7 @@ export interface State {
     histories: OrderHistory[];
     ifdocoOrder: IFDOCOrder;
     isOrdering: boolean;
+    marketFills?: MarketFills;
     orders: Order[];
     parentStopOrders: ParentStopOrders;
     position: Position;

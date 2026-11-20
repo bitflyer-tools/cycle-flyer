@@ -14,6 +14,7 @@ import {view} from "./view";
 
 export interface State {
     board: Board;
+    hasBoardSnapshot?: boolean;
     currentPrice: number;
     groupedSize: number;
     orders: Order[];

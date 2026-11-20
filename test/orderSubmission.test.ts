@@ -1,16 +1,18 @@
-import {mockDOMSource} from "@cycle/dom";
+import {mockDOMSource, VNode} from "@cycle/dom";
 import {RequestOptions, Response, ResponseStream} from "@cycle/http";
 import {MainHTTPSource} from "@cycle/http/lib/cjs/MainHTTPSource";
 import {StateSource} from "@cycle/state";
 import {routerify} from "cyclic-router";
-import {deepEqual, equal} from "node:assert/strict";
+import {deepEqual, doesNotMatch, equal, match} from "node:assert/strict";
 import {test, TestContext} from "node:test";
 import switchPath from "switch-path";
 import Stream, {MemoryStream} from "xstream";
 import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
+import {groupSizeStorageKey} from "../src/components/trade/board/intent";
 import {storageKeys} from "../src/components/trade/order/intent";
+import {BoardLevels} from "../src/models/board";
 
 test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
     const order = setup(t, "-10000");
@@ -178,9 +180,39 @@ test("dispatches every Clear Orders request and stays locked until they all sett
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
 
-function setup(t: TestContext, width = "0.01") {
+test("previews both market sides from synchronized public depth without credentials", (t) => {
+    const order = setup(t, "0.01", false);
+    equal(order.tradeState.boardComponentState?.groupedSize, 100);
+    const boardResponse = order.respondTo(order.boardRequest!);
+
+    order.updateBoard({ asks: [{ price: 110, size: 0.02 }], bids: [] });
+    match(order.rendered(), /Order book unavailable/);
+    doesNotMatch(order.rendered(), /110 JPY/);
+
+    boardResponse.succeed({
+        asks: [{ price: 100, size: 0.01 }],
+        bids: [{ price: 90, size: 0.01 }, { price: 72, size: 0.02 }],
+    });
+    match(order.rendered(), /Live average fill estimates \(before fees\)/);
+    match(order.rendered(), /100 JPY \(0.0000%\)/);
+    match(order.rendered(), /90 JPY \(0.0000%\)/);
+
+    order.enterSize("0.02");
+    match(order.rendered(), /105 JPY \(\+5.0000%\)/);
+    match(order.rendered(), /81 JPY \(-10.0000%\)/);
+
+    order.updateBoard({ asks: [{ price: 110, size: 0 }], bids: [] });
+    match(order.rendered(), /Insufficient depth/);
+    match(order.rendered(), /81 JPY \(-10.0000%\)/);
+
+    order.enterSize("0");
+    doesNotMatch(order.rendered(), /market-fill-preview/);
+    deepEqual(order.requests, []);
+});
+
+function setup(t: TestContext, width = "0.01", credentials = true) {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: credentials ? { "api-secret": "test" } : {} });
     t.after(() => {
         if (originalStorage) {
             Object.defineProperty(globalThis, "localStorage", originalStorage);
@@ -193,6 +225,8 @@ function setup(t: TestContext, width = "0.01") {
     const sellIFDOCO$ = Stream.create<null>();
     const buyLimit$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
+    const board$ = Stream.create<BoardLevels>();
+    const sizeInput$ = Stream.create<{ target: { value: string } }>();
     const priceInput$ = Stream.create<{ target: { value: string } }>();
     const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
@@ -200,6 +234,7 @@ function setup(t: TestContext, width = "0.01") {
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
+        "#size-input": { input: sizeInput$ },
         "#price-input": { input: priceInput$ },
         ".order-buttons": { ".clear-order-button": { click: clearOrders$ } },
         ".limit-order-buttons": { ".buy-button": { click: buyLimit$ } },
@@ -209,6 +244,7 @@ function setup(t: TestContext, width = "0.01") {
             ".sell-button": { click: sellIFDOCO$ },
         },
     };
+    const storedValues: Record<string, string> = { [groupSizeStorageKey]: "100", [storageKeys.priceWidth]: width };
     const main: Sinks = routerify(Root, switchPath)({
         DOM: mockDOMSource({ ".___trade": new Proxy({}, { get: (_, selector) =>
             typeof selector === "string" && selector.startsWith(".___cycle") ? orderEvents : undefined,
@@ -216,7 +252,7 @@ function setup(t: TestContext, width = "0.01") {
         HTTP: new MainHTTPSource(responses$, "HTTP"),
         history: history$,
         socket: {
-            board$: Stream.never(),
+            board$,
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
             executionBatch$: Stream.never(),
@@ -224,7 +260,7 @@ function setup(t: TestContext, width = "0.01") {
             reconnect$: Stream.never(),
         },
         state: new StateSource(state$, "state"),
-        storage: { local: { getItem: (key: string) => Stream.of(key === storageKeys.priceWidth ? width : "0.01") } },
+        storage: { local: { getItem: (key: string) => Stream.of(storedValues[key] ?? "0.01") } },
     } as unknown as Omit<Sources, "router"> & { history: typeof history$ });
 
     let state: { trade?: TradeState } | undefined;
@@ -237,27 +273,36 @@ function setup(t: TestContext, width = "0.01") {
         },
     });
     const requests: RequestOptions[] = [];
+    let boardRequest: RequestOptions | undefined;
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
+        if (options.category === "board") { boardRequest = options; }
         if (["ifdoco-order", "limit-order", "market-order", "cancel-orders", "cancel-parent-order"]
             .includes(options.category as string)) {
             requests.push(options);
         }
     } });
+    let vnode: VNode;
+    const dom = main.DOM.subscribe({ next: (value) => { vnode = value; } });
     const sounds: Sound[] = [];
     const audio = main.sound!.subscribe({ next: (sound) => sounds.push(sound) });
     t.after(() => {
+        dom.unsubscribe();
         audio.unsubscribe();
         http.unsubscribe();
         reducers.unsubscribe();
     });
 
     return {
+        get boardRequest() { return boardRequest; },
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
         buyLimit: () => buyLimit$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
         clearOrders: () => clearOrders$.shamefullySendNext(null),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
+        enterSize: (value: string) => sizeInput$.shamefullySendNext({ target: { value } }),
+        rendered: () => JSON.stringify(vnode),
+        updateBoard: (delta: BoardLevels) => board$.shamefullySendNext(delta),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         requests,
