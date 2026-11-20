@@ -5,7 +5,7 @@ import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {Actions as TradeActions} from "../src/components/trade/intent";
 import {model as tradeModel} from "../src/components/trade/model";
-import {OrderOutcome} from "../src/components/trade/order/history";
+import {TwapSliceOutcome} from "../src/components/trade/order/history";
 import {Actions as OrderActions} from "../src/components/trade/order/intent";
 import {model as orderModel} from "../src/components/trade/order/model";
 import {State as SummaryState} from "../src/components/trade/summary";
@@ -29,25 +29,24 @@ const child = (node: VNode, selector: string): VNode => {
     return match;
 };
 
-test("Order results and TWAP slices retain only the newest history entries", () => {
-    const orders$ = Stream.create<OrderOutcome>();
-    const slices$ = Stream.create<OrderOutcome>();
+test("TWAP slice results retain only the newest history entries", () => {
+    const slices$ = Stream.create<TwapSliceOutcome>();
     const state = collectState(orderModel(withIdleActions<OrderActions>({
-        onOrderOutcome$: orders$,
         onTwapSliceOutcome$: slices$,
     }), Stream.of(false)));
 
     const entries = Array.from({ length: HISTORY_LIMIT * 2 + 2 }, (_, index) =>
         createOrderHistory("Order", "BUY", index, 0, "success"),
     );
-    const parentOrderEntries = entries.slice(1, -1);
-    slices$.shamefullySendNext({ status: "success", histories: entries.slice(0, 1) });
-    orders$.shamefullySendNext({ status: "success", histories: parentOrderEntries });
+    const scheduleId = Symbol();
+    const sliceEntries = entries.slice(1, -1);
+    slices$.shamefullySendNext({ status: "success", scheduleId, histories: entries.slice(0, 1) });
+    slices$.shamefullySendNext({ status: "success", scheduleId, histories: sliceEntries });
 
     assert.deepEqual(state().histories, entries.slice(-HISTORY_LIMIT - 1, -1).reverse());
-    assert.deepEqual(parentOrderEntries, entries.slice(1, -1));
+    assert.deepEqual(sliceEntries, entries.slice(1, -1));
 
-    slices$.shamefullySendNext({ status: "success", histories: entries.slice(-1) });
+    slices$.shamefullySendNext({ status: "success", scheduleId, histories: entries.slice(-1) });
     assert.deepEqual(state().histories, entries.slice(-HISTORY_LIMIT).reverse());
 });
 
@@ -81,7 +80,7 @@ test("Private executions cap rendered rows and public executions reuse the histo
     const summary$ = Stream.create<SummaryState>();
     const rendered: VNode[] = [];
     view(summary$).addListener({ next: (node) => rendered.push(node) });
-    const render = () => summary$.shamefullySendNext({ ...state(), collateral: 0, marketState: {} });
+    const render = () => summary$.shamefullySendNext({ ...state(), collateral: 0, marketState: { health: "", state: "" } });
 
     render();
     publicExecutions$.shamefullySendNext([{ side: "BUY", price: 41 }, { side: "SELL", price: 42 }]);

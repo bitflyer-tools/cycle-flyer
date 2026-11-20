@@ -1,6 +1,6 @@
 import Stream from "xstream";
 
-export type Sound = "success" | "failure" | "execution";
+export type Sound = "success" | "failure" | "execution" | "price-alert";
 
 export const soundEnabledStorageKey = "sound-enabled";
 
@@ -21,6 +21,7 @@ const tones: { [sound: string]: number[] } = {
     execution: [660, 990],
     failure: [220, 196],
     success: [880],
+    "price-alert": [523, 784, 1047],
 };
 
 const play = (context: AudioContext, frequencies: number[]) =>

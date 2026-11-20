@@ -2,41 +2,52 @@ import {Response} from "@cycle/http";
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {Board, BoardLevels} from "../../../models/board";
+import {BoardSnapshot} from "../../../models/boardSnapshot";
+import {Execution} from "../../../models/execution";
 import {State} from "./index";
 
+type BoardUpdate = (snapshot: BoardSnapshot) => void;
+
 interface PendingSnapshot {
-    deltas: BoardLevels[];
+    updates: BoardUpdate[];
     board?: Board;
 }
 
 export const synchronizeBoard = <T extends Stream<Response>>(
     deltas$: Stream<BoardLevels>,
     responses$$: Stream<T>,
+    executions$: Stream<Execution[]>,
 ): Stream<Reducer<State>> => {
     const liveReducer$ = deltas$
         .map<Reducer<State>>((delta) => (state) => state && ({ ...state, board: mergeDelta(state.board, delta) }));
+    const boardUpdates$ = Stream.merge(
+        deltas$.map<BoardUpdate>(({ asks, bids }) => (snapshot) => snapshot.merge(asks, bids)),
+        executions$.filter((batch) => batch.length > 0)
+            .map<BoardUpdate>((batch) => (snapshot) => snapshot.removeExecutions(batch)),
+    );
 
     // Each response stream is announced at request time. Switching drops superseded requests.
     const snapshotReducer$ = responses$$
-        .map((response$) => reconcileSnapshot(response$, deltas$))
+        .map((response$) => reconcileSnapshot(response$, boardUpdates$))
         .flatten()
         .map<Reducer<State>>((board) => (state) => state && ({ ...state, board }));
 
     return Stream.merge(liveReducer$, snapshotReducer$);
 };
 
-const reconcileSnapshot = (response$: Stream<Response>, deltas$: Stream<BoardLevels>): Stream<Board> => {
-    const updates$ = deltas$.map((delta) => (pending: PendingSnapshot) => {
-        pending.deltas.push(delta);
+const reconcileSnapshot = (response$: Stream<Response>, boardUpdates$: Stream<BoardUpdate>): Stream<Board> => {
+    const updates$ = boardUpdates$.map((update) => (pending: PendingSnapshot) => {
+        pending.updates.push(update);
         return pending;
     });
-    const snapshot$ = response$.map((response) => (pending: PendingSnapshot) => ({
-        ...pending,
-        board: pending.deltas.reduce(mergeDelta, decodeSnapshot(response.text)),
-    }));
+    const snapshot$ = response$.map((response) => (pending: PendingSnapshot) => {
+        const snapshot = decodeSnapshot(response.text);
+        pending.updates.forEach((update) => update(snapshot));
+        return { ...pending, board: snapshot.toBoard() };
+    });
 
     return Stream.merge(updates$, snapshot$)
-        .fold((pending, update) => update(pending), { deltas: [] } as PendingSnapshot)
+        .fold((pending, update) => update(pending), { updates: [] } as PendingSnapshot)
         .map((pending) => pending.board)
         .filter((board): board is Board => !!board)
         .take(1)
@@ -45,12 +56,12 @@ const reconcileSnapshot = (response$: Stream<Response>, deltas$: Stream<BoardLev
 
 const mergeDelta = (board: Board, delta: BoardLevels): Board => board.merge(delta.asks, delta.bids);
 
-const decodeSnapshot = (text: string): Board => {
+const decodeSnapshot = (text: string): BoardSnapshot => {
     const snapshot = JSON.parse(text);
     if (!isBoardSide(snapshot?.asks) || !isBoardSide(snapshot?.bids)) {
         throw new Error("Invalid board snapshot");
     }
-    return new Board(snapshot);
+    return new BoardSnapshot(snapshot);
 };
 
 const isBoardSide = (orders: unknown): boolean =>
