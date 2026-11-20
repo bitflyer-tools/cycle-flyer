@@ -13,6 +13,7 @@ import {privateResponses} from "./privateResponses";
 import {PositionRequest} from "./request";
 
 export interface Actions {
+    onCancelOrders$: Stream<null>;
     onCancelParentOrder$: Stream<{ id: string; sequence: number }>;
     onExecutionBatch$: Stream<Execution[]>;
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
@@ -45,7 +46,15 @@ export const intent = (sources: Sources): Actions => {
         sources.socket.reconnect$,
     ).compose(debounce(500));
 
-    const onOrdersLoaded$ = pollResponse<object[]>(privateResponses(sources.HTTP, "orders"), decodeArray);
+    const ordersCanceled = Symbol("ordersCanceled");
+    const cancelOrders$ = privateResponses(sources.HTTP, "cancel-orders")
+        .map((response$) => response$.replaceError(() => Stream.empty()))
+        .compose(flattenConcurrently)
+        .mapTo<typeof ordersCanceled>(ordersCanceled);
+
+    const orderLists$ = pollResponse<object[] | typeof ordersCanceled>(
+        privateResponses(sources.HTTP, "orders"), decodeArray, cancelOrders$,
+    );
 
     const pages = parentOrderPages(sources.HTTP, () => ++parentOrderSequence);
     const onParentOrdersLoaded$ = pages.loaded$;
@@ -59,11 +68,12 @@ export const intent = (sources: Sources): Actions => {
         isPositionList(json) ? { position: new Position(json), positionCloseId: request.positionCloseId } : undefined);
 
     return {
+        onCancelOrders$: orderLists$.filter((orders) => orders === ordersCanceled).mapTo(null),
         onCancelParentOrder$,
         onExecutionBatch$: sources.socket.executionBatch$,
         onMyExecutionCreated$,
         onMyOrderChanged$,
-        onOrdersLoaded$,
+        onOrdersLoaded$: orderLists$.map<object[]>((orders) => orders === ordersCanceled ? [] : orders),
         onParentOrderLoaded$: details.loaded$,
         onParentOrdersLoaded$,
         onParentOrderListSettled$: pages.settled$,

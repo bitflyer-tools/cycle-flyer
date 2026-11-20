@@ -4,10 +4,8 @@ import {Sources} from "../index";
 import {State} from "./index";
 import {clicks, numberInputs, sizePresetClicks} from "./events";
 import {TwapActions, twapIntent} from "./twapIntent";
-import {privateResponses} from "../privateResponses";
 
 export interface Actions extends TwapActions {
-    onCancelOrders$: Stream<null>;
     onClickClearButton$: Stream<null>;
     onClickClearOrderButton$: Stream<null>;
     onClickIFDOCOBuyButton$: Stream<null>;
@@ -36,14 +34,8 @@ export const storageKeys = {
 };
 
 export const intent = (sources: Sources, state$: Stream<State>): Actions => {
-    const onCancelOrders$ = privateResponses(sources.HTTP, "cancel-orders")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .mapTo(null);
-
     return {
         ...twapIntent(sources, state$),
-        onCancelOrders$,
         onClickClearButton$: clicks(sources.DOM, ".order-buttons", ".clear-button"),
         onClickClearOrderButton$: clicks(sources.DOM, ".order-buttons", ".clear-order-button"),
         onClickIFDOCOBuyButton$: clicks(sources.DOM, ".ranged-ifdoco-order-buttons", ".buy-button"),
