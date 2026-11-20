@@ -44,10 +44,7 @@ export const intent = (sources: Sources): Actions => {
         sources.socket.reconnect$,
     ).compose(debounce(500));
 
-    const onOrdersLoaded$ = sources.HTTP.select("orders")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .map((response) => JSON.parse(response.text));
+    const onOrdersLoaded$ = pollResponse<object[]>(sources.HTTP.select("orders"), decodeArray);
 
     const pages = parentOrderPages(sources.HTTP, () => ++parentOrderSequence);
     const onParentOrdersLoaded$ = pages.loaded$;
@@ -73,6 +70,8 @@ export const intent = (sources: Sources): Actions => {
         parentOrderRequests$: Stream.merge(pages.requests$, details.requests$),
     };
 };
+
+const decodeArray = <T>(json: unknown): T[] | undefined => Array.isArray(json) ? json : undefined;
 
 const isPositionList = (positions: unknown): boolean =>
     Array.isArray(positions) && positions.every((position) =>

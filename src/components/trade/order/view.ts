@@ -8,7 +8,7 @@ import {numberInput} from "./numberInput";
 import {sizeSection} from "./sizeView";
 import {stopSection} from "./stopView";
 import {twapSection} from "./twapView";
-import {canClearPosition, isValidLimitOrder, isValidMarketOrder} from "./validation";
+import {canClearPosition, isValidLimitOrder, isValidOrderSize} from "./validation";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
     state$.compose(dropRepeats(sameViewInputs)).map((state) =>
@@ -41,12 +41,13 @@ const sameViewInputs = (previous: State, next: State): boolean =>
     && Object.is(previous.twap.slices, next.twap.slices)
     && Object.is(previous.twap.interval, next.twap.interval)
     && Object.is(previous.twap.remaining, next.twap.remaining)
+    && Object.is(previous.twap.totalSlices, next.twap.totalSlices)
     && clearOrderButtonDisabled(previous) === clearOrderButtonDisabled(next);
 
 const marketSection = (state: State): VNode =>
     div([
         h4(".sub-title", "Market"),
-        div(".market-order-buttons.order-buttons", sideButtons(state.isOrdering || !isValidMarketOrder(state))),
+        div(".market-order-buttons.order-buttons", sideButtons(state.isOrdering || !isValidOrderSize(state))),
     ]);
 
 const limitSection = (state: State): VNode =>

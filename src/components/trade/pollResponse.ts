@@ -1,12 +1,28 @@
 import {HTTPSource, RequestOptions} from "@cycle/http";
 import {Stream} from "xstream";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
 
 export const pollResponse = <T>(
     responses$: ReturnType<HTTPSource["select"]>,
     decode: (json: any, request: RequestOptions) => T | undefined,
-): Stream<T> => responses$
-    .map((response$) => response$
-        .map((response) => decode(JSON.parse(response.text), response$.request))
-        .filter((result): result is T => result !== undefined)
-        .replaceError(() => Stream.empty<T>()))
-    .flatten();
+): Stream<T> => {
+    let nextRequest = 0;
+    let latestApplied = 0;
+
+    return responses$
+        .map((response$) => {
+            const request = ++nextRequest;
+            return response$
+                .map((response) => decode(JSON.parse(response.text), response$.request))
+                .filter((result): result is T => result !== undefined)
+                .map((result) => ({ request, result }))
+                .replaceError(() => Stream.empty());
+        })
+        .compose(flattenConcurrently)
+        .filter(({ request }) => {
+            if (request <= latestApplied) { return false; }
+            latestApplied = request;
+            return true;
+        })
+        .map(({ result }) => result);
+};

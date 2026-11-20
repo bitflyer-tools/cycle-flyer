@@ -34,6 +34,7 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
     Object.assign(localStorage, { 'api-key': key, 'api-secret': secret });
     const reconnect$ = Stream.create();
     const parentOrders$ = Stream.create();
+    const parentResponse$ = Stream.create();
     const idle = Stream.never();
     const actions = components.trade_intent({
       socket: { reconnect$, childOrderEvent$: idle, executionBatch$: idle, parentOrderEvent$: idle },
@@ -49,21 +50,26 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
 
     assert.deepEqual(takeCategories(), (authenticated ? [...initialCategories] : ['board', 'status']).sort());
 
+    if (authenticated) {
+      parentOrders$.shamefullySendNext(parentResponse$);
+    }
     reconnect$.shamefullySendNext(null);
     t.mock.timers.tick(500);
     assert.deepEqual(takeCategories(), authenticated ? otherAccountCategories : []);
 
     t.mock.timers.tick(9500);
     assert.deepEqual(takeCategories(), authenticated ? otherAccountCategories : []);
-    t.mock.timers.tick(5000);
+    t.mock.timers.tick(1000);
+    parentResponse$.shamefullySendNext({ text: '[{"parent_order_id":"parent-id"}]' });
+    parentResponse$.shamefullySendComplete();
+    assert.deepEqual(takeCategories(), authenticated ? ['parent-order', 'parent-orders'] : []);
+
+    t.mock.timers.tick(4000);
     assert.deepEqual(takeCategories(), authenticated ? ['board', 'collateral'] : ['board']);
     t.mock.timers.tick(15000);
     assert.deepEqual(takeCategories(), (authenticated
       ? ['board', 'collateral', 'status', ...otherAccountCategories, ...otherAccountCategories]
       : ['board', 'status']).sort());
-
-    parentOrders$.shamefullySendNext(Stream.of({ text: '[{"parent_order_id":"parent-id"}]' }));
-    assert.deepEqual(takeCategories(), authenticated ? ['parent-order', 'parent-orders'] : []);
   });
 }
 
@@ -157,5 +163,70 @@ for (const { component, category, first, invalid, next, read, expected } of test
     } finally {
       subscription.unsubscribe();
     }
+  });
+}
+
+const positionCloseId = Symbol('position close');
+const accountPolls = [
+  ['orders', 'onOrdersLoaded$', (price) => [{ price }], (orders) => orders[0].price],
+  ['positions', 'onPositionsLoaded$',
+    (price) => [{ side: 'BUY', price, size: 1 }], (result) => {
+      assert.equal(result.positionCloseId, positionCloseId);
+      return result.position.price;
+    }],
+];
+
+for (const [category, action, payload, read] of accountPolls) {
+  const observe = (t) => {
+    const responses = Stream.create();
+    const idle = Stream.never();
+    const actions = components.trade_intent({
+      socket: { executionBatch$: idle, childOrderEvent$: idle, parentOrderEvent$: idle, reconnect$: idle },
+      HTTP: { select: (name) => name === category ? responses : idle },
+    });
+    const values = [];
+    const subscription = actions[action].subscribe({ next: (value) => values.push(read(value)) });
+    t.after(() => subscription.unsubscribe());
+
+    const announce = (value, delay) => {
+      const response = Object.assign(Stream.create(), { request: { category, positionCloseId } });
+      responses.shamefullySendNext(response);
+      setTimeout(() => {
+        response.shamefullySendNext({ text: JSON.stringify(payload(value)) });
+        response.shamefullySendComplete();
+      }, delay);
+    };
+
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    return { values, announce };
+  };
+
+  test(`${category} applies 11-second responses with a 10-second polling interval`, (t) => {
+    const { values, announce } = observe(t);
+    announce(1, 11000);
+    t.mock.timers.tick(10000);
+    announce(2, 11000);
+    t.mock.timers.tick(1000);
+    assert.deepEqual(values, [1]);
+
+    t.mock.timers.tick(9000);
+    announce(3, 11000);
+    t.mock.timers.tick(1000);
+    assert.deepEqual(values, [1, 2]);
+  });
+
+  test(`${category} ignores older responses after applying a newer result`, (t) => {
+    const { values, announce } = observe(t);
+    announce(1, 15000);
+    t.mock.timers.tick(10000);
+    announce(2, 1000);
+    t.mock.timers.tick(1000);
+    assert.deepEqual(values, [2]);
+
+    announce(3, 11000);
+    t.mock.timers.tick(4000);
+    assert.deepEqual(values, [2]);
+    t.mock.timers.tick(7000);
+    assert.deepEqual(values, [2, 3]);
   });
 }
