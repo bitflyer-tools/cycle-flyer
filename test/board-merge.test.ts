@@ -1,6 +1,6 @@
 import {deepStrictEqual, strictEqual} from "node:assert";
 import {test} from "node:test";
-import {Board} from "../src/models/board";
+import {Board, BoardLevels} from "../src/models/board";
 import {BoardOrder} from "../src/models/boardOrder";
 
 test("merge replaces, removes, and sorts levels on both sides", () => {
@@ -27,18 +27,39 @@ test("merge replaces, removes, and sorts levels on both sides", () => {
     ]);
 });
 
-test("merge preserves levels on a side with no updates", () => {
+test("snapshots order asks and bids best first", () => {
     const board = new Board({
-        asks: [{ price: 110, size: 1 }],
-        bids: [{ price: 100, size: 2 }],
+        asks: [{ price: 120, size: 1 }, { price: 110, size: 2 }],
+        bids: [{ price: 90, size: 3 }, { price: 100, size: 4 }],
     });
-    const originalBid = board.bids[0];
 
-    board.merge([{ price: 100, size: 0 }, { price: 120, size: 0 }], []);
+    deepStrictEqual(board.asks.map(({price}) => price), [110, 120]);
+    deepStrictEqual(board.bids.map(({price}) => price), [100, 90]);
+    strictEqual(board.spread(), 10);
+});
 
-    deepStrictEqual(board.asks, [new BoardOrder({ price: 110, size: 1 })]);
-    deepStrictEqual(board.bids, [originalBid]);
-    strictEqual(board.bids[0], originalBid);
+(["asks", "bids"] as const).forEach((side) => {
+    const unchangedSide = side === "asks" ? "bids" : "asks";
+    test(`merge skips all access to existing ${unchangedSide} for a delta to ${side} only`, () => {
+        const board = new Board({
+            asks: [{ price: 120, size: 1 }, { price: 110, size: 1 }],
+            bids: [{ price: 90, size: 1 }, { price: 100, size: 1 }],
+        });
+        const original = board[unchangedSide];
+        const untouched = new Proxy(original, {
+            get() { throw new Error(`Unexpected access to ${unchangedSide}`); },
+        });
+        board[unchangedSide] = untouched;
+
+        const delta: BoardLevels = { asks: [], bids: [] };
+        delta[side].push({ price: 105, size: 2 });
+        board.merge(delta.asks, delta.bids);
+
+        strictEqual(board[unchangedSide], untouched);
+        strictEqual(board[side][0].price, 105);
+        board[unchangedSide] = original;
+        strictEqual(board.spread(), 5);
+    });
 });
 
 test("merge reads an existing price once when checking many changed prices", () => {

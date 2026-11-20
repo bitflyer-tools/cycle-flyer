@@ -1,19 +1,18 @@
 import {Response} from "@cycle/http";
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
-import {Board} from "../../../models/board";
+import {Board, BoardLevels} from "../../../models/board";
 import {State} from "./index";
 
 interface PendingSnapshot {
-    deltas: Board[];
+    deltas: BoardLevels[];
     board?: Board;
 }
 
 export const synchronizeBoard = <T extends Stream<Response>>(
-    updates$: Stream<object>,
+    deltas$: Stream<BoardLevels>,
     responses$$: Stream<T>,
 ): Stream<Reducer<State>> => {
-    const deltas$ = updates$.map((json) => new Board(json));
     const liveReducer$ = deltas$
         .map<Reducer<State>>((delta) => (state) => state && ({ ...state, board: mergeDelta(state.board, delta) }));
 
@@ -26,7 +25,7 @@ export const synchronizeBoard = <T extends Stream<Response>>(
     return Stream.merge(liveReducer$, snapshotReducer$);
 };
 
-const reconcileSnapshot = (response$: Stream<Response>, deltas$: Stream<Board>): Stream<Board> => {
+const reconcileSnapshot = (response$: Stream<Response>, deltas$: Stream<BoardLevels>): Stream<Board> => {
     const updates$ = deltas$.map((delta) => (pending: PendingSnapshot) => {
         pending.deltas.push(delta);
         return pending;
@@ -44,7 +43,7 @@ const reconcileSnapshot = (response$: Stream<Response>, deltas$: Stream<Board>):
         .replaceError(() => Stream.empty());
 };
 
-const mergeDelta = (board: Board, delta: Board): Board => board.merge(delta.asks, delta.bids);
+const mergeDelta = (board: Board, delta: BoardLevels): Board => board.merge(delta.asks, delta.bids);
 
 const decodeSnapshot = (text: string): Board => {
     const snapshot = JSON.parse(text);

@@ -131,6 +131,30 @@ for (const outcome of ["succeed", "fail"] as const) {
     });
 }
 
+test("records a rejected limit order and permits a retry", (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: 1000 });
+    const order = setup(t);
+    order.enterPrice("900");
+
+    order.buyLimit();
+    deepEqual(order.requests.map(({ category }) => category), ["limit-order"]);
+    equal(order.state.isOrdering, true);
+
+    order.respondTo(order.requests[0]).reject();
+    equal(order.state.isOrdering, false);
+    deepEqual(order.sounds, ["failure"]);
+    deepEqual(order.histories, [{
+        createdAt: new Date(1000),
+        description: "BUY / 0.01 / 900",
+        name: "Limit",
+        status: "failed",
+    }]);
+
+    order.buyLimit();
+    deepEqual(order.requests.map(({ category }) => category), ["limit-order", "limit-order"]);
+    equal(order.state.isOrdering, true);
+});
+
 test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
     const order = setup(t);
     order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getparentorders", category: "parent-orders", _namespace: ["trade"] }).succeed([
@@ -179,6 +203,7 @@ for (const category of ["limit-order", "cancel-orders"] as const) {
         await once(server, "listening");
         const address = server.address() as { port: number };
         const order = setup(t, "0.01", `http://127.0.0.1:${address.port}`);
+        order.enterPrice("10000");
         const submit = category === "limit-order" ? order.buyLimit : order.clearOrders;
         const path = category === "limit-order" ? "/v1/me/sendchildorder" : "/v1/me/cancelallchildorders";
 
@@ -243,9 +268,9 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
 
     const buyIFDOCO$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
-    const buyMarket$ = Stream.create<null>();
     const buyLimit$ = Stream.create<null>();
-    const price$ = Stream.of({ target: { value: "10000" } });
+    const buyMarket$ = Stream.create<null>();
+    const priceInput$ = Stream.create<{ target: { value: string } }>();
     const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const writes$ = Stream.create<RequestInput | null>();
@@ -255,8 +280,8 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
+        "#price-input": { input: priceInput$ },
         ".order-buttons": { ".clear-order-button": { click: clearOrders$ } },
-        "#price-input": { input: price$ },
         ".limit-order-buttons": { ".buy-button": { click: buyLimit$ } },
         ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
         ".ranged-ifdoco-order-buttons": {
@@ -294,7 +319,8 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
     const requests: RequestOptions[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
-        if (["ifdoco-order", "market-order", "limit-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
+        if (["ifdoco-order", "limit-order", "market-order", "cancel-orders", "cancel-parent-order"]
+            .includes(options.category as string)) {
             requests.push(options);
             if (writeOrigin) {
                 writes$.shamefullySendNext({ ...options, url: writeOrigin + new URL(options.url).pathname });
@@ -314,6 +340,7 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
         buyLimit: () => buyLimit$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
         clearOrders: () => clearOrders$.shamefullySendNext(null),
+        enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         requests,
@@ -324,6 +351,7 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
             return {
                 fail: (error = new Error("Network failure")) => response$.shamefullySendError(error),
                 progress: () => response$.shamefullySendNext({ request } as Response),
+                reject: () => response$.shamefullySendError({ response: { request, status: 400 } }),
                 succeed: (body?: unknown) => {
                     response$.shamefullySendNext({ request, text: JSON.stringify(body) } as Response);
                     response$.shamefullySendComplete();
