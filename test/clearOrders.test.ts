@@ -10,6 +10,7 @@ import {State} from "../src/components/trade/order";
 import {intent} from "../src/components/trade/order/intent";
 import {model} from "../src/components/trade/order/model";
 import {orderRequests} from "../src/components/trade/order/request";
+import {apiCredentials} from "../src/credentials";
 import {flattenStopOrders, retainActive} from "../src/models/parentStopOrders";
 import {StopOrder} from "../src/models/stopOrder";
 
@@ -161,6 +162,26 @@ test("Clear Orders invalidates every pending child-order poll and accepts the ne
     deepStrictEqual(state().orders.map(({price}) => price), [200]);
 });
 
+test("A child-order cancellation from previous credentials leaves the current poll active", () => {
+    const {childResponses, orderLists, state} = clearOrders([]);
+    const cancellation$ = Stream.create<unknown>();
+    childResponses.shamefullySendNext(Object.assign(cancellation$, {
+        request: { credentialVersion: apiCredentials().version },
+    }));
+
+    localStorage["api-key"] = "updated-key";
+    orderLists.shamefullySendNext(Stream.of<unknown>(childOrderList(100)));
+    const currentPoll$ = Stream.create<unknown>();
+    orderLists.shamefullySendNext(Object.assign(currentPoll$, {
+        request: { credentialVersion: apiCredentials().version },
+    }));
+    cancellation$.shamefullySendNext({});
+
+    deepStrictEqual(state().orders.map(({price}) => price), [100]);
+    currentPoll$.shamefullySendNext(childOrderList(200));
+    deepStrictEqual(state().orders.map(({price}) => price), [200]);
+});
+
 test("A failed child-order cancellation leaves the in-flight poll active", () => {
     const {childResponses, orderLists, startPolling, state} = clearOrders([]);
     const {polls, subscription} = startPolling();
@@ -222,6 +243,10 @@ function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = tr
         },
         storage: { local: { getItem: () => Stream.never() } },
     } as unknown as Parameters<typeof intent>[0];
+    Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: { "api-key": "test-key", "api-secret": "test-secret" },
+    });
     const state$ = Stream.createWithMemory<State>();
     const actions = intent(sources, state$);
     let currentState: State & TradeState;
@@ -247,10 +272,6 @@ function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = tr
     currentState = { ...currentState!, parentStopOrders };
     state$.shamefullySendNext(currentState);
 
-    Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: { "api-key": "test-key", "api-secret": "test-secret" },
-    });
     const detailRequests = new Map<string, RequestOptions>();
     const pageRequests: RequestOptions[] = [];
     tradeActions.parentOrderRequests$.addListener({

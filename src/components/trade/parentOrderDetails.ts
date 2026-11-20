@@ -3,6 +3,7 @@ import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {getParentOrder, hasApiCredentials} from "../../http";
 import {ParentOrderEvent} from "../../models/orderEvent";
+import {privateResponses} from "./privateResponses";
 
 export interface ActiveParentOrder {
     parent_order_id: string;
@@ -79,7 +80,7 @@ export const parentOrderDetails = (
         return { detail };
     };
 
-    const responses$ = http.select("parent-order")
+    const responses$ = privateResponses(http, "parent-order")
         .map((response$) => response$
             .map<ActiveParentOrder | undefined>((response) => JSON.parse(response.text))
             .replaceError(() => Stream.of<ActiveParentOrder | undefined>(undefined))

@@ -9,6 +9,7 @@ import {Sources} from "./index";
 import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
 import {parentOrderPages} from "./parentOrderPages";
 import {pollResponse} from "./pollResponse";
+import {privateResponses} from "./privateResponses";
 
 export interface Actions {
     onCancelOrders$: Stream<null>;
@@ -28,7 +29,7 @@ export interface Actions {
 let parentOrderSequence = 0;
 
 export const intent = (sources: Sources): Actions => {
-    const onCancelParentOrder$ = sources.HTTP.select("cancel-parent-order")
+    const onCancelParentOrder$ = privateResponses(sources.HTTP, "cancel-parent-order")
         .map((response$) => response$.replaceError(() => Stream.empty()))
         .compose(flattenConcurrently)
         .map((response) => ({
@@ -45,13 +46,13 @@ export const intent = (sources: Sources): Actions => {
     ).compose(debounce(500));
 
     const ordersCanceled = Symbol("ordersCanceled");
-    const cancelOrders$ = sources.HTTP.select("cancel-orders")
+    const cancelOrders$ = privateResponses(sources.HTTP, "cancel-orders")
         .map((response$) => response$.replaceError(() => Stream.empty()))
         .compose(flattenConcurrently)
         .mapTo<typeof ordersCanceled>(ordersCanceled);
 
     const orderLists$ = pollResponse<object[] | typeof ordersCanceled>(
-        sources.HTTP.select("orders"), decodeArray, cancelOrders$,
+        privateResponses(sources.HTTP, "orders"), decodeArray, cancelOrders$,
     );
 
     const pages = parentOrderPages(sources.HTTP, () => ++parentOrderSequence);
@@ -62,7 +63,7 @@ export const intent = (sources: Sources): Actions => {
         sources.socket.parentOrderEvent$, sources.socket.reconnect$,
     );
 
-    const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json) =>
+    const onPositionsLoaded$ = pollResponse(privateResponses(sources.HTTP, "positions"), (json) =>
         isPositionList(json) ? new Position(json) : undefined);
 
     return {
