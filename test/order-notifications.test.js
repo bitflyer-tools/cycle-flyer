@@ -35,7 +35,7 @@ function appHarness(t) {
     if (!responses.has(category)) responses.set(category, Stream.create());
     return responses.get(category);
   };
-  const execution$ = Stream.create();
+  const executionBatch$ = Stream.create();
   const childOrderEvent$ = Stream.create();
   const state$ = Stream.createWithMemory();
   const app = routerify(Root, switchPath)({
@@ -44,8 +44,8 @@ function appHarness(t) {
     history: Stream.of({ pathname: '/' }),
     socket: {
       board$: Stream.never(),
-      execution$,
-      executionBatch$: Stream.never(),
+      execution$: Stream.never(),
+      executionBatch$,
       childOrderEvent$,
       parentOrderEvent$: Stream.never(),
       reconnect$: Stream.never(),
@@ -68,7 +68,7 @@ function appHarness(t) {
   });
 
   return {
-    execution$,
+    executionBatch$,
     childOrderEvent$,
     sounds,
     histories: () => state.trade.histories,
@@ -93,8 +93,8 @@ test('notifies for submissions, TWAP slices, and private executions', (t) => {
   app.submit(marketOrder(0.01, 'BUY')).disconnect();
   app.submit(limitOrder(100, 0.01, 'BUY')).accept();
   app.submit(stopOrder(90, 0.01, 'SELL')).accept();
-  app.submit(twapSliceOrder(0.01, 'SELL')).reject();
-  app.execution$.shamefullySendNext({ price: 100 });
+  app.submit(twapSliceOrder(0.01, 'SELL', Symbol())).reject();
+  app.executionBatch$.shamefullySendNext([{ price: 100, size: 0.01, side: 'BUY' }]);
   app.childOrderEvent$.shamefullySendNext({ event_type: 'ORDER' });
 
   const execution = { event_type: 'EXECUTION', side: 'BUY', price: 100, size: 0.01 };

@@ -28,12 +28,6 @@ export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Re
     const cancelOrdersReducer$ = actions.onCancelOrders$
         .map((_) => (state: State) => ({ ...state, orders: [] as Order[] }));
 
-    const historyReducer$ = actions.onTwapSliceOutcome$
-        .map(({ histories }) => (state: State) => ({
-            ...state,
-            histories: histories.slice().reverse().concat(state.histories),
-        }));
-
     const isOrderingReducer$ = isOrdering$
         .map((isOrdering) => (state: State) => ({ ...state, isOrdering }));
 
@@ -55,7 +49,6 @@ export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Re
     return Stream.merge(
         defaultReducer$,
         cancelOrdersReducer$,
-        historyReducer$,
         isOrderingReducer$,
         priceReducer$,
         priceWidthReducer$,

@@ -35,7 +35,7 @@ export const OrderComponent = (sources: Sources, isOrdering$: Stream<boolean>): 
     sound: Stream<Sound>;
 } => {
     const state$ = sources.state.stream as any as Stream<State>;
-    const actions = intent(sources);
+    const actions = intent(sources, state$);
     const reducer$ = model(actions, isOrdering$);
     const view$ = view(state$);
 
