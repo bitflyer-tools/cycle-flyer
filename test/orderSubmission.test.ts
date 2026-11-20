@@ -22,6 +22,7 @@ import {Execution} from "../src/models/execution";
 import type {State as SummaryState} from "../src/components/trade/summary";
 import {view as summaryView} from "../src/components/trade/summary/view";
 import {cancelOrders, limitOrder, parentOrdersPageSize, stopOrder, twapSliceOrder} from "../src/http";
+import {flattenStopOrders} from "../src/models/parentStopOrders";
 
 test("blocks both IFDOCO sides until the first public execution arrives", (t) => {
     const order = setup(t, "10000", { initialPrice: null });
@@ -191,12 +192,19 @@ test("records a rejected limit order and permits a retry", (t) => {
     equal(order.state.isOrdering, true);
 });
 
-test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
+test("reports mixed Clear Orders results and stays locked until every request settles", (t) => {
     const order = setup(t);
+    order.respondTo({ category: "orders", _namespace: ["trade"] }).succeed([
+        { price: 100, side: "BUY", outstanding_size: 0.01 },
+    ]);
     order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getparentorders", category: "parent-orders", _namespace: ["trade"] }).succeed([
         { parent_order_id: "JCO-success" },
         { parent_order_id: "JCO-failure" },
     ]);
+    order.parentDetails.forEach((request, id) => order.respondTo(request).succeed({
+        parent_order_id: id,
+        parameters: [{ condition_type: "STOP", trigger_price: id === "JCO-success" ? 200 : 300 }],
+    }));
 
     order.clearOrders();
     order.clearOrders();
@@ -204,20 +212,92 @@ test("dispatches every Clear Orders request and stays locked until they all sett
         "cancel-orders", "cancel-parent-order", "cancel-parent-order",
     ]);
     equal(order.state.isOrdering, true);
+    equal(order.tradeState.orders.length, 1);
+    deepEqual(flattenStopOrders(order.tradeState.parentStopOrders).map(({ price }) => price), [200, 300]);
 
-    order.respondTo(order.requests[0]).succeed();
+    order.respondTo(order.requests[2]).fail();
+    equal(order.state.isOrdering, true);
+    deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-success", "JCO-failure"]);
     order.respondTo(order.requests[1]).succeed();
     order.buy("market");
     equal(order.requests.length, 3);
     equal(order.state.isOrdering, true);
     deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-failure"]);
 
-    order.respondTo(order.requests[2]).fail();
+    order.respondTo(order.requests[0]).succeed();
     equal(order.state.isOrdering, false);
-    deepEqual(order.sounds, []);
+    deepEqual(order.tradeState.orders, []);
+    deepEqual(flattenStopOrders(order.tradeState.parentStopOrders).map(({ price }) => price), [300]);
+    deepEqual(order.histories.map(({ name, description, status }) => [name, description, status]), [
+        ["Cancel", "All child orders", "success"],
+        ["Cancel", "Parent order JCO-success", "success"],
+        ["Cancel", "Parent order JCO-failure", "failed"],
+    ]);
+    deepEqual(order.sounds, ["failure", "success", "success"]);
     order.clearOrders();
     deepEqual(order.requests.slice(3).map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
+});
+
+test("reports a failed bulk cancellation and keeps the child orders visible", (t) => {
+    const order = setup(t);
+    order.respondTo({ category: "orders", _namespace: ["trade"] }).succeed([
+        { price: 100, side: "BUY", outstanding_size: 0.01 },
+    ]);
+    const childOrders = order.tradeState.orders;
+
+    order.clearOrders();
+    order.respondTo(order.requests[0]).fail();
+
+    equal(order.state.isOrdering, false);
+    equal(order.tradeState.orders, childOrders);
+    deepEqual(order.histories.map(({ description, status }) => [description, status]), [
+        ["All child orders", "failed"],
+    ]);
+    deepEqual(order.sounds, ["failure"]);
+});
+
+test("keeps a parent order visible when its cancellation times out", (t) => {
+    const order = setup(t);
+    order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getparentorders", category: "parent-orders", _namespace: ["trade"] })
+        .succeed([{ parent_order_id: "JCO-timeout" }]);
+    order.respondTo(order.parentDetails.get("JCO-timeout")!).succeed({
+        parent_order_id: "JCO-timeout",
+        parameters: [{ condition_type: "STOP", trigger_price: 200 }],
+    });
+
+    order.clearOrders();
+    order.respondTo(order.requests[0]).succeed();
+    order.respondTo(order.requests[1]).fail(
+        Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }),
+    );
+
+    equal(order.state.isOrdering, false);
+    deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-timeout"]);
+    deepEqual(order.histories.map(({ description, status }) => [description, status]), [
+        ["Parent order JCO-timeout", "unconfirmed"],
+        ["All child orders", "success"],
+    ]);
+});
+
+test("ignores Clear Orders results from the previous account", (t) => {
+    const order = setup(t, "0.01", { apiKey: "account-a" });
+    const parentOrders = order.polls.find(({ category }) => category === "parent-orders")!;
+    order.respondTo(parentOrders).succeed([{ parent_order_id: "JCO-old" }]);
+    order.clearOrders();
+    deepEqual(order.requests.map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
+    const [bulkCancel, parentCancel] = order.requests;
+    const pendingBulkCancel = order.respondTo(bulkCancel);
+
+    order.navigate("/setting");
+    order.writeCredential("api-key", "account-b");
+    order.navigate("/");
+    order.respondTo(parentCancel).fail();
+    pendingBulkCancel.succeed();
+
+    equal(order.state.isOrdering, false);
+    deepEqual(order.histories, []);
+    deepEqual(order.sounds, []);
 });
 
 test("clears cached account data and ignores late private responses after switching credentials", (t) => {
@@ -504,7 +584,7 @@ for (const category of ["limit-order", "cancel-orders", "market-order"] as const
         deepEqual(paths, [path]);
         equal(order.requests.length, 1);
         deepEqual(order.histories.map(({ status }) => status), ["unconfirmed"]);
-        deepEqual(order.sounds, category === "cancel-orders" ? [] : ["failure"]);
+        deepEqual(order.sounds, ["failure"]);
         summaryView(Stream.of<SummaryState>({
             ...order.tradeState,
             collateral: 0,
@@ -658,10 +738,15 @@ function setup(t: TestContext, width = "0.01", options: {
     });
     const polls: RequestOptions[] = [];
     const requests: RequestOptions[] = [];
+    const parentDetails = new Map<string, RequestOptions>();
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
         if (options.method === "GET") { polls.push(options); }
-        if (["ifdoco-order", "market-order", "limit-order", "stop-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
+        if (options.category === "parent-order") {
+            parentDetails.set((options.query as { parent_order_id: string }).parent_order_id, options);
+        }
+        if (["ifdoco-order", "market-order", "limit-order", "stop-order", "cancel-orders", "cancel-parent-order"]
+            .includes(options.category as string)) {
             requests.push(options);
             if (writeOrigin) {
                 writes$.shamefullySendNext({ ...options, url: writeOrigin + new URL(options.url).pathname });
@@ -687,6 +772,7 @@ function setup(t: TestContext, width = "0.01", options: {
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
+        parentDetails,
         polls,
         publishExecution,
         requests,

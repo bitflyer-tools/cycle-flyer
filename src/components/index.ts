@@ -12,7 +12,7 @@ import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
 import {resetAccountState} from "./trade/model";
-import {createCancellationTimeoutHistory, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
+import {createCancellationOutcome, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
 import {closePositionOutcomes, OrderRequestBatch, submissions} from "./trade/order/request";
 import {privateResponses} from "./trade/privateResponses";
 
@@ -81,21 +81,19 @@ export const Root = (sources: Sources): Sinks => {
             return { ...state, positionClose: { ...close, settled: true, rejected } };
         });
     const isOrdering$ = pending$.map((pending) => pending !== null);
-    const orderOutcome$ = submittedOrderOutcomes(sources.HTTP);
-    const cancellationHistories$ = Stream.merge(
-        privateResponses(sources.HTTP, "cancel-orders"),
-        privateResponses(sources.HTTP, "cancel-parent-order"),
-    ).map(createCancellationTimeoutHistory)
-        .compose(flattenConcurrently)
-        .map((history) => [history]);
-
+    const orderOutcome$ = Stream.merge(
+        submittedOrderOutcomes(sources.HTTP),
+        Stream.merge(
+            privateResponses(sources.HTTP, "cancel-orders"),
+            privateResponses(sources.HTTP, "cancel-parent-order"),
+        ).map(createCancellationOutcome).compose(flattenConcurrently),
+    );
     const orderHistoryReducer$ = Stream.merge(
         orderOutcome$.map(({ histories }) => histories.slice().reverse()),
         // Keep timeout notices when the trade screen is inactive.
         twapOutcomes(sources.HTTP)
             .filter(({ status }) => status === "unconfirmed")
             .map(({ histories }) => histories.slice().reverse()),
-        cancellationHistories$,
     ).map<Reducer<TradeState>>((histories) => (state) =>
         state && { ...state, histories: histories.concat(state.histories) });
 
