@@ -7,10 +7,14 @@ export const loadNumber = (
     key: string,
     accept: (value: string) => boolean = (value) => value !== "" && !isNaN(+value),
 ): Stream<number> =>
-    ((storage as any as ResponseCollection).local.getItem(key) as Stream<string | null>)
-        .filter((value) => value !== null && accept(value))
-        .map((value) => +(value as string))
+    loadStoredValue(storage, key)
+        .filter(accept)
+        .map((value) => +value)
         .take(1);
+
+export const loadStoredValue = (storage: StorageSource, key: string): Stream<string> =>
+    ((storage as any as ResponseCollection).local.getItem(key) as Stream<string | null>)
+        .filter((value): value is string => value !== null);
 
 export const saveValue = <S>(state$: Stream<S>, key: string, select: (state: S) => number): Stream<StorageRequest> =>
     state$

@@ -92,7 +92,7 @@ test("leaving Trade stops a partially completed TWAP and restores idle controls"
 
     history.shamefullySendNext({ pathname: "/setting" });
     await flush();
-    assert.deepEqual(state.trade.orderComponentState.twap, { interval: 2, remaining: 0, slices: 3, totalSlices: 3 });
+    assert.deepEqual(state.trade.orderComponentState.twap, { interval: 2, remaining: 0, slices: 3, totalSlices: 3, scheduleId: undefined });
     t.mock.timers.tick(4000);
     assert.equal(requests.length, 1);
 

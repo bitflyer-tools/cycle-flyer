@@ -20,16 +20,21 @@ export class Position {
 
         this.side = positions[0].side;
         this.size = Position.round(size * (this.side === "BUY" ? 1 : -1));
-        this.price = Math.floor(Position.round(priceSum / size));
+        this.price = priceSum / size;
     }
 
     public profit(currentPrice: number): number {
-        return Math.floor(Position.round((currentPrice - this.price) * this.size));
+        const profit = Math.floor(Position.round((currentPrice - this.price) * this.size));
+        return profit === 0 ? 0 : profit;
+    }
+
+    public get displayPrice(): number {
+        return Math.floor(Position.round(this.price));
     }
 
     public toPriceString(): string {
         if (this.price === 0) { return "None"; }
-        return this.price.toLocaleString();
+        return this.displayPrice.toLocaleString();
     }
     public toSizeString(): string {
         if (this.size === 0) { return "None"; }
@@ -38,9 +43,6 @@ export class Position {
 
     public toDiffString(currentPrice: number): string {
         if (this.price === 0) { return "None"; }
-        return (currentPrice - this.price).toLocaleString().replace("-", "- ");
+        return (currentPrice - this.displayPrice).toLocaleString().replace("-", "- ");
     }
-    public toProfitString(currentPrice: number): string {
-        if (this.price === 0) { return "None"; }
-        return this.profit(currentPrice).toLocaleString().replace("-", "- ");
-    }}
+}

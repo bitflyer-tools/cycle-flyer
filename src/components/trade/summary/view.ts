@@ -28,7 +28,7 @@ export const view = (state$: Stream<State>) =>
             ]),
             div(".profit", [
                 span(".label", "Profit / Loss"),
-                span(profitClass(state), state.currentPrice === null ? "Pending" : state.position.toProfitString(state.currentPrice)),
+                profitValue(state),
                 span(".unit", "JPY"),
             ]),
             div(".collateral", [
@@ -70,18 +70,18 @@ const sameViewInputs = (previous: State, next: State): boolean =>
     && previous.marketState.state === next.marketState.state
     && previous.histories === next.histories;
 
-const profitClass = (state: State): string => {
-    if (state.currentPrice === null || !state.position.price) { return ".number"; }
-    if (state.position.side === "BUY") {
-        return state.currentPrice - state.position.price >= 0.0 ? ".number.plus" : ".number.minus";
-    } else {
-        return state.currentPrice - state.position.price >= 0.0 ? ".number.minus" : ".number.plus";
-    }
+const profitValue = (state: State) => {
+    if (state.currentPrice === null) { return span(".number", "Pending"); }
+    if (!state.position.price) { return span(".number", "None"); }
+
+    const profit = state.position.profit(state.currentPrice);
+    const selector = profit > 0 ? ".number.plus" : profit < 0 ? ".number.minus" : ".number";
+    return span(selector, profit.toLocaleString().replace("-", "- "));
 };
 
 const profitDifferenceClass = (state: State): string => {
     if (state.currentPrice === null || !state.position.price) { return ".number"; }
-    return state.currentPrice - state.position.price >= 0.0 ? ".number.plus" : ".number.minus";
+    return state.currentPrice - state.position.displayPrice >= 0.0 ? ".number.plus" : ".number.minus";
 };
 
 const healthClass = (health: string): string => {
