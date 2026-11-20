@@ -18,11 +18,12 @@ export interface TwapSliceOutcome extends OrderOutcome {
     scheduleId: symbol;
 }
 
-export const orderOutcomes = (http: HTTPSource): Stream<OrderOutcome> =>
+export const submittedOrderOutcomes = (http: HTTPSource): Stream<OrderOutcome> =>
     Stream.merge(
         http.select("market-order").map((response$) => createChildOrderOutcome("Market", response$)),
         http.select("limit-order").map((response$) => createChildOrderOutcome("Limit", response$)),
         http.select("stop-order").map(createParentOrderOutcome),
+        http.select("ifdoco-order").map(createParentOrderOutcome),
     ).compose(flattenConcurrently);
 
 export const twapOutcomes = (http: HTTPSource): Stream<TwapSliceOutcome> =>
@@ -39,7 +40,7 @@ export const createChildOrderOutcome = (name: string, stream$: HTTPResponse$): S
         return [createOrderHistory(name, send.side, send.size, send.price, status)];
     });
 
-export const createParentOrderOutcome = (stream$: HTTPResponse$): Stream<OrderOutcome> =>
+const createParentOrderOutcome = (stream$: HTTPResponse$): Stream<OrderOutcome> =>
     createOutcome(stream$, (body, status) =>
         JSON.parse(body).parameters.map((order: any) =>
             createOrderHistory(

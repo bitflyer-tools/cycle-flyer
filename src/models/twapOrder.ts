@@ -3,6 +3,7 @@ export interface TwapOrder {
     remaining: number;
     scheduleId?: symbol;
     slices: number;
+    totalSlices: number;
 }
 
 export const minimumOrderSize = 0.01;
@@ -10,7 +11,7 @@ export const minimumOrderSize = 0.01;
 const maximumTimerDelay = 2 ** 31 - 1;
 export const maximumTwapInterval = maximumTimerDelay / 1000;
 
-export const defaultTwapOrder: TwapOrder = { interval: 60, remaining: 0, slices: 5 };
+export const defaultTwapOrder: TwapOrder = { interval: 60, remaining: 0, slices: 5, totalSlices: 0 };
 
 export const isValidTwapInterval = (interval: number): boolean => {
     const delay = interval * 1000;

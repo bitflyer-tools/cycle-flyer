@@ -1,13 +1,14 @@
 import {State} from "./index";
 
-export const isValidMarketOrder = (state: State): boolean =>
+export const isValidOrderSize = (state: State): boolean =>
     isPositiveFinite(state.size);
 
 export const isValidLimitOrder = (state: State): boolean =>
-    isValidMarketOrder(state) && isPositiveFinite(state.price);
+    isValidOrderSize(state) && isPositiveFinite(state.price);
 
 export const isValidIFDOCOOrder = (state: State): boolean =>
-    isPositiveFinite(state.size) && state.ifdocoOrder.hasValidWidth();
+    isValidOrderSize(state) && isPositiveFinite(state.currentPrice)
+    && state.ifdocoOrder.hasValidWidth() && state.ifdocoOrder.hasValidRatio();
 
 const isPositiveFinite = (value: number): boolean =>
     Number.isFinite(value) && value > 0;

@@ -10,7 +10,7 @@ import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
-import {createCancellationOutcome, createParentOrderOutcome, orderOutcomes, twapOutcomes} from "./trade/order/history";
+import {createCancellationOutcome, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
 import {OrderRequestBatch, submissions} from "./trade/order/request";
 
 interface RootState {
@@ -62,14 +62,16 @@ export const Root = (sources: Sources): Sinks => {
     const pending$ = submissions(orderRequests$, sources.HTTP);
     const isOrdering$ = pending$.map((pending) => pending !== null);
     const orderOutcome$ = Stream.merge(
-        sources.HTTP.select("ifdoco-order").map(createParentOrderOutcome),
-        sources.HTTP.select("cancel-orders").map(createCancellationOutcome),
-        sources.HTTP.select("cancel-parent-order").map(createCancellationOutcome),
-    ).compose(flattenConcurrently);
+        submittedOrderOutcomes(sources.HTTP),
+        Stream.merge(
+            sources.HTTP.select("cancel-orders"),
+            sources.HTTP.select("cancel-parent-order"),
+        ).map(createCancellationOutcome).compose(flattenConcurrently),
+    );
     const orderHistoryReducer$ = Stream.merge(
         orderOutcome$.map(({ histories }) => histories.slice().reverse()),
         // Keep timeout notices when the trade screen is inactive.
-        Stream.merge(orderOutcomes(sources.HTTP), twapOutcomes(sources.HTTP))
+        twapOutcomes(sources.HTTP)
             .filter(({ status }) => status === "unconfirmed")
             .map(({ histories }) => histories.slice().reverse()),
     ).map<Reducer<TradeState>>((histories) => (state) =>

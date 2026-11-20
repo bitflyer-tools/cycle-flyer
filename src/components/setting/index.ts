@@ -31,10 +31,10 @@ export const Setting = (sources: Sources): Sinks => {
     const reducer$ = model(actions);
     const view$ = view(sources.state.stream);
     const storage$ = Stream.merge(
-        sources.state.stream
-            .map((state) => ({ key: "api-key", value: state.apiKey }) as StorageRequest),
-        sources.state.stream
-            .map((state) => ({ key: "api-secret", value: state.apiSecret }) as StorageRequest),
+        actions.onApiKeyInputChanged$
+            .map((value) => ({ key: "api-key", value }) as StorageRequest),
+        actions.onApiSecretInputChanged$
+            .map((value) => ({ key: "api-secret", value }) as StorageRequest),
         actions.onSoundToggled$
             .map((enabled) => ({ key: soundEnabledStorageKey, value: enabled.toString() }) as StorageRequest),
     );
