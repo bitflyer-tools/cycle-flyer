@@ -7,6 +7,7 @@ import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
 import {Sources} from "./index";
 import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
+import {parentOrderPages} from "./parentOrderPages";
 import {pollResponse} from "./pollResponse";
 import {privateResponses} from "./privateResponses";
 
@@ -18,6 +19,7 @@ export interface Actions {
     onOrdersLoaded$: Stream<object[]>;
     onParentOrderLoaded$: Stream<ActiveParentOrder>;
     onParentOrdersLoaded$: Stream<{ orders: ActiveParentOrder[]; sequence: number }>;
+    onParentOrderListSettled$: Stream<null>;
     parentOrderRequests$: Stream<RequestOptions>;
     onPositionsLoaded$: Stream<Position>;
 }
@@ -47,13 +49,8 @@ export const intent = (sources: Sources): Actions => {
         .flatten()
         .map((response) => JSON.parse(response.text));
 
-    const onParentOrdersLoaded$ = privateResponses(sources.HTTP, "parent-orders")
-        .map((response$) => {
-            const sequence = ++parentOrderSequence;
-            return response$.map((response) => ({ orders: JSON.parse(response.text) as ActiveParentOrder[], sequence }))
-                .replaceError(() => Stream.never());
-        })
-        .flatten();
+    const pages = parentOrderPages(sources.HTTP, () => ++parentOrderSequence);
+    const onParentOrdersLoaded$ = pages.loaded$;
 
     const details = parentOrderDetails(
         sources.HTTP, onParentOrdersLoaded$.map(({ orders }) => orders),
@@ -71,8 +68,9 @@ export const intent = (sources: Sources): Actions => {
         onOrdersLoaded$,
         onParentOrderLoaded$: details.loaded$,
         onParentOrdersLoaded$,
+        onParentOrderListSettled$: pages.settled$,
         onPositionsLoaded$,
-        parentOrderRequests$: details.requests$,
+        parentOrderRequests$: Stream.merge(pages.requests$, details.requests$),
     };
 };
 

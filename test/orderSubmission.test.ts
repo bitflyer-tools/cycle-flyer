@@ -12,6 +12,7 @@ import Stream, {MemoryStream} from "xstream";
 import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
+import {parentOrdersPageSize} from "../src/http";
 import {credentialAwareStorageDriver} from "../src/storage";
 import {storageKeys} from "../src/components/trade/order/intent";
 
@@ -128,6 +129,30 @@ for (const outcome of ["succeed", "fail"] as const) {
     });
 }
 
+test("records a rejected limit order and permits a retry", (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: 1000 });
+    const order = setup(t);
+    order.enterPrice("900");
+
+    order.buyLimit();
+    deepEqual(order.requests.map(({ category }) => category), ["limit-order"]);
+    equal(order.state.isOrdering, true);
+
+    order.respondTo(order.requests[0]).reject();
+    equal(order.state.isOrdering, false);
+    deepEqual(order.sounds, ["failure"]);
+    deepEqual(order.histories, [{
+        createdAt: new Date(1000),
+        description: "BUY / 0.01 / 900",
+        name: "Limit",
+        status: "failed",
+    }]);
+
+    order.buyLimit();
+    deepEqual(order.requests.map(({ category }) => category), ["limit-order", "limit-order"]);
+    equal(order.state.isOrdering, true);
+});
+
 test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
     const order = setup(t);
     order.respondTo({ category: "parent-orders", _namespace: ["trade"] }).succeed([
@@ -200,6 +225,27 @@ test("clears cached account data and ignores late private responses after switch
     assertSignature(order, "account-b", "secret-b");
 });
 
+test("continues pagination for the current account when an old parent-order list arrives", (t) => {
+    const trade = setup(t, "0.01", "account-a");
+    const firstPage = () => trade.polls.filter(({ category }) => category === "parent-orders").at(-1)!;
+    const original = firstPage();
+
+    trade.navigate("/setting");
+    trade.writeCredential("api-key", "account-b");
+    trade.navigate("/");
+    const current = trade.respondTo(firstPage());
+    const fullPage = Array.from({ length: parentOrdersPageSize }, (_, index) =>
+        ({ id: index + 2, parent_order_id: `parent-${index + 2}` }));
+    trade.respondTo(original).succeed(fullPage);
+    equal(trade.polls.some(({ category }) => category === "parent-orders-page"), false);
+
+    current.succeed(fullPage);
+    const pages = trade.polls.filter(({ category }) => category === "parent-orders-page");
+    equal(pages.length, 1);
+    equal((pages[0].headers as Record<string, string>)["ACCESS-KEY"], "account-b");
+    trade.respondTo(pages[0]).succeed([]);
+});
+
 test("a pending IFDOCO from the previous account cannot lock or update the new account", (t) => {
     const trade = setup(t, "0.01", "account-a");
     trade.buyIFDOCO();
@@ -261,15 +307,19 @@ function setup(t: TestContext, width = "0.01", apiKey?: string) {
 
     const buyIFDOCO$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
+    const buyLimit$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
     const clearPosition$ = Stream.create<null>();
+    const priceInput$ = Stream.create<{ target: { value: string } }>();
     const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
+        "#price-input": { input: priceInput$ },
         ".order-buttons": { ".clear-order-button": { click: clearOrders$ }, ".clear-button": { click: clearPosition$ } },
+        ".limit-order-buttons": { ".buy-button": { click: buyLimit$ } },
         ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buyIFDOCO$ },
@@ -311,7 +361,8 @@ function setup(t: TestContext, width = "0.01", apiKey?: string) {
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
         if (options.method === "GET") { polls.push(options); }
-        if (["ifdoco-order", "market-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
+        if (["ifdoco-order", "limit-order", "market-order", "cancel-orders", "cancel-parent-order"]
+            .includes(options.category as string)) {
             requests.push(options);
         }
     } });
@@ -327,9 +378,11 @@ function setup(t: TestContext, width = "0.01", apiKey?: string) {
 
     return {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
+        buyLimit: () => buyLimit$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
         clearPosition: () => clearPosition$.shamefullySendNext(null),
         clearOrders: () => clearOrders$.shamefullySendNext(null),
+        enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         polls,
@@ -343,6 +396,7 @@ function setup(t: TestContext, width = "0.01", apiKey?: string) {
             return {
                 fail: () => response$.shamefullySendError(new Error("Network failure")),
                 progress: () => response$.shamefullySendNext({ request } as Response),
+                reject: () => response$.shamefullySendError({ response: { request, status: 400 } }),
                 succeed: (body?: unknown) => {
                     response$.shamefullySendNext({ request, text: JSON.stringify(body) } as Response);
                     response$.shamefullySendComplete();

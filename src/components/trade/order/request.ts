@@ -7,7 +7,7 @@ import {apiCredentials, credentialChanges$} from "../../../credentials";
 import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
-import {isValidLimitOrder, isValidMarketOrder} from "./validation";
+import {isValidIFDOCOOrder, isValidLimitOrder, isValidMarketOrder} from "./validation";
 
 export interface OrderRequestBatch {
     requests: RequestInput[];
@@ -59,8 +59,6 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
 
     const accountIsCurrent = (state: State) =>
         state.credentialVersion === undefined || state.credentialVersion === apiCredentials().version;
-
-    const isValidIFDOCOOrder = (state: State) => state.ifdocoOrder.hasValidWidth();
 
     return Stream.merge(
         withState(actions.onClickMarketBuyButton$, (state) => marketOrder(state.size, "BUY"), isValidMarketOrder),

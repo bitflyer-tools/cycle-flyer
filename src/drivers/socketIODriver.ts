@@ -1,6 +1,7 @@
 import { io, Socket } from "socket.io-client";
 import Stream from "xstream";
 import {apiCredentials} from "../credentials";
+import {BoardLevels} from "../models/board";
 import {Execution} from "../models/execution";
 import {ChildOrderEvent, ParentOrderEvent} from "../models/orderEvent";
 import {authenticate, privateChannelNames} from "./privateChannel";
@@ -14,7 +15,7 @@ export const makeSocketIODriver = () => (): SocketIOSource => {
 const productCode = "FX_BTC_JPY";
 
 export class SocketIOSource {
-    public board$: Stream<object> = Stream.create();
+    public board$: Stream<BoardLevels> = Stream.create();
     public ticker$: Stream<object> = Stream.create();
     public execution$: Stream<Execution> = Stream.create();
     public executionBatch$: Stream<Execution[]> = Stream.create();
