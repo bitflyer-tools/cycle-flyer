@@ -24,13 +24,6 @@ const defaultState: State = {
 export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
-    const historyReducer$ = actions.onOrderOutcome$
-        .filter(({ status }) => status !== "unconfirmed")
-        .map(({ histories }) => (state: State) => ({
-            ...state,
-            histories: histories.slice().reverse().concat(state.histories),
-        }));
-
     const isOrderingReducer$ = isOrdering$
         .map((isOrdering) => (state: State) => ({ ...state, isOrdering }));
 
@@ -51,7 +44,6 @@ export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Re
 
     return Stream.merge(
         defaultReducer$,
-        historyReducer$,
         isOrderingReducer$,
         priceReducer$,
         priceWidthReducer$,

@@ -6,7 +6,7 @@ const {intent, storageKeys} = require("../src/components/trade/order/intent");
 const {model} = require("../src/components/trade/order/model");
 const {orderRequests} = require("../src/components/trade/order/request");
 
-function setup(t, storedWidth, storedSize = "1") {
+function setup(t, storedWidth, storedSize = "1", currentPrice = 10000000) {
     const widthInput$ = Stream.create();
     const ratioInput$ = Stream.create();
     const sizeInput$ = Stream.create();
@@ -33,7 +33,7 @@ function setup(t, storedWidth, storedSize = "1") {
     let state;
     const reducers = model(actions, Stream.never()).subscribe({
         next: (reduce) => {
-            state = { ...reduce(state), currentPrice: 10000000 };
+            state = { ...reduce(state), currentPrice };
             state$.shamefullySendNext(state);
         },
     });
@@ -61,6 +61,11 @@ function setup(t, storedWidth, storedSize = "1") {
         enterRatio: (value) => ratioInput$.shamefullySendNext({ target: { value } }),
         enterSize: (value) => sizeInput$.shamefullySendNext({ target: { value } }),
         enterWidth: (value) => widthInput$.shamefullySendNext({ target: { value } }),
+        setCurrentPrice: (price) => {
+            currentPrice = price;
+            state = { ...state, currentPrice };
+            state$.shamefullySendNext(state);
+        },
         requests,
         view: () => ifdocoSection(state),
     };
@@ -97,6 +102,21 @@ for (const size of ["-0.05", "0", "NaN", "Infinity", "-Infinity"]) {
         assert.deepEqual(form.requests, []);
     });
 }
+
+test("IFDOCO requires a positive finite market reference price for both sides", (t) => {
+    const form = setup(t, "10000", "1", 0);
+    for (const price of [0, -1, NaN, Infinity, -Infinity]) {
+        form.setCurrentPrice(price);
+        assert.deepEqual(form.disabled(), [true, true]);
+        form.clickBoth();
+        assert.deepEqual(form.requests, []);
+    }
+
+    form.setCurrentPrice(10000000);
+    assert.deepEqual(form.disabled(), [false, false]);
+    form.clickBoth();
+    assert.equal(form.requests.length, 2);
+});
 
 test("IFDOCO rejects invalid ratios and restores the preview and both submissions at 50", (t) => {
     const form = setup(t, "10000");
