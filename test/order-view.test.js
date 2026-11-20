@@ -19,7 +19,7 @@ new Function('require', 'module', bundle.outputFiles[0].text)(require, tradeModu
 const { Trade } = tradeModule.exports;
 
 test('board deltas reuse the order form and refreshed markers show open quantities', (t) => {
-  t.mock.timers.enable({ apis: ['setInterval'] });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const board$ = Stream.create();
   const executionBatch$ = Stream.create();
   const sizeInput$ = Stream.create();
@@ -83,6 +83,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
     });
   }
   assert.equal(state.boardComponentState.board.asks[0].size, 100);
+  t.mock.timers.tick(100);
   assert.notEqual(tradeNode, initialTrade);
   assert.equal(orderRenders, initialRenders);
 
@@ -100,6 +101,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
     ]),
   }));
   assert.equal(orderRenders, initialRenders + 3);
+  t.mock.timers.tick(100);
   const bids = tradeNode.children[1].children.find(({ sel }) => sel === 'div.bids');
   const markers = bids.children.map((bid) => [
     bid.data.dataset.price,
@@ -114,7 +116,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
 });
 
 test('the summary waits for a public execution before valuing an open position', (t) => {
-  t.mock.timers.enable({ apis: ['setInterval'] });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const executionBatch$ = Stream.create();
   const positions$ = Stream.create();
   const collateral$ = Stream.create();
