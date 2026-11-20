@@ -25,6 +25,7 @@ runInNewContext(outputFiles[0].text, { module: testModule, require, localStorage
 const components = testModule.exports;
 
 const accountCategories = ['orders', 'parent-orders', 'positions'];
+const otherAccountCategories = ['orders', 'positions'];
 const initialCategories = [...accountCategories, 'collateral', 'status', 'board'];
 
 for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'secret']]) {
@@ -50,18 +51,19 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
 
     reconnect$.shamefullySendNext(null);
     t.mock.timers.tick(500);
-    assert.deepEqual(takeCategories(), authenticated ? accountCategories : []);
+    assert.deepEqual(takeCategories(), authenticated ? otherAccountCategories : []);
 
     t.mock.timers.tick(9500);
-    assert.deepEqual(takeCategories(), authenticated ? accountCategories : []);
+    assert.deepEqual(takeCategories(), authenticated ? otherAccountCategories : []);
     t.mock.timers.tick(5000);
     assert.deepEqual(takeCategories(), authenticated ? ['board', 'collateral'] : ['board']);
     t.mock.timers.tick(15000);
     assert.deepEqual(takeCategories(), (authenticated
-      ? [...initialCategories, ...accountCategories] : ['board', 'status']).sort());
+      ? ['board', 'collateral', 'status', ...otherAccountCategories, ...otherAccountCategories]
+      : ['board', 'status']).sort());
 
     parentOrders$.shamefullySendNext(Stream.of({ text: '[{"parent_order_id":"parent-id"}]' }));
-    assert.deepEqual(takeCategories(), authenticated ? ['parent-order'] : []);
+    assert.deepEqual(takeCategories(), authenticated ? ['parent-order', 'parent-orders'] : []);
   });
 }
 
