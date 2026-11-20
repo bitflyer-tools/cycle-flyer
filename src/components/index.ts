@@ -12,7 +12,7 @@ import {Sound} from "../drivers/soundDriver";
 import {Position} from "../models/position";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
-import {createCancellationTimeoutHistory, createParentOrderOutcome, orderOutcomes, twapOutcomes} from "./trade/order/history";
+import {createCancellationTimeoutHistory, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
 import {OrderRequestBatch, submissions, unsignedSubmissions$} from "./trade/order/request";
 import {stopTwap, twapSigningFailed$} from "./trade/order/twapRequest";
 
@@ -71,9 +71,7 @@ export const Root = (sources: Sources): Sinks => {
     );
     const orderSigningReducer$ = orderSigningError$.map<Reducer<TradeState>>((orderSigningError) =>
         (state) => state && { ...state, orderSigningError });
-    const ifdocoOutcome$ = sources.HTTP.select("ifdoco-order")
-        .map(createParentOrderOutcome)
-        .compose(flattenConcurrently);
+    const orderOutcome$ = submittedOrderOutcomes(sources.HTTP);
     const cancellationHistories$ = Stream.merge(
         sources.HTTP.select("cancel-orders"),
         sources.HTTP.select("cancel-parent-order"),
@@ -82,9 +80,9 @@ export const Root = (sources: Sources): Sinks => {
         .map((history) => [history]);
 
     const orderHistoryReducer$ = Stream.merge(
-        ifdocoOutcome$.map(({ histories }) => histories.slice().reverse()),
+        orderOutcome$.map(({ histories }) => histories.slice().reverse()),
         // Keep timeout notices when the trade screen is inactive.
-        Stream.merge(orderOutcomes(sources.HTTP), twapOutcomes(sources.HTTP))
+        twapOutcomes(sources.HTTP)
             .filter(({ status }) => status === "unconfirmed")
             .map(({ histories }) => histories.slice().reverse()),
         cancellationHistories$,
@@ -116,7 +114,7 @@ export const Root = (sources: Sources): Sinks => {
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
         sound: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
-            ifdocoOutcome$.map(({ status }): Sound => status === "success" ? "success" : "failure"),
+            orderOutcome$.map(({ status }): Sound => status === "success" ? "success" : "failure"),
         ),
         state: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
