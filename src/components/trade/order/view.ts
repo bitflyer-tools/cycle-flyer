@@ -8,7 +8,7 @@ import {numberInput} from "./numberInput";
 import {sizeSection} from "./sizeView";
 import {stopSection} from "./stopView";
 import {twapSection} from "./twapView";
-import {isValidLimitOrder, isValidMarketOrder} from "./validation";
+import {isValidLimitOrder, isValidOrderSize} from "./validation";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
     state$.compose(dropRepeats(sameViewInputs)).map((state) =>
@@ -46,7 +46,7 @@ const sameViewInputs = (previous: State, next: State): boolean =>
 const marketSection = (state: State): VNode =>
     div([
         h4(".sub-title", "Market"),
-        div(".market-order-buttons.order-buttons", sideButtons(state.isOrdering || !isValidMarketOrder(state))),
+        div(".market-order-buttons.order-buttons", sideButtons(state.isOrdering || !isValidOrderSize(state))),
     ]);
 
 const limitSection = (state: State): VNode =>
