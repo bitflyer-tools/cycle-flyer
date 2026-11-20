@@ -10,6 +10,20 @@ import Stream, {MemoryStream} from "xstream";
 import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
+import {storageKeys} from "../src/components/trade/order/intent";
+
+test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
+    const order = setup(t, "-10000");
+
+    order.buyIFDOCO();
+    order.sellIFDOCO();
+    deepEqual(order.requests, []);
+    equal(order.state.isOrdering, false);
+
+    order.buyMarket();
+    deepEqual(order.requests.map(({ category }) => category), ["market-order"]);
+    equal(order.state.isOrdering, true);
+});
 
 test("accepts a single IFDOCO submission until its delayed success", (t) => {
     const order = setup(t);
@@ -144,6 +158,30 @@ for (const [submit, entries] of disconnectedOrders) {
     });
 }
 
+test("records a rejected limit order and permits a retry", (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: 1000 });
+    const order = setup(t);
+    order.enterPrice("900");
+
+    order.buyLimit();
+    deepEqual(order.requests.map(({ category }) => category), ["limit-order"]);
+    equal(order.state.isOrdering, true);
+
+    order.respondTo(order.requests[0]).reject();
+    equal(order.state.isOrdering, false);
+    deepEqual(order.sounds, ["failure"]);
+    deepEqual(order.histories, [{
+        createdAt: new Date(1000),
+        description: "BUY / 0.01 / 900",
+        name: "Limit",
+        status: "failed",
+    }]);
+
+    order.buyLimit();
+    deepEqual(order.requests.map(({ category }) => category), ["limit-order", "limit-order"]);
+    equal(order.state.isOrdering, true);
+});
+
 test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
     const order = setup(t);
     order.respondTo({ category: "parent-orders", _namespace: ["trade"] }).succeed([
@@ -173,7 +211,7 @@ test("dispatches every Clear Orders request and stays locked until they all sett
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
 
-function setup(t: TestContext) {
+function setup(t: TestContext, width = "0.01") {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
     t.after(() => {
@@ -186,8 +224,10 @@ function setup(t: TestContext) {
 
     const buyIFDOCO$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
+    const buyLimit$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
     const buyStop$ = Stream.create<null>();
+    const priceInput$ = Stream.create<{ target: { value: string } }>();
     const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
@@ -196,7 +236,9 @@ function setup(t: TestContext) {
     const orderEvents = {
         "#trigger-price-input": { input: Stream.of({ target: { value: "800" } }) },
         ".stop-order-buttons": { ".buy-button": { click: buyStop$ } },
+        "#price-input": { input: priceInput$ },
         ".order-buttons": { ".clear-order-button": { click: clearOrders$ } },
+        ".limit-order-buttons": { ".buy-button": { click: buyLimit$ } },
         ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buyIFDOCO$ },
@@ -218,7 +260,7 @@ function setup(t: TestContext) {
             reconnect$: Stream.never(),
         },
         state: new StateSource(state$, "state"),
-        storage: { local: { getItem: () => Stream.of("0.01") } },
+        storage: { local: { getItem: (key: string) => Stream.of(key === storageKeys.priceWidth ? width : "0.01") } },
     } as unknown as Omit<Sources, "router"> & { history: typeof history$ });
 
     let state: { trade?: TradeState } | undefined;
@@ -233,7 +275,8 @@ function setup(t: TestContext) {
     const requests: RequestOptions[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
-        if (["ifdoco-order", "market-order", "stop-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
+        if (["ifdoco-order", "limit-order", "market-order", "stop-order", "cancel-orders", "cancel-parent-order"]
+            .includes(options.category as string)) {
             requests.push(options);
         }
     } });
@@ -247,9 +290,11 @@ function setup(t: TestContext) {
 
     return {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
+        buyLimit: () => buyLimit$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
         buyStop: () => buyStop$.shamefullySendNext(null),
         clearOrders: () => clearOrders$.shamefullySendNext(null),
+        enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         requests,
@@ -263,6 +308,7 @@ function setup(t: TestContext) {
                     response: { status: 400 },
                 })),
                 progress: () => response$.shamefullySendNext({ request } as Response),
+                reject: () => response$.shamefullySendError({ response: { request, status: 400 } }),
                 succeed: (body?: unknown) => {
                     response$.shamefullySendNext({ request, text: JSON.stringify(body) } as Response);
                     response$.shamefullySendComplete();

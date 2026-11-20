@@ -1,13 +1,14 @@
 import {div, hr, li, span, ul} from "@cycle/dom";
 import Stream from "xstream";
+import dropRepeats from "xstream/extra/dropRepeats";
 import {State} from "./index";
 
 export const view = (state$: Stream<State>) =>
-    state$.map((state) =>
+    state$.compose(dropRepeats(sameViewInputs)).map((state) =>
         div(".summary", [
             div(".current-price", [
                 span(".label", "Current price"),
-                span(".number", state.currentPrice.toLocaleString()),
+                span(".number", state.currentPrice?.toLocaleString() ?? "Pending"),
                 span(".unit", "JPY"),
             ]),
             div(".position", [
@@ -17,7 +18,7 @@ export const view = (state$: Stream<State>) =>
             ]),
             div(".position-diff", [
                 span(".label", "Position diff"),
-                span(profitDifferenceClass(state), state.position.toDiffString(state.currentPrice)),
+                span(profitDifferenceClass(state), state.currentPrice === null ? "Pending" : state.position.toDiffString(state.currentPrice)),
                 span(".unit", "JPY"),
             ]),
             div(".position-size", [
@@ -27,7 +28,7 @@ export const view = (state$: Stream<State>) =>
             ]),
             div(".profit", [
                 span(".label", "Profit / Loss"),
-                span(profitClass(state), state.position.toProfitString(state.currentPrice)),
+                profitValue(state),
                 span(".unit", "JPY"),
             ]),
             div(".collateral", [
@@ -61,18 +62,28 @@ const historyStatus = (status: string) => {
     return status === "success" ? span(".success", "○") : span(".failed", "✗");
 };
 
-const profitClass = (state: State): string => {
-    if (!state.position.price) { return ".number"; }
-    if (state.position.side === "BUY") {
-        return state.currentPrice - state.position.price >= 0.0 ? ".number.plus" : ".number.minus";
-    } else {
-        return state.currentPrice - state.position.price >= 0.0 ? ".number.minus" : ".number.plus";
-    }
+const sameViewInputs = (previous: State, next: State): boolean =>
+    Object.is(previous.currentPrice, next.currentPrice)
+    && Object.is(previous.collateral, next.collateral)
+    && Object.is(previous.position.price, next.position.price)
+    && Object.is(previous.position.size, next.position.size)
+    && previous.position.side === next.position.side
+    && previous.marketState.health === next.marketState.health
+    && previous.marketState.state === next.marketState.state
+    && previous.histories === next.histories;
+
+const profitValue = (state: State) => {
+    if (state.currentPrice === null) { return span(".number", "Pending"); }
+    if (!state.position.price) { return span(".number", "None"); }
+
+    const profit = state.position.profit(state.currentPrice);
+    const selector = profit > 0 ? ".number.plus" : profit < 0 ? ".number.minus" : ".number";
+    return span(selector, profit.toLocaleString().replace("-", "- "));
 };
 
 const profitDifferenceClass = (state: State): string => {
-    if (!state.position.price) { return ".number"; }
-    return state.currentPrice - state.position.price >= 0.0 ? ".number.plus" : ".number.minus";
+    if (state.currentPrice === null || !state.position.price) { return ".number"; }
+    return state.currentPrice - state.position.displayPrice >= 0.0 ? ".number.plus" : ".number.minus";
 };
 
 const healthClass = (health: string): string => {
