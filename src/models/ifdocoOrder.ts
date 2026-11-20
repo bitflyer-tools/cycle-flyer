@@ -4,7 +4,9 @@ export class IFDOCOrder {
 
     constructor(width: number, ratio: number) {
         this.width = width;
-        if (ratio > 100) {
+        if (!Number.isFinite(ratio)) {
+            this.ratio = ratio;
+        } else if (ratio > 100) {
             this.ratio = 100;
         } else if (ratio < 0) {
             this.ratio = 0;
@@ -15,6 +17,10 @@ export class IFDOCOrder {
 
     public hasValidWidth(): boolean {
         return Number.isFinite(this.width) && this.width > 0;
+    }
+
+    public hasValidRatio(): boolean {
+        return Number.isFinite(this.ratio);
     }
 
     public buyProfitLine(currentPrice: number): number {
