@@ -1,22 +1,16 @@
 import {Stream} from "xstream";
-import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {hasApiCredentials} from "../../../credentials";
 import sampleCombine from "xstream/extra/sampleCombine";
-import {TwapSliceRequest} from "../../../http";
 import {canStart, isValidTwapInterval} from "../../../models/twapOrder";
 import {loadNumber, loadStoredValue} from "../../../storage";
 import {Sources} from "../index";
 import {State} from "./index";
 import {clicks, numberInputs} from "./events";
-import {createChildOrderOutcome, OrderOutcome} from "./history";
+import {TwapSliceOutcome, twapOutcomes} from "./history";
 
 export interface TwapSchedule {
     id: symbol;
     side: "BUY" | "SELL";
-}
-
-export interface TwapSliceOutcome extends OrderOutcome {
-    scheduleId: symbol;
 }
 
 export interface TwapActions {
@@ -41,12 +35,7 @@ export const twapIntent = (sources: Sources, state$: Stream<State>): TwapActions
         .take(1)
         .map((value) => +value)
         .map((interval) => isValidTwapInterval(interval) ? interval : 0),
-    onTwapSliceOutcome$: sources.HTTP.select("twap-order")
-        .map((response$) => {
-            const {scheduleId} = response$.request as TwapSliceRequest;
-            return createChildOrderOutcome("TWAP", response$).map((outcome) => ({ ...outcome, scheduleId }));
-        })
-        .compose(flattenConcurrently),
+    onTwapSliceOutcome$: twapOutcomes(sources.HTTP),
     onTwapSlicesChanged$: numberInputs(sources.DOM, "#twap-slices-input"),
     onTwapSlicesLoaded$: loadNumber(sources.storage, twapStorageKeys.slices),
     onTwapStarted$: Stream.merge(

@@ -1,11 +1,10 @@
 import {Stream} from "xstream";
-import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {isCurrentAccountRequest} from "../../../drivers/httpDriver";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
 import {State} from "./index";
 import {clicks, numberInputs, sizePresetClicks} from "./events";
-import {createChildOrderOutcome, createParentOrderOutcome, OrderOutcome} from "./history";
+import {OrderOutcome, orderOutcomes} from "./history";
 import {TwapActions, twapIntent} from "./twapIntent";
 
 export interface Actions extends TwapActions {
@@ -45,12 +44,6 @@ export const intent = (sources: Sources, state$: Stream<State>): Actions => {
         .filter((response) => isCurrentAccountRequest(response.request))
         .mapTo(null);
 
-    const onOrderOutcome$ = Stream.merge(
-        sources.HTTP.select("market-order").map((stream) => createChildOrderOutcome("Market", stream)),
-        sources.HTTP.select("limit-order").map((stream) => createChildOrderOutcome("Limit", stream)),
-        sources.HTTP.select("stop-order").map(createParentOrderOutcome),
-    ).compose(flattenConcurrently);
-
     return {
         ...twapIntent(sources, state$),
         onCancelOrders$,
@@ -65,7 +58,7 @@ export const intent = (sources: Sources, state$: Stream<State>): Actions => {
         onClickSizePresetButton$: sizePresetClicks(sources.DOM),
         onClickStopBuyButton$: clicks(sources.DOM, ".stop-order-buttons", ".buy-button"),
         onClickStopSellButton$: clicks(sources.DOM, ".stop-order-buttons", ".sell-button"),
-        onOrderOutcome$,
+        onOrderOutcome$: orderOutcomes(sources.HTTP),
         onPriceChanged$: numberInputs(sources.DOM, "#price-input"),
         onPriceWidthChanged$: numberInputs(sources.DOM, "#price-width-input"),
         onPriceWidthLoaded$: loadNumber(sources.storage, storageKeys.priceWidth, () => true),

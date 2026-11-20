@@ -12,7 +12,7 @@ import {Sound} from "../drivers/soundDriver";
 import {Position} from "../models/position";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
-import {createParentOrderOutcome} from "./trade/order/history";
+import {createCancellationTimeoutHistory, createParentOrderOutcome, orderOutcomes, twapOutcomes} from "./trade/order/history";
 import {OrderRequestBatch, submissions, unsignedSubmissions$} from "./trade/order/request";
 import {stopTwap, twapSigningFailed$} from "./trade/order/twapRequest";
 
@@ -74,11 +74,22 @@ export const Root = (sources: Sources): Sinks => {
     const ifdocoOutcome$ = sources.HTTP.select("ifdoco-order")
         .map(createParentOrderOutcome)
         .compose(flattenConcurrently);
-    const ifdocoHistoryReducer$ = ifdocoOutcome$
-        .map<Reducer<TradeState>>(({ histories }) => (state) => state && ({
-            ...state,
-            histories: histories.slice().reverse().concat(state.histories),
-        }));
+    const cancellationHistories$ = Stream.merge(
+        sources.HTTP.select("cancel-orders"),
+        sources.HTTP.select("cancel-parent-order"),
+    ).map(createCancellationTimeoutHistory)
+        .compose(flattenConcurrently)
+        .map((history) => [history]);
+
+    const orderHistoryReducer$ = Stream.merge(
+        ifdocoOutcome$.map(({ histories }) => histories.slice().reverse()),
+        // Keep timeout notices when the trade screen is inactive.
+        Stream.merge(orderOutcomes(sources.HTTP), twapOutcomes(sources.HTTP))
+            .filter(({ status }) => status === "unconfirmed")
+            .map(({ histories }) => histories.slice().reverse()),
+        cancellationHistories$,
+    ).map<Reducer<TradeState>>((histories) => (state) =>
+        state && { ...state, histories: histories.concat(state.histories) });
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>
@@ -111,7 +122,7 @@ export const Root = (sources: Sources): Sinks => {
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
             credentialsChanging$.mapTo(resetAccount),
             twapSigningFailed$.mapTo(resetTwap("TWAP stopped because an order could not be signed.")),
-            sources.state.isolateSink(ifdocoHistoryReducer$, tradeScope),
+            sources.state.isolateSink(orderHistoryReducer$, tradeScope),
             sources.state.isolateSink(orderSigningReducer$, tradeScope),
         ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
