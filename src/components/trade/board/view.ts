@@ -97,7 +97,7 @@ const barStyle = (size: number): object => {
 };
 
 const myPosition = (state: State, order: BoardOrder): VNode | null => {
-    const price = state.position.price;
+    const price = state.position.displayPrice;
     if (state.position.side === "SELL") {
         if (price === 0 || ceilBy(price, state.groupedSize) !== order.price) { return null; }
     } else {
