@@ -1,6 +1,7 @@
 import {button, div, h4, VNode} from "@cycle/dom";
 import {State} from "./index";
 import {numberInput} from "./numberInput";
+import {isValidOrderSize} from "./validation";
 
 export const stopSection = (state: State): VNode =>
     div([
@@ -14,7 +15,7 @@ export const stopSection = (state: State): VNode =>
 
 const stopButtonDisabled = (state: State, side: string): boolean =>
     state.isOrdering
-    || state.size === 0
+    || !isValidOrderSize(state)
     || state.triggerPrice <= 0
     || state.currentPrice === 0
     || !isValidTriggerPrice(side, state.triggerPrice, state.currentPrice);

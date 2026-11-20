@@ -2,6 +2,7 @@ import {div, hr, li, span, ul} from "@cycle/dom";
 import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
 import {State} from "./index";
+import {priceAlertView} from "./priceAlertView";
 
 export const view = (state$: Stream<State>) =>
     state$.compose(dropRepeats(sameViewInputs)).map((state) =>
@@ -11,6 +12,7 @@ export const view = (state$: Stream<State>) =>
                 span(".number", state.currentPrice?.toLocaleString() ?? "Pending"),
                 span(".unit", "JPY"),
             ]),
+            priceAlertView(state.priceAlert),
             div(".position", [
                 span(".label", "Position"),
                 span(".number", state.position.toPriceString()),
@@ -64,6 +66,7 @@ const historyStatus = (status: string, timedOut?: boolean): string => {
 
 const sameViewInputs = (previous: State, next: State): boolean =>
     Object.is(previous.currentPrice, next.currentPrice)
+    && previous.priceAlert === next.priceAlert
     && Object.is(previous.collateral, next.collateral)
     && Object.is(previous.position.price, next.position.price)
     && Object.is(previous.position.size, next.position.size)
