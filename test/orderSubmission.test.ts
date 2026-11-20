@@ -126,6 +126,30 @@ for (const outcome of ["succeed", "fail"] as const) {
     });
 }
 
+test("records a rejected limit order and permits a retry", (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: 1000 });
+    const order = setup(t);
+    order.enterPrice("900");
+
+    order.buyLimit();
+    deepEqual(order.requests.map(({ category }) => category), ["limit-order"]);
+    equal(order.state.isOrdering, true);
+
+    order.respondTo(order.requests[0]).reject();
+    equal(order.state.isOrdering, false);
+    deepEqual(order.sounds, ["failure"]);
+    deepEqual(order.histories, [{
+        createdAt: new Date(1000),
+        description: "BUY / 0.01 / 900",
+        name: "Limit",
+        status: "failed",
+    }]);
+
+    order.buyLimit();
+    deepEqual(order.requests.map(({ category }) => category), ["limit-order", "limit-order"]);
+    equal(order.state.isOrdering, true);
+});
+
 test("reports mixed Clear Orders results and stays locked until every request settles", (t) => {
     const order = setup(t);
     order.respondTo({ category: "orders", _namespace: ["trade"] }).succeed([
@@ -207,14 +231,18 @@ function setup(t: TestContext, width = "0.01") {
 
     const buyIFDOCO$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
+    const buyLimit$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
+    const priceInput$ = Stream.create<{ target: { value: string } }>();
     const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
+        "#price-input": { input: priceInput$ },
         ".order-buttons": { ".clear-order-button": { click: clearOrders$ } },
+        ".limit-order-buttons": { ".buy-button": { click: buyLimit$ } },
         ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buyIFDOCO$ },
@@ -255,7 +283,8 @@ function setup(t: TestContext, width = "0.01") {
         if (options.category === "parent-order") {
             parentDetails.set((options.query as { parent_order_id: string }).parent_order_id, options);
         }
-        if (["ifdoco-order", "market-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
+        if (["ifdoco-order", "limit-order", "market-order", "cancel-orders", "cancel-parent-order"]
+            .includes(options.category as string)) {
             requests.push(options);
         }
     } });
@@ -269,8 +298,10 @@ function setup(t: TestContext, width = "0.01") {
 
     return {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
+        buyLimit: () => buyLimit$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
         clearOrders: () => clearOrders$.shamefullySendNext(null),
+        enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         parentDetails,
@@ -282,6 +313,7 @@ function setup(t: TestContext, width = "0.01") {
             return {
                 fail: () => response$.shamefullySendError(new Error("Network failure")),
                 progress: () => response$.shamefullySendNext({ request } as Response),
+                reject: () => response$.shamefullySendError({ response: { request, status: 400 } }),
                 succeed: (body?: unknown) => {
                     response$.shamefullySendNext({ request, text: JSON.stringify(body) } as Response);
                     response$.shamefullySendComplete();
