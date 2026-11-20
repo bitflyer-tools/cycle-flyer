@@ -1,20 +1,25 @@
 import {mockDOMSource} from "@cycle/dom";
-import {RequestOptions, Response, ResponseStream} from "@cycle/http";
+import {RequestInput, RequestOptions, Response, ResponseStream} from "@cycle/http";
 import {MainHTTPSource} from "@cycle/http/lib/cjs/MainHTTPSource";
 import {StorageRequest} from "@cycle/storage";
 import {StateSource} from "@cycle/state";
 import {routerify} from "cyclic-router";
+import {deepEqual, equal, match} from "node:assert/strict";
+import {once} from "node:events";
+import {createServer} from "node:http";
 import {createHmac} from "node:crypto";
-import {deepEqual, equal} from "node:assert/strict";
 import {test, TestContext} from "node:test";
 import switchPath from "switch-path";
 import Stream, {MemoryStream} from "xstream";
+import {makeHTTPDriver} from "../src/drivers/httpDriver";
 import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
-import {parentOrdersPageSize} from "../src/http";
 import {credentialAwareStorageDriver} from "../src/storage";
 import {storageKeys} from "../src/components/trade/order/intent";
+import type {State as SummaryState} from "../src/components/trade/summary";
+import {view as summaryView} from "../src/components/trade/summary/view";
+import {cancelOrders, limitOrder, parentOrdersPageSize, twapSliceOrder} from "../src/http";
 
 test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
     const order = setup(t, "-10000");
@@ -155,7 +160,7 @@ test("records a rejected limit order and permits a retry", (t) => {
 
 test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
     const order = setup(t);
-    order.respondTo({ category: "parent-orders", _namespace: ["trade"] }).succeed([
+    order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getparentorders", category: "parent-orders", _namespace: ["trade"] }).succeed([
         { parent_order_id: "JCO-success" },
         { parent_order_id: "JCO-failure" },
     ]);
@@ -183,7 +188,7 @@ test("dispatches every Clear Orders request and stays locked until they all sett
 });
 
 test("clears cached account data and ignores late private responses after switching credentials", (t) => {
-    const trade = setup(t, "0.01", "account-a");
+    const trade = setup(t, "0.01", { apiKey: "account-a" });
     const positionRequest = () => trade.polls.filter(({ category }) => category === "positions").at(-1)!;
     const accountA = positionRequest();
     trade.respondTo(accountA).succeed([{ side: "BUY", size: 0.25, price: 100 }]);
@@ -226,7 +231,7 @@ test("clears cached account data and ignores late private responses after switch
 });
 
 test("continues pagination for the current account when an old parent-order list arrives", (t) => {
-    const trade = setup(t, "0.01", "account-a");
+    const trade = setup(t, "0.01", { apiKey: "account-a" });
     const firstPage = () => trade.polls.filter(({ category }) => category === "parent-orders").at(-1)!;
     const original = firstPage();
 
@@ -247,7 +252,7 @@ test("continues pagination for the current account when an old parent-order list
 });
 
 test("a pending IFDOCO from the previous account cannot lock or update the new account", (t) => {
-    const trade = setup(t, "0.01", "account-a");
+    const trade = setup(t, "0.01", { apiKey: "account-a" });
     trade.buyIFDOCO();
     equal(trade.state.isOrdering, true);
     const original = trade.respondTo(trade.requests[0]);
@@ -266,7 +271,7 @@ test("a pending IFDOCO from the previous account cannot lock or update the new a
 });
 
 test("rejects a response from before a secret-only change away and back", (t) => {
-    const trade = setup(t, "0.01", "account-a");
+    const trade = setup(t, "0.01", { apiKey: "account-a" });
     const original = trade.polls.find(({ category }) => category === "positions")!;
     trade.navigate("/setting");
     trade.writeCredential("api-secret", "replacement");
@@ -286,7 +291,97 @@ function assertSignature(order: RequestOptions, key: string, secret: string) {
     equal(headers["ACCESS-SIGN"], createHmac("sha256", secret).update(signed).digest("hex"));
 }
 
-function setup(t: TestContext, width = "0.01", apiKey?: string) {
+for (const category of ["limit-order", "cancel-orders"] as const) {
+    test(`aborts a stalled ${category} and displays it as unconfirmed without retrying`, { timeout: 5_000 }, async (t) => {
+        const paths: string[] = [];
+        const server = createServer((request, response) => {
+            request.resume();
+            paths.push(new URL(request.url!, "http://localhost").pathname);
+            if (paths.length === 1) {
+                return;
+            }
+            response.end();
+        });
+        t.after(() => {
+            server.closeAllConnections();
+            server.close();
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const address = server.address() as { port: number };
+        const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${address.port}` });
+        order.enterPrice("10000");
+        const refreshOrders = () => order.respondTo(order.polls.filter(({ category }) => category === "orders").at(-1)!)
+            .succeed([{ side: "BUY", size: 0.1, price: 10000 }]);
+        refreshOrders();
+        const submit = category === "limit-order" ? order.buyLimit : order.clearOrders;
+        const path = category === "limit-order" ? "/v1/me/sendchildorder" : "/v1/me/cancelallchildorders";
+
+        const receivedFirst = once(server, "request");
+        submit();
+        submit();
+        equal(order.state.isOrdering, true);
+        order.navigate("/setting");
+        const [, stalledResponse] = await receivedFirst;
+        await once(stalledResponse, "close");
+        order.navigate("/");
+        equal(order.state.isOrdering, false);
+        deepEqual(paths, [path]);
+        equal(order.requests.length, 1);
+        equal(order.histories[0].status, "unconfirmed");
+        summaryView(Stream.of<SummaryState>({
+            ...order.tradeState,
+            collateral: 0,
+            marketState: { health: "", state: "" },
+        })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /Unconfirmed \(timed out\)/) });
+
+        refreshOrders();
+        const received = once(server, "request");
+        submit();
+        await received;
+        deepEqual(paths, [path, path]);
+        equal(order.requests.length, 2);
+    });
+}
+
+for (const route of ["/", "/setting"]) {
+    test(`records a TWAP slice deadline once when it expires on ${route}`, (t) => {
+        const order = setup(t);
+        const request = twapSliceOrder(0.01, "BUY", Symbol());
+        const response = order.respondTo({ ...request, _namespace: ["trade"] });
+
+        if (route === "/setting") order.navigate(route);
+        response.fail(Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }));
+        deepEqual(order.histories.map(({ name, status }) => ({ name, status })), [
+            { name: "TWAP", status: "unconfirmed" },
+        ]);
+
+        if (route === "/setting") order.navigate("/");
+        equal(order.histories.length, 1);
+        summaryView(Stream.of<SummaryState>({
+            ...order.tradeState,
+            collateral: 0,
+            marketState: { health: "", state: "" },
+        })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /Unconfirmed \(timed out\)/) });
+    });
+}
+
+test("ignores write deadlines from the previous account", (t) => {
+    const trade = setup(t);
+    const pending = [cancelOrders(), limitOrder(10000, 0.01, "BUY"), twapSliceOrder(0.01, "BUY", Symbol())]
+        .map((request) => trade.respondTo({ ...request, _namespace: ["trade"] }));
+
+    trade.navigate("/setting");
+    trade.writeCredential("api-key", "account-b");
+    const timeout = Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" });
+    pending.forEach((response) => response.fail(timeout));
+    trade.navigate("/");
+
+    deepEqual(trade.histories, []);
+    deepEqual(trade.sounds, []);
+});
+
+function setup(t: TestContext, width = "0.01", { apiKey = "test", writeOrigin }: { apiKey?: string; writeOrigin?: string } = {}) {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     const credentials: Record<string, string | undefined> = { "api-key": apiKey, "api-secret": "test" };
     Object.defineProperty(globalThis, "localStorage", {
@@ -313,6 +408,9 @@ function setup(t: TestContext, width = "0.01", apiKey?: string) {
     const priceInput$ = Stream.create<{ target: { value: string } }>();
     const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
+    const writes$ = Stream.create<RequestInput | null>();
+    const transport$ = makeHTTPDriver(250)(writes$).select();
+    const source = new MainHTTPSource(Stream.merge(responses$, transport$), "HTTP");
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
@@ -333,7 +431,7 @@ function setup(t: TestContext, width = "0.01", apiKey?: string) {
             "#api-key-input": { keyup: apiKeyInput$ },
             "#api-secret-input": { keyup: apiSecretInput$ },
         } }),
-        HTTP: new MainHTTPSource(responses$, "HTTP"),
+        HTTP: source,
         history: history$,
         socket: {
             board$: Stream.never(),
@@ -364,6 +462,9 @@ function setup(t: TestContext, width = "0.01", apiKey?: string) {
         if (["ifdoco-order", "limit-order", "market-order", "cancel-orders", "cancel-parent-order"]
             .includes(options.category as string)) {
             requests.push(options);
+            if (writeOrigin) {
+                writes$.shamefullySendNext({ ...options, url: writeOrigin + new URL(options.url).pathname });
+            }
         }
     } });
     const sounds: Sound[] = [];
@@ -394,7 +495,7 @@ function setup(t: TestContext, width = "0.01", apiKey?: string) {
             const response$ = Object.assign(Stream.createWithMemory<Response>(), { request: { ...request } });
             responses$.shamefullySendNext(response$);
             return {
-                fail: () => response$.shamefullySendError(new Error("Network failure")),
+                fail: (error = new Error("Network failure")) => response$.shamefullySendError(error),
                 progress: () => response$.shamefullySendNext({ request } as Response),
                 reject: () => response$.shamefullySendError({ response: { request, status: 400 } }),
                 succeed: (body?: unknown) => {

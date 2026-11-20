@@ -1,16 +1,38 @@
-import {Response, ResponseStream} from "@cycle/http";
+import {HTTPSource, Response, ResponseStream} from "@cycle/http";
 import {MemoryStream, Stream} from "xstream";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
+import {isWriteDeadlineError} from "../../../drivers/httpDriver";
+import {TwapSliceRequest} from "../../../http";
 import {createOrderHistory, OrderHistory} from "../../../models/orderHistory";
-import {isCurrentResponse} from "../privateResponses";
+import {isCurrentResponse, privateResponses} from "../privateResponses";
 
 type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 
-type OrderStatus = "success" | "failed";
+type OrderStatus = "success" | "failed" | "unconfirmed";
 
 export interface OrderOutcome {
     status: OrderStatus;
     histories: OrderHistory[];
 }
+
+export interface TwapSliceOutcome extends OrderOutcome {
+    scheduleId: symbol;
+}
+
+export const orderOutcomes = (http: HTTPSource): Stream<OrderOutcome> =>
+    Stream.merge(
+        privateResponses(http, "market-order").map((response$) => createChildOrderOutcome("Market", response$)),
+        privateResponses(http, "limit-order").map((response$) => createChildOrderOutcome("Limit", response$)),
+        privateResponses(http, "stop-order").map(createParentOrderOutcome),
+    ).compose(flattenConcurrently);
+
+export const twapOutcomes = (http: HTTPSource): Stream<TwapSliceOutcome> =>
+    privateResponses(http, "twap-order")
+        .map((response$) => {
+            const {scheduleId} = response$.request as TwapSliceRequest;
+            return createChildOrderOutcome("TWAP", response$).map((outcome) => ({ ...outcome, scheduleId }));
+        })
+        .compose(flattenConcurrently);
 
 export const createChildOrderOutcome = (name: string, stream$: HTTPResponse$): Stream<OrderOutcome> =>
     createOutcome(stream$, (body, status) => {
@@ -31,6 +53,20 @@ export const createParentOrderOutcome = (stream$: HTTPResponse$): Stream<OrderOu
         ),
     );
 
+export const createCancellationTimeoutHistory = (stream$: HTTPResponse$): Stream<OrderHistory> =>
+    stream$.mapTo<OrderHistory | null>(null)
+        .replaceError((error) => {
+            if (!isWriteDeadlineError(error)) return Stream.empty();
+            const parentOrderId = JSON.parse(stream$.request.send as string).parent_order_id;
+            return Stream.of<OrderHistory | null>({
+                createdAt: new Date(),
+                description: parentOrderId || "All child orders",
+                name: "Cancel",
+                status: "unconfirmed",
+            });
+        })
+        .filter((history): history is OrderHistory => history !== null);
+
 const createOutcome = (
     stream$: HTTPResponse$,
     createHistories: (body: string, status: OrderStatus) => OrderHistory[],
@@ -38,7 +74,7 @@ const createOutcome = (
     stream$
         .last()
         .mapTo<OrderStatus>("success")
-        .replaceError(() => Stream.of<OrderStatus>("failed"))
+        .replaceError((error) => Stream.of<OrderStatus>(isWriteDeadlineError(error) ? "unconfirmed" : "failed"))
         .filter(() => isCurrentResponse(stream$))
         .map((status) => ({ status, histories: createHistories(stream$.request.send as string, status) }));
 
