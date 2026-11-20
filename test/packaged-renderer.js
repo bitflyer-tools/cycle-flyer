@@ -44,8 +44,21 @@ const checkRenderer = async () => {
 
   await click('.menu-setting');
   await waitFor(() => visible('.content #api-key-input'), 'Settings');
-  await click('.menu-trade');
+  await contents.executeJavaScript(`(() => {
+    for (const key of ['api-key', 'api-secret']) {
+      const field = document.querySelector('#' + key + '-input');
+      field.value = 'pasted-test-' + key;
+      field.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        inputType: 'insertFromPaste',
+      }));
+    }
+    document.querySelector('.menu-trade').click();
+  })()`);
   await waitFor(() => visible('.content .trade'), 'Trade after returning from Settings');
+  assert.deepEqual(await contents.executeJavaScript(
+    "['api-key', 'api-secret'].map((key) => localStorage.getItem(key))"
+  ), ['pasted-test-api-key', 'pasted-test-api-secret']);
 };
 
 const main = async (executable) => {
@@ -81,7 +94,7 @@ const main = async (executable) => {
     const { error, result } = JSON.parse(message.data);
     assert.ifError(error);
     assert.equal(result.exceptionDetails, undefined, result.result.description);
-    console.log('Packaged renderer sandbox and routing checks passed.');
+    console.log('Packaged renderer sandbox, routing, and credential persistence checks passed.');
   } catch (error) {
     if (stderr) console.error(stderr.trimEnd());
     throw error;
