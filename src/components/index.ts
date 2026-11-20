@@ -10,7 +10,7 @@ import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
-import {createCancellationOutcome, createParentOrderOutcome} from "./trade/order/history";
+import {createCancellationOutcome, createParentOrderOutcome, orderOutcomes, twapOutcomes} from "./trade/order/history";
 import {OrderRequestBatch, submissions} from "./trade/order/request";
 
 interface RootState {
@@ -66,11 +66,14 @@ export const Root = (sources: Sources): Sinks => {
         sources.HTTP.select("cancel-orders").map(createCancellationOutcome),
         sources.HTTP.select("cancel-parent-order").map(createCancellationOutcome),
     ).compose(flattenConcurrently);
-    const orderHistoryReducer$ = orderOutcome$
-        .map(({ histories }) => (state: TradeState) => ({
-            ...state,
-            histories: histories.slice().reverse().concat(state.histories),
-        }));
+    const orderHistoryReducer$ = Stream.merge(
+        orderOutcome$.map(({ histories }) => histories.slice().reverse()),
+        // Keep timeout notices when the trade screen is inactive.
+        Stream.merge(orderOutcomes(sources.HTTP), twapOutcomes(sources.HTTP))
+            .filter(({ status }) => status === "unconfirmed")
+            .map(({ histories }) => histories.slice().reverse()),
+    ).map<Reducer<TradeState>>((histories) => (state) =>
+        state && { ...state, histories: histories.concat(state.histories) });
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>

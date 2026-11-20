@@ -49,8 +49,8 @@ export const view = (state$: Stream<State>) =>
             ul(".histories", state.histories.map((history) =>
                     li(".history", [
                         span(
-                            history.status === "success" ? ".success" : ".failed",
-                            history.status === "success" ? "○" : "✗",
+                            "." + history.status,
+                            historyStatus(history.status),
                         ),
                         span(".name", history.name),
                         span(".description", history.description),
@@ -59,6 +59,11 @@ export const view = (state$: Stream<State>) =>
                 ),
             ),
         ]));
+
+const historyStatus = (status: string): string => {
+    if (status === "unconfirmed") return "Unconfirmed (timed out)";
+    return status === "success" ? "○" : "✗";
+};
 
 const sameViewInputs = (previous: State, next: State): boolean =>
     Object.is(previous.currentPrice, next.currentPrice)
