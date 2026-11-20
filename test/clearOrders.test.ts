@@ -143,6 +143,24 @@ test("Clear Orders discards an in-flight child-order poll and requests a fresh l
     }
 });
 
+test("Clear Orders invalidates every pending child-order poll and accepts the next valid list", () => {
+    const {childResponses, orderLists, state} = clearOrders([]);
+    const stalePolls = [Stream.create<unknown>(), Stream.create<unknown>()];
+    orderLists.shamefullySendNext(Stream.of<unknown>(childOrderList(100)));
+    stalePolls.forEach((poll$) => orderLists.shamefullySendNext(poll$));
+
+    childResponses.shamefullySendNext(Stream.of<unknown>({}));
+    orderLists.shamefullySendNext(Stream.of<unknown>({ text: "{}" }));
+    stalePolls.forEach((poll$) => poll$.shamefullySendNext(childOrderList(100)));
+    deepStrictEqual(state().orders, []);
+
+    const freshPoll$ = Stream.create<unknown>();
+    orderLists.shamefullySendNext(freshPoll$);
+    orderLists.shamefullySendNext(Stream.of<unknown>({ text: "invalid JSON" }));
+    freshPoll$.shamefullySendNext(childOrderList(200));
+    deepStrictEqual(state().orders.map(({price}) => price), [200]);
+});
+
 test("A failed child-order cancellation leaves the in-flight poll active", () => {
     const {childResponses, orderLists, startPolling, state} = clearOrders([]);
     const {polls, subscription} = startPolling();

@@ -45,18 +45,14 @@ export const intent = (sources: Sources): Actions => {
     ).compose(debounce(500));
 
     const ordersCanceled = Symbol("ordersCanceled");
-    type OrderList = object[] | typeof ordersCanceled;
     const cancelOrders$ = sources.HTTP.select("cancel-orders")
         .map((response$) => response$.replaceError(() => Stream.empty()))
         .compose(flattenConcurrently)
-        .map((): Stream<OrderList> => Stream.never<OrderList>().startWith(ordersCanceled));
+        .mapTo<typeof ordersCanceled>(ordersCanceled);
 
-    const orderLists$ = Stream.merge<Stream<OrderList>>(
-        sources.HTTP.select("orders")
-            .map((response$) => response$.replaceError(() => Stream.never())
-                .map((response): OrderList => JSON.parse(response.text))),
-        cancelOrders$,
-    ).flatten();
+    const orderLists$ = pollResponse<object[] | typeof ordersCanceled>(
+        sources.HTTP.select("orders"), decodeArray, cancelOrders$,
+    );
 
     const pages = parentOrderPages(sources.HTTP, () => ++parentOrderSequence);
     const onParentOrdersLoaded$ = pages.loaded$;
@@ -83,6 +79,8 @@ export const intent = (sources: Sources): Actions => {
         parentOrderRequests$: Stream.merge(pages.requests$, details.requests$),
     };
 };
+
+const decodeArray = <T>(json: unknown): T[] | undefined => Array.isArray(json) ? json : undefined;
 
 const isPositionList = (positions: unknown): boolean =>
     Array.isArray(positions) && positions.every((position) =>

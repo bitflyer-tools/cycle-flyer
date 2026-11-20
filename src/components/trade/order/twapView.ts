@@ -16,12 +16,13 @@ export const twapSection = (state: State): VNode =>
         ]),
         p(".twap-interval-hint", `Enter an interval greater than 0 and up to ${maximumTwapInterval} seconds.`),
         p(".twap-status", twapStatus(state)),
+        ...(isRunning(state.twap) ? [p(".twap-status", "Schedule edits apply to the next TWAP.")] : []),
         div(".twap-order-buttons.order-buttons", twapButtons(state)),
     ]);
 
 const twapStatus = (state: State): string =>
     isRunning(state.twap)
-        ? `Running: ${state.twap.remaining} / ${state.twap.slices} slices left`
+        ? `Running: ${state.twap.remaining} / ${state.twap.totalSlices} slices left`
         : `${sliceSize(state.size, state.twap.slices)} x ${state.twap.slices} every ${state.twap.interval} sec`;
 
 const twapButtons = (state: State): VNode[] =>
