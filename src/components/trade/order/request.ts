@@ -1,4 +1,4 @@
-import {HTTPSource, RequestInput, RequestOptions} from "@cycle/http";
+import {HTTPSource, RequestInput, RequestOptions, Response} from "@cycle/http";
 import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
@@ -7,21 +7,33 @@ import {apiCredentials, credentialChanges$} from "../../../credentials";
 import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
-import {isValidIFDOCOOrder, isValidLimitOrder, isValidOrderSize} from "./validation";
+import {canClearPosition, isValidIFDOCOOrder, isValidLimitOrder, isValidOrderSize} from "./validation";
 
 export interface OrderRequestBatch {
     requests: RequestInput[];
     _namespace?: string[];
+    closePositionSize?: number;
 }
 
 interface Submission extends RequestOptions {
     submissionId: symbol;
+    closePositionSize?: number;
 }
 
+export const closePositionOutcomes = (http: HTTPSource): Stream<{ id: symbol; rejected: boolean }> =>
+    http.select("market-order")
+        .map((response$) => ({ response$, submission: response$.request as Submission }))
+        .filter(({ submission }) => submission.closePositionSize !== undefined && !!submission.submissionId)
+        .map(({ response$, submission: { submissionId: id } }) => response$.last()
+            .map((response) => ({ id, rejected: isOrderRejection(response) }))
+            .replaceError((error) => Stream.of({ id, rejected: isOrderRejection(error?.response) })))
+        .compose(flattenConcurrently);
+
 export const submissions = (requests$: Stream<OrderRequestBatch>, http: HTTPSource): Stream<Submission[] | null> => {
-    const requested$ = requests$.map(({ requests, _namespace }) => requests.map((request) => ({
+    const requested$ = requests$.map(({ requests, _namespace, closePositionSize }) => requests.map((request) => ({
         ...request as RequestOptions,
         _namespace,
+        closePositionSize,
         submissionId: Symbol(),
     })));
 
@@ -69,8 +81,12 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
         withState(actions.onClickStopSellButton$, (state) => stopOrder(state.triggerPrice, state.size, "SELL"), isValidOrderSize),
         withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder, isValidIFDOCOOrder),
         withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder, isValidIFDOCOOrder),
-        withState(actions.onClickClearButton$, clearPositionOrder,
-            (state) => accountIsCurrent(state) && state.position.size !== 0),
+        actions.onClickClearButton$.compose(sampleCombine(state$))
+            .filter(([_, state]) => accountIsCurrent(state) && canClearPosition(state))
+            .map(([_, { position }]) => ({
+                closePositionSize: position.size,
+                requests: [marketOrder(position.size, position.side === "BUY" ? "SELL" : "BUY")],
+            })),
         actions.onClickClearOrderButton$.compose(sampleCombine(state$))
             .filter(([_, state]) => accountIsCurrent(state)
                 && state.orders.length + Object.keys(state.parentStopOrders).length > 0)
@@ -96,5 +112,16 @@ const ifdocoSellOrder = (state: State): RequestInput =>
         "SELL",
     );
 
-const clearPositionOrder = (state: State): RequestInput =>
-    marketOrder(state.position.size, state.position.side === "BUY" ? "SELL" : "BUY");
+const isOrderRejection = (response?: Response): boolean => {
+    const status = response?.status ?? 0;
+    const hasDefinitiveStatus = (status >= 200 && status < 300)
+        || (status >= 400 && status < 500 && status !== 408);
+    if (!response || !hasDefinitiveStatus) return false;
+    try {
+        const body = JSON.parse(response.text);
+        return Number.isFinite(body?.status) && body.status < 0
+            && typeof body.error_message === "string" && body.error_message.trim().length > 0;
+    } catch {
+        return false;
+    }
+};

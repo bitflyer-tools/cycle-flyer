@@ -30,10 +30,12 @@ export const resetAccountState = (state: State, version: symbol): State => {
         ...account,
         credentialVersion: version,
         canceledParentOrderIds: undefined,
+        positionClose: undefined,
         orderComponentState: orderComponentState && {
             ...orderComponentState,
             ...account,
             isOrdering: false,
+            positionClosePending: false,
             twap: { ...orderComponentState.twap, remaining: 0, scheduleId: undefined },
         },
         summaryComponentState: summaryComponentState && {
@@ -65,7 +67,13 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map((orders: Order[]) => (state: State) => ({ ...state, orders }));
 
     const positionReducer$ = actions.onPositionsLoaded$
-        .map((position) => (state: State) => ({ ...state, position }));
+        .map(({ position, positionCloseId }) => (state: State) => {
+            const close = state.positionClose;
+            const reconciled = close?.settled && close.id === positionCloseId
+                && (close.rejected || position.size === 0 || (Math.sign(position.size) === Math.sign(close.size)
+                    && Math.abs(position.size) < Math.abs(close.size)));
+            return { ...state, position, positionClose: reconciled ? undefined : close };
+        });
 
     const cancelParentOrderReducer$ = actions.onCancelParentOrder$
         .map(({ id, sequence }) => (state: State) => {

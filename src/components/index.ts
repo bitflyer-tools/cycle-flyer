@@ -13,7 +13,7 @@ import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
 import {resetAccountState} from "./trade/model";
 import {createCancellationTimeoutHistory, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
-import {OrderRequestBatch, submissions} from "./trade/order/request";
+import {closePositionOutcomes, OrderRequestBatch, submissions} from "./trade/order/request";
 import {privateResponses} from "./trade/privateResponses";
 
 interface RootState {
@@ -63,6 +63,23 @@ export const Root = (sources: Sources): Sinks => {
 
     const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<OrderRequestBatch>()).flatten();
     const pending$ = submissions(orderRequests$, sources.HTTP);
+    const positionCloseReducer$ = pending$.map((pending) => (state: TradeState | undefined) => {
+        if (!state) return state;
+
+        const submission = pending?.find(({ closePositionSize }) => closePositionSize !== undefined);
+        if (submission?.closePositionSize !== undefined) {
+            return { ...state, positionClose: {
+                id: submission.submissionId, size: submission.closePositionSize, settled: false,
+            } };
+        }
+        return state;
+    });
+    const closeOutcomeReducer$ = closePositionOutcomes(sources.HTTP)
+        .map(({ id, rejected }) => (state: TradeState | undefined) => {
+            const close = state?.positionClose;
+            if (!close || close.id !== id || close.settled) return state;
+            return { ...state, positionClose: { ...close, settled: true, rejected } };
+        });
     const isOrdering$ = pending$.map((pending) => pending !== null);
     const orderOutcome$ = submittedOrderOutcomes(sources.HTTP);
     const cancellationHistories$ = Stream.merge(
@@ -111,6 +128,8 @@ export const Root = (sources: Sources): Sinks => {
         ),
         state: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
+            sources.state.isolateSink(positionCloseReducer$, tradeScope),
+            sources.state.isolateSink(closeOutcomeReducer$, tradeScope),
             sources.state.isolateSink(orderHistoryReducer$, tradeScope),
             credentialChanges$.map((version): Reducer<RootState> => (state) =>
                 state?.trade ? { ...state, trade: resetAccountState(state.trade, version) } : state),
