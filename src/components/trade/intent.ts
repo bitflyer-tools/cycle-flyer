@@ -18,6 +18,7 @@ export interface Actions {
     onOrdersLoaded$: Stream<object[]>;
     onParentOrderLoaded$: Stream<ActiveParentOrder>;
     onParentOrdersLoaded$: Stream<{ orders: ActiveParentOrder[]; sequence: number }>;
+    onParentOrderListSettled$: Stream<null>;
     parentOrderRequests$: Stream<RequestOptions>;
     onPositionsLoaded$: Stream<Position>;
 }
@@ -66,6 +67,7 @@ export const intent = (sources: Sources): Actions => {
         onOrdersLoaded$,
         onParentOrderLoaded$: details.loaded$,
         onParentOrdersLoaded$,
+        onParentOrderListSettled$: pages.settled$,
         onPositionsLoaded$,
         parentOrderRequests$: Stream.merge(pages.requests$, details.requests$),
     };
