@@ -24,7 +24,7 @@ const defaultState: State = {
 export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
-    const historyReducer$ = Stream.merge(actions.onOrderOutcome$, actions.onTwapSliceOutcome$)
+    const historyReducer$ = actions.onOrderOutcome$
         .map(({ histories }) => (state: State) => ({
             ...state,
             histories: histories.slice().reverse().concat(state.histories),

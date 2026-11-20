@@ -2,6 +2,7 @@ import {Stream} from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
+import {State} from "./index";
 import {clicks, numberInputs, sizePresetClicks} from "./events";
 import {createChildOrderOutcome, createParentOrderOutcome, OrderOutcome} from "./history";
 import {TwapActions, twapIntent} from "./twapIntent";
@@ -35,7 +36,7 @@ export const storageKeys = {
     size: "order-size",
 };
 
-export const intent = (sources: Sources): Actions => {
+export const intent = (sources: Sources, state$: Stream<State>): Actions => {
     const onOrderOutcome$ = Stream.merge(
         sources.HTTP.select("market-order").map((stream) => createChildOrderOutcome("Market", stream)),
         sources.HTTP.select("limit-order").map((stream) => createChildOrderOutcome("Limit", stream)),
@@ -43,7 +44,7 @@ export const intent = (sources: Sources): Actions => {
     ).compose(flattenConcurrently);
 
     return {
-        ...twapIntent(sources),
+        ...twapIntent(sources, state$),
         onClickClearButton$: clicks(sources.DOM, ".order-buttons", ".clear-button"),
         onClickClearOrderButton$: clicks(sources.DOM, ".order-buttons", ".clear-order-button"),
         onClickIFDOCOBuyButton$: clicks(sources.DOM, ".ranged-ifdoco-order-buttons", ".buy-button"),
@@ -58,7 +59,7 @@ export const intent = (sources: Sources): Actions => {
         onOrderOutcome$,
         onPriceChanged$: numberInputs(sources.DOM, "#price-input"),
         onPriceWidthChanged$: numberInputs(sources.DOM, "#price-width-input"),
-        onPriceWidthLoaded$: loadNumber(sources.storage, storageKeys.priceWidth),
+        onPriceWidthLoaded$: loadNumber(sources.storage, storageKeys.priceWidth, () => true),
         onRatioChanged$: numberInputs(sources.DOM, "#ratio-input"),
         onRatioLoaded$: loadNumber(sources.storage, storageKeys.ratio),
         onSizeChanged$: numberInputs(sources.DOM, "#size-input"),
