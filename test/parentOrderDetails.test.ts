@@ -167,6 +167,74 @@ test("reconciles on reconnect and ignores responses for removed parents", async 
     deepStrictEqual(trade.requestedIds(), ["a", "b", "a", "b"]);
 });
 
+test("coalesces periodic and order-event refreshes until all parent order pages arrive", (t) => {
+    t.mock.timers.enable({apis: ["setInterval"]});
+    const trade = setup(t);
+    const state = observeState(t, trade.actions);
+    const firstPage$ = trade.startList();
+    const orders = Array.from({length: 100}, (_, index) => ({
+        id: index + 2, parent_order_id: `parent-${index + 2}`,
+    }));
+
+    t.mock.timers.tick(10000);
+    strictEqual(trade.listRequests.length, 1);
+    firstPage$.shamefullySendNext({text: JSON.stringify(orders)} as Response);
+    strictEqual(trade.pageRequests.length, 1);
+
+    trade.events.shamefullySendNext({parent_order_id: "parent-1"} as ParentOrderEvent);
+    t.mock.timers.tick(10500);
+    strictEqual(trade.listRequests.length, 1);
+    deepStrictEqual(state().parentStopOrders, {});
+
+    trade.send(trade.pageRequests[0], Stream.of({text: '[{"id":1,"parent_order_id":"parent-1"}]'} as Response));
+    deepStrictEqual(Object.keys(state().parentStopOrders), [...orders.map((order) => order.parent_order_id), "parent-1"]);
+    strictEqual(trade.listRequests.length, 2);
+
+    trade.startList().shamefullySendNext({text: JSON.stringify(orders)} as Response);
+    strictEqual(trade.pageRequests.length, 2);
+    trade.events.shamefullySendNext({parent_order_id: "parent-1"} as ParentOrderEvent);
+    t.mock.timers.tick(500);
+    strictEqual(trade.listRequests.length, 2);
+    trade.fail(trade.pageRequests[1]);
+    strictEqual(trade.listRequests.length, 3);
+    strictEqual(Object.keys(state().parentStopOrders).length, 101);
+
+    trade.fail(trade.listRequests[2]);
+    t.mock.timers.tick(10000);
+    strictEqual(trade.listRequests.length, 4);
+});
+
+["first", "later"].forEach((stalledPage) => {
+    test(`recovers when the ${stalledPage} parent order page times out`, (t) => {
+        t.mock.timers.enable({apis: ["setInterval"]});
+        const trade = setup(t);
+        const state = observeState(t, trade.actions);
+        trade.list(["old"]);
+        t.mock.timers.tick(10000);
+        const firstPage$ = trade.startList();
+        const stalled$ = Stream.create<Response>();
+        if (stalledPage === "later") {
+            const orders = Array.from({length: 100}, (_, index) => ({
+                id: index + 2, parent_order_id: `partial-${index}`,
+            }));
+            firstPage$.shamefullySendNext({text: JSON.stringify(orders)} as Response);
+            trade.send(trade.pageRequests[0], stalled$);
+        }
+
+        t.mock.timers.tick(14999);
+        strictEqual(trade.listRequests.length, 2);
+        t.mock.timers.tick(1);
+        strictEqual(trade.listRequests.length, 3);
+        deepStrictEqual(Object.keys(state().parentStopOrders), ["old"]);
+
+        const late$ = stalledPage === "later" ? stalled$ : firstPage$;
+        late$.shamefullySendNext({text: '[{"parent_order_id":"late"}]'} as Response);
+        deepStrictEqual(Object.keys(state().parentStopOrders), ["old"]);
+        trade.startList().shamefullySendNext({text: '[{"parent_order_id":"new"}]'} as Response);
+        deepStrictEqual(Object.keys(state().parentStopOrders), ["new"]);
+    });
+});
+
 const observeState = (t: { after: (cleanup: () => void) => void }, actions: ReturnType<typeof intent>) => {
     let state: State | undefined;
     const subscription = model(actions).subscribe({ next: (reducer) => { state = reducer(state); } });
@@ -196,12 +264,14 @@ const setup = (t: { after: (cleanup: () => void) => void }) => {
     const actions = intent(sources as unknown as Parameters<typeof intent>[0]);
     const requests: RequestOptions[] = [];
     const listRequests: RequestOptions[] = [];
+    const pageRequests: RequestOptions[] = [];
     const loaded: ActiveParentOrder[] = [];
     const request$ = request(actions).filter((input): input is string | RequestOptions => input !== null);
     const sink = isolateSink(request$, "trade").subscribe({ next: (input) => {
         if (typeof input !== "object") { return; }
         if (input.category === "parent-order") { requests.push(input); }
         if (input.category === "parent-orders") { listRequests.push(input); }
+        if (input.category === "parent-orders-page") { pageRequests.push(input); }
     } });
     const details = actions.onParentOrderLoaded$.subscribe({ next: (detail) => loaded.push(detail) });
     t.after(() => {
@@ -234,6 +304,7 @@ const setup = (t: { after: (cleanup: () => void) => void }) => {
                 parent_order_id: id,
             }))),
         listRequests,
+        pageRequests,
         loaded,
         reconnect,
         requestedIds: () => requests.map(requestedId),
