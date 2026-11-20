@@ -63,8 +63,8 @@ const createHistoryListView = () => {
         list = ul(".histories", histories.map((history) =>
             li(".history", [
                 span(
-                    history.status === "success" ? ".success" : ".failed",
-                    history.status === "success" ? "○" : "✗",
+                    "." + history.status,
+                    historyStatus(history.status),
                 ),
                 span(".name", history.name),
                 span(".description", history.description),
@@ -73,6 +73,11 @@ const createHistoryListView = () => {
         ));
         return list;
     };
+};
+
+const historyStatus = (status: string): string => {
+    if (status === "unconfirmed") return "Unconfirmed (timed out)";
+    return status === "success" ? "○" : "✗";
 };
 
 const sameViewInputs = (previous: State, next: State): boolean =>

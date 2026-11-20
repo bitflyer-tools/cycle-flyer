@@ -11,7 +11,7 @@ import {Sound} from "../drivers/soundDriver";
 import {prependOrderHistories} from "../models/orderHistory";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
-import {createParentOrderOutcome} from "./trade/order/history";
+import {createCancellationTimeoutHistory, createParentOrderOutcome, orderOutcomes, twapOutcomes} from "./trade/order/history";
 import {OrderRequestBatch, submissions} from "./trade/order/request";
 
 interface RootState {
@@ -65,11 +65,22 @@ export const Root = (sources: Sources): Sinks => {
     const ifdocoOutcome$ = sources.HTTP.select("ifdoco-order")
         .map(createParentOrderOutcome)
         .compose(flattenConcurrently);
-    const ifdocoHistoryReducer$ = ifdocoOutcome$
-        .map(({ histories }) => (state: TradeState) => ({
-            ...state,
-            histories: prependOrderHistories(state.histories, histories),
-        }));
+    const cancellationHistories$ = Stream.merge(
+        sources.HTTP.select("cancel-orders"),
+        sources.HTTP.select("cancel-parent-order"),
+    ).map(createCancellationTimeoutHistory)
+        .compose(flattenConcurrently)
+        .map((history) => [history]);
+
+    const orderHistoryReducer$ = Stream.merge(
+        ifdocoOutcome$.map(({ histories }) => histories),
+        // Keep timeout notices when the trade screen is inactive.
+        Stream.merge(orderOutcomes(sources.HTTP), twapOutcomes(sources.HTTP))
+            .filter(({ status }) => status === "unconfirmed")
+            .map(({ histories }) => histories),
+        cancellationHistories$,
+    ).map<Reducer<TradeState>>((histories) => (state) =>
+        state && { ...state, histories: prependOrderHistories(state.histories, histories) });
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>
@@ -100,7 +111,7 @@ export const Root = (sources: Sources): Sinks => {
         ),
         state: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
-            sources.state.isolateSink(ifdocoHistoryReducer$, tradeScope),
+            sources.state.isolateSink(orderHistoryReducer$, tradeScope),
         ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
     };

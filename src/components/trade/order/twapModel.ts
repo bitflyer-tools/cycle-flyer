@@ -16,9 +16,9 @@ export const twapModel = (actions: TwapActions): Stream<Reducer<State>> => {
         .map(({id}) => updateTwap((twap) => ({ ...twap, remaining: twap.slices, scheduleId: id })));
 
     const sliceReducer$ = actions.onTwapSliceOutcome$
-        .map<Reducer<State>>(({histories, scheduleId}) => (state) => state && ({
+        .map<Reducer<State>>(({histories, scheduleId, status}) => (state) => state && ({
             ...state,
-            histories: prependOrderHistories(state.histories, histories),
+            histories: status === "unconfirmed" ? state.histories : prependOrderHistories(state.histories, histories),
             twap: state.twap.scheduleId === scheduleId
                 ? { ...state.twap, remaining: Math.max(state.twap.remaining - 1, 0) }
                 : state.twap,
