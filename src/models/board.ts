@@ -87,14 +87,12 @@ export class Board {
         }
 
         const sizes = new Map<number, number>();
-        orders.forEach((order) => {
+        for (const order of orders) {
             const price = roundPrice(order.price, groupPrice);
+            if (sizes.size === visibleRows && !sizes.has(price)) { break; }
             sizes.set(price, (sizes.get(price) || 0) + order.size);
-        });
-        return Array.from(sizes.keys())
-            .sort((a, b) => direction * (a - b))
-            .slice(0, visibleRows)
-            .map((price) => new BoardOrder({ price, size: sizes.get(price) }));
+        }
+        return Array.from(sizes, ([price, size]) => new BoardOrder({ price, size }));
     }
 
     private groupWindow(

@@ -129,13 +129,17 @@ test('polls REST offline and synchronizes previews only from a fresh connected s
 
     const refresh = Stream.create();
     responses.shamefullySendNext(refresh);
+    socket.receive(executionChannel, [{ side: 'SELL', price: 99 }]);
     socket.receive(boardChannel, { asks: [{ price: 102, size: 4 }], bids: [] });
     refresh.shamefullySendNext({ text: JSON.stringify(snapshot) });
     refresh.shamefullySendComplete();
     assert.equal(state.board.asks[0].size, 4);
+    assert.equal(state.board.bids.length, 0);
+    assert.equal(state.hasBoardSnapshot, true);
 
     const stale = Stream.create();
     responses.shamefullySendNext(stale);
+    socket.receive(executionChannel, [{ side: 'BUY', price: 103 }]);
     socket.receive('disconnect');
     assert.equal(state.hasBoardSnapshot, false);
 
