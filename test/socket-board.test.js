@@ -25,6 +25,8 @@ runInNewContext(outputFiles[0].text, {
   module: testModule,
   require,
   setTimeout,
+  setInterval: (...args) => setInterval(...args),
+  clearInterval: (...args) => clearInterval(...args),
   localStorage: { 'api-secret': 'test-secret' },
 });
 const { SocketIOSource, BoardComponent } = testModule.exports;
@@ -64,7 +66,8 @@ test('subscribes only to board deltas and executions on connect and reconnect', 
   assert.equal(socket.handlers.has(snapshotChannel), false);
 });
 
-test('synchronizes each connection with REST and rejects stale snapshots after disconnect', async () => {
+test('polls REST offline and synchronizes previews only from a fresh connected snapshot', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
   const socket = makeSocket();
   const responses = Stream.create();
   const dom = { select: () => dom, events: () => Stream.never() };
@@ -93,8 +96,6 @@ test('synchronizes each connection with REST and rejects stale snapshots after d
   });
   const subscription = sinks.state.subscribe({ next: (reduce) => { state = reduce(state); } });
   try {
-    assert.equal(requests.length, 0);
-    socket.receive('connect');
     await Promise.resolve();
     assert.equal(requests.length, 1);
     assert.equal(requests[0].category, 'board');
@@ -105,6 +106,20 @@ test('synchronizes each connection with REST and rejects stale snapshots after d
     requestResponse.shamefullySendComplete();
     assert.equal(state.board.asks[0].size, 1);
     assert.equal(state.board.bids[0].size, 2);
+    assert.equal(state.hasBoardSnapshot, false);
+
+    t.mock.timers.tick(15000);
+    assert.equal(requests.length, 2);
+    requestResponse.shamefullySendNext({ text: JSON.stringify({ ...snapshot, asks: [] }) });
+    requestResponse.shamefullySendComplete();
+    assert.equal(state.board.asks.length, 0);
+    assert.equal(state.hasBoardSnapshot, false);
+
+    socket.receive('connect');
+    await Promise.resolve();
+    assert.equal(requests.length, 3);
+    requestResponse.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    requestResponse.shamefullySendComplete();
     assert.equal(state.hasBoardSnapshot, true);
 
     socket.receive(snapshotChannel, { asks: [], bids: [] });
@@ -124,13 +139,21 @@ test('synchronizes each connection with REST and rejects stale snapshots after d
     socket.receive('disconnect');
     assert.equal(state.hasBoardSnapshot, false);
 
-    responses.shamefullySendNext(Stream.of({ text: JSON.stringify(snapshot) }));
+    stale.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    assert.equal(state.board.asks[0].size, 1);
     assert.equal(state.hasBoardSnapshot, false);
 
-    socket.receive('connect');
     await Promise.resolve();
-    assert.equal(requests.length, 2);
-    stale.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    assert.equal(requests.length, 4);
+    t.mock.timers.tick(15000);
+    assert.equal(requests.length, 5);
+    const offlineResponse = requestResponse;
+
+    socket.receive('connect');
+    offlineResponse.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    assert.equal(state.hasBoardSnapshot, false);
+    await Promise.resolve();
+    assert.equal(requests.length, 6);
     assert.equal(state.hasBoardSnapshot, false);
 
     socket.receive(boardChannel, { asks: [{ price: 102, size: 5 }], bids: [] });
