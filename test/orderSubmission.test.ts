@@ -11,6 +11,7 @@ import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
 import {storageKeys} from "../src/components/trade/order/intent";
+import {flattenStopOrders} from "../src/models/parentStopOrders";
 
 test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
     const order = setup(t, "-10000");
@@ -125,12 +126,19 @@ for (const outcome of ["succeed", "fail"] as const) {
     });
 }
 
-test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
+test("reports mixed Clear Orders results and stays locked until every request settles", (t) => {
     const order = setup(t);
+    order.respondTo({ category: "orders", _namespace: ["trade"] }).succeed([
+        { price: 100, side: "BUY", outstanding_size: 0.01 },
+    ]);
     order.respondTo({ category: "parent-orders", _namespace: ["trade"] }).succeed([
         { parent_order_id: "JCO-success" },
         { parent_order_id: "JCO-failure" },
     ]);
+    order.parentDetails.forEach((request, id) => order.respondTo(request).succeed({
+        parent_order_id: id,
+        parameters: [{ condition_type: "STOP", trigger_price: id === "JCO-success" ? 200 : 300 }],
+    }));
 
     order.clearOrders();
     order.clearOrders();
@@ -138,25 +146,57 @@ test("dispatches every Clear Orders request and stays locked until they all sett
         "cancel-orders", "cancel-parent-order", "cancel-parent-order",
     ]);
     equal(order.state.isOrdering, true);
+    equal(order.tradeState.orders.length, 1);
+    deepEqual(flattenStopOrders(order.tradeState.parentStopOrders).map(({ price }) => price), [200, 300]);
 
-    order.respondTo(order.requests[0]).succeed();
+    order.respondTo(order.requests[2]).fail();
+    equal(order.state.isOrdering, true);
+    deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-success", "JCO-failure"]);
     order.respondTo(order.requests[1]).succeed();
     order.buyMarket();
     equal(order.requests.length, 3);
     equal(order.state.isOrdering, true);
     deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-failure"]);
 
-    order.respondTo(order.requests[2]).fail();
+    order.respondTo(order.requests[0]).succeed();
     equal(order.state.isOrdering, false);
-    deepEqual(order.sounds, []);
+    deepEqual(order.tradeState.orders, []);
+    deepEqual(flattenStopOrders(order.tradeState.parentStopOrders).map(({ price }) => price), [300]);
+    deepEqual(order.histories.map(({ name, description, status }) => [name, description, status]), [
+        ["Cancel", "All child orders", "success"],
+        ["Cancel", "Parent order JCO-success", "success"],
+        ["Cancel", "Parent order JCO-failure", "failed"],
+    ]);
+    deepEqual(order.sounds, ["failure", "success", "success"]);
     order.clearOrders();
     deepEqual(order.requests.slice(3).map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
 
+test("reports a failed bulk cancellation and keeps the child orders visible", (t) => {
+    const order = setup(t);
+    order.respondTo({ category: "orders", _namespace: ["trade"] }).succeed([
+        { price: 100, side: "BUY", outstanding_size: 0.01 },
+    ]);
+    const childOrders = order.tradeState.orders;
+
+    order.clearOrders();
+    order.respondTo(order.requests[0]).fail();
+
+    equal(order.state.isOrdering, false);
+    equal(order.tradeState.orders, childOrders);
+    deepEqual(order.histories.map(({ description, status }) => [description, status]), [
+        ["All child orders", "failed"],
+    ]);
+    deepEqual(order.sounds, ["failure"]);
+});
+
 function setup(t: TestContext, width = "0.01") {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
+    Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: { "api-key": "test", "api-secret": "test" },
+    });
     t.after(() => {
         if (originalStorage) {
             Object.defineProperty(globalThis, "localStorage", originalStorage);
@@ -209,8 +249,12 @@ function setup(t: TestContext, width = "0.01") {
         },
     });
     const requests: RequestOptions[] = [];
+    const parentDetails = new Map<string, RequestOptions>();
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
+        if (options.category === "parent-order") {
+            parentDetails.set((options.query as { parent_order_id: string }).parent_order_id, options);
+        }
         if (["ifdoco-order", "market-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
             requests.push(options);
         }
@@ -229,6 +273,7 @@ function setup(t: TestContext, width = "0.01") {
         clearOrders: () => clearOrders$.shamefullySendNext(null),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
+        parentDetails,
         requests,
         sounds,
         respondTo(request: RequestOptions) {

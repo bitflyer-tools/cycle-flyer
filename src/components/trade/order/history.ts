@@ -30,6 +30,16 @@ export const createParentOrderOutcome = (stream$: HTTPResponse$): Stream<OrderOu
         ),
     );
 
+export const createCancellationOutcome = (stream$: HTTPResponse$): Stream<OrderOutcome> =>
+    createOutcome(stream$, (body, status) => [{
+        createdAt: new Date(),
+        description: stream$.request.category === "cancel-parent-order"
+            ? `Parent order ${JSON.parse(body).parent_order_id}`
+            : "All child orders",
+        name: "Cancel",
+        status,
+    }]);
+
 const createOutcome = (
     stream$: HTTPResponse$,
     createHistories: (body: string, status: OrderStatus) => OrderHistory[],
