@@ -114,7 +114,7 @@ const clearTwapProgress: Reducer<RootState> = (state) => {
         ...state,
         trade: {
             ...trade,
-            orderComponentState: { ...order, twap: { ...order.twap, remaining: 0 } },
+            orderComponentState: { ...order, twap: { ...order.twap, remaining: 0, scheduleId: undefined } },
         },
     };
 };

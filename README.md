@@ -10,6 +10,13 @@ Download the latest release from [GitHub Releases](https://github.com/bitflyer-t
 
 ![](./images/looking.png)
 
+## Features
+
+- Follow the live `FX_BTC_JPY` order book and spread, with adjustable price grouping.
+- View collateral, positions, and profit or loss with bitFlyer Lightning API credentials.
+- Place market, limit, stop, and ranged IFDOCO orders.
+- Use TWAP to split a market order into slices submitted at a set interval.
+
 ## Quick start
 
 1. Download the installer or archive for your platform from [GitHub Releases](https://github.com/bitflyer-tools/cycle-flyer/releases/latest).
