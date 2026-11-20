@@ -10,7 +10,7 @@ import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
-import {createCancellationTimeoutHistory, createParentOrderOutcome, orderOutcomes} from "./trade/order/history";
+import {createCancellationTimeoutHistory, createParentOrderOutcome, orderOutcomes, twapOutcomes} from "./trade/order/history";
 import {OrderRequestBatch, submissions} from "./trade/order/request";
 
 interface RootState {
@@ -74,7 +74,8 @@ export const Root = (sources: Sources): Sinks => {
     const orderHistoryReducer$ = Stream.merge(
         ifdocoOutcome$.map(({ histories }) => histories.slice().reverse()),
         // Keep timeout notices when the trade screen is inactive.
-        orderOutcomes(sources.HTTP).filter(({ status }) => status === "unconfirmed")
+        Stream.merge(orderOutcomes(sources.HTTP), twapOutcomes(sources.HTTP))
+            .filter(({ status }) => status === "unconfirmed")
             .map(({ histories }) => histories.slice().reverse()),
         cancellationHistories$,
     ).map<Reducer<TradeState>>((histories) => (state) =>

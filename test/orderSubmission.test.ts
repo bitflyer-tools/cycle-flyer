@@ -16,6 +16,7 @@ import {State as TradeState} from "../src/components/trade";
 import {storageKeys} from "../src/components/trade/order/intent";
 import type {State as SummaryState} from "../src/components/trade/summary";
 import {view as summaryView} from "../src/components/trade/summary/view";
+import {twapSliceOrder} from "../src/http";
 
 test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
     const order = setup(t, "-10000");
@@ -207,6 +208,28 @@ for (const category of ["limit-order", "cancel-orders"] as const) {
     });
 }
 
+for (const route of ["/", "/setting"]) {
+    test(`records a TWAP slice deadline once when it expires on ${route}`, (t) => {
+        const order = setup(t);
+        const request = twapSliceOrder(0.01, "BUY", Symbol());
+        const response = order.respondTo({ ...request, _namespace: ["trade"] });
+
+        if (route === "/setting") order.navigate(route);
+        response.fail(Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }));
+        deepEqual(order.histories.map(({ name, status }) => ({ name, status })), [
+            { name: "TWAP", status: "unconfirmed" },
+        ]);
+
+        if (route === "/setting") order.navigate("/");
+        equal(order.histories.length, 1);
+        summaryView(Stream.of<SummaryState>({
+            ...order.tradeState,
+            collateral: 0,
+            marketState: { health: "", state: "" },
+        })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /Unconfirmed \(timed out\)/) });
+    });
+}
+
 function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-key": "test", "api-secret": "test" } });
@@ -299,7 +322,7 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
             const response$ = Object.assign(Stream.createWithMemory<Response>(), { request: { ...request } });
             responses$.shamefullySendNext(response$);
             return {
-                fail: () => response$.shamefullySendError(new Error("Network failure")),
+                fail: (error = new Error("Network failure")) => response$.shamefullySendError(error),
                 progress: () => response$.shamefullySendNext({ request } as Response),
                 succeed: (body?: unknown) => {
                     response$.shamefullySendNext({ request, text: JSON.stringify(body) } as Response);
