@@ -150,8 +150,7 @@ for (const [operation, replacement] of [
     const requests = [];
     const listener = { next: (request) => requests.push(request) };
     const requests$ = renderer.twapRequest({
-      onClickTwapBuyButton$: buy$,
-      onClickTwapSellButton$: renderer.Stream.never(),
+      onTwapStarted$: buy$.map(() => ({ id: Symbol(), side: "BUY" })),
       onClickTwapCancelButton$: renderer.Stream.never(),
     }, state$);
     requests$.addListener(listener);
@@ -179,8 +178,8 @@ test('Electron TWAP readiness controls the buttons and the status explains why T
     save: async (value) => { available = !!value; },
   });
   const state = { size: 0.03, twap: { interval: 1, slices: 3, remaining: 0 } };
-  const section = () => renderer.twapSection(state, renderer.canSignTwap());
-  const chooseButtons = () => section().children[4].children;
+  const section = () => renderer.twapSection(state, renderer.hasApiCredentials());
+  const chooseButtons = () => section().children[5].children;
   await renderer.initializeCredentials();
   assert.ok(chooseButtons().every((button) => button.data.attrs.disabled));
   await renderer.saveCredentials(pair);
@@ -189,7 +188,7 @@ test('Electron TWAP readiness controls the buttons and the status explains why T
   await renderer.saveCredentials(null);
   state.twap.error = 'TWAP stopped because credentials changed.';
   assert.ok(chooseButtons().every((button) => button.data.attrs.disabled));
-  assert.equal(section().children[3].text, state.twap.error);
+  assert.equal(section().children[4].text, state.twap.error);
 });
 
 test('a missing Electron signature stops the current TWAP before its next slice', async (t) => {
@@ -202,8 +201,7 @@ test('a missing Electron signature stops the current TWAP before its next slice'
   const buy$ = renderer.Stream.create();
   const requests = [];
   const subscription = renderer.twapRequest({
-    onClickTwapBuyButton$: buy$,
-    onClickTwapSellButton$: renderer.Stream.never(),
+    onTwapStarted$: buy$.map(() => ({ id: Symbol(), side: "BUY" })),
     onClickTwapCancelButton$: renderer.Stream.never(),
   }, renderer.Stream.of({ size: 0.03, twap: { interval: 1, slices: 3 } }))
     .subscribe({ next: (request) => requests.push(request) });
@@ -226,7 +224,7 @@ test('TWAP authorization drops requests that overlap an Electron credential upda
     save: () => new Promise((resolve) => { finishSaving = resolve; }),
   });
   await renderer.initializeCredentials();
-  const request = renderer.twapSliceOrder(0.01, 'BUY');
+  const request = renderer.twapSliceOrder(0.01, 'BUY', Symbol());
   const signing = renderer.authorizeRequest(request);
   await Promise.resolve();
   const saving = renderer.saveCredentials(pair);

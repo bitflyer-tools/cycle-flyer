@@ -8,8 +8,8 @@ export interface AccountRequest extends RequestOptions {
     credentialVersion?: number;
 }
 
-export const isCurrentAccountRequest = (request: AccountRequest): boolean =>
-    request.credentialVersion !== undefined && request.credentialVersion === currentCredentialVersion();
+export const isCurrentAccountRequest = (request: Pick<AccountRequest, "credentialVersion"> | undefined): boolean =>
+    request?.credentialVersion !== undefined && request.credentialVersion === currentCredentialVersion();
 
 export const unsignedRequests$ = Stream.create<RequestInput>();
 

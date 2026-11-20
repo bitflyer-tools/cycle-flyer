@@ -15,8 +15,18 @@ export const getPositions = (): RequestInput =>
 export const getOrders = (): RequestInput =>
     requestInput("orders", "/v1/me/getchildorders", "GET", undefined, { child_order_state: "ACTIVE" });
 
-export const getParentOrders = (): RequestInput =>
-    requestInput("parent-orders", "/v1/me/getparentorders", "GET", undefined, { parent_order_state: "ACTIVE" });
+export const parentOrdersPageSize = 100;
+
+export const getParentOrders = (before?: number): RequestOptions =>
+    ({
+        ...requestInput(before === undefined ? "parent-orders" : "parent-orders-page",
+            "/v1/me/getparentorders", "GET", undefined, {
+                parent_order_state: "ACTIVE",
+                count: parentOrdersPageSize,
+                ...(before === undefined ? {} : { before }),
+            }),
+        lazy: true,
+    });
 
 export const getParentOrder = (parentOrderId: string): RequestOptions =>
     requestInput("parent-order", "/v1/me/getparentorder", "GET", undefined, { parent_order_id: parentOrderId });
@@ -34,10 +44,11 @@ export const marketOrder = (size: number, side: string): RequestInput => {
 export interface TwapSliceRequest extends RequestOptions {
     isTwapActive?: () => boolean;
     onSigningFailure?: () => void;
+    scheduleId: symbol;
 }
 
-export const twapSliceOrder = (size: number, side: string): TwapSliceRequest =>
-    ({ ...(marketOrder(size, side) as RequestOptions), category: "twap-order" });
+export const twapSliceOrder = (size: number, side: string, scheduleId: symbol): TwapSliceRequest =>
+    ({ ...(marketOrder(size, side) as RequestOptions), category: "twap-order", scheduleId });
 
 export const limitOrder = (price: number, size: number, side: string): RequestInput => {
     const json = {
@@ -58,20 +69,20 @@ export const ifdocoOrder = (profitLine: number, lossLine: number, size: number, 
                 condition_type: "MARKET",
                 product_code: "FX_BTC_JPY",
                 side,
-                size: Math.abs(size),
+                size,
             },
             {
                 condition_type: "LIMIT",
                 price: profitLine,
                 product_code: "FX_BTC_JPY",
                 side: side === "BUY" ? "SELL" : "BUY",
-                size: Math.abs(size),
+                size,
             },
             {
                 condition_type: "STOP",
                 product_code: "FX_BTC_JPY",
                 side: side === "BUY" ? "SELL" : "BUY",
-                size: Math.abs(size),
+                size,
                 trigger_price: lossLine,
             },
         ],

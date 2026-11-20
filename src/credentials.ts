@@ -34,10 +34,10 @@ let pendingSaves = 0;
 let ready = false;
 const readiness$ = Stream.create<boolean>();
 
-export const canSignTwap = (): boolean => pendingSaves === 0 && ready;
+export const hasApiCredentials = (): boolean => pendingSaves === 0 && ready;
 
-export const twapCredentialAvailability = (): Stream<boolean> =>
-    readiness$.startWith(canSignTwap());
+export const credentialAvailability = (): Stream<boolean> =>
+    readiness$.startWith(hasApiCredentials());
 
 export const currentCredentialVersion = (): number | null =>
     pendingSaves === 0 ? credentialVersion : null;

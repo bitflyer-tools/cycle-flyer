@@ -10,6 +10,7 @@ import Stream, {MemoryStream} from "xstream";
 import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
+import {storageKeys} from "../src/components/trade/order/intent";
 import {currentCredentialVersion, saveCredentials} from "../src/credentials";
 import {AccountRequest, authorizeRequest, makeSignedHTTPDriver, unsignedRequests$} from "../src/drivers/httpDriver";
 
@@ -42,6 +43,19 @@ test("shows a clear-orders signing error after returning from Settings", async (
     equal(order.state.isOrdering, false);
     equal(order.signingAlert?.text,
         "Could not sign the request to clear orders. Check your bitFlyer credentials in Settings.");
+});
+
+test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
+    const order = setup(t, "-10000");
+
+    order.buyIFDOCO();
+    order.sellIFDOCO();
+    deepEqual(order.requests, []);
+    equal(order.state.isOrdering, false);
+
+    order.buyMarket();
+    deepEqual(order.requests.map(({ category }) => category), ["market-order"]);
+    equal(order.state.isOrdering, true);
 });
 
 test("accepts a single IFDOCO submission until its delayed success", (t) => {
@@ -143,6 +157,29 @@ for (const outcome of ["succeed", "fail"] as const) {
         equal(order.requests.length, 2);
     });
 }
+
+test("records a rejected limit order and permits a retry", (t) => {
+    const order = setup(t, "0.01", ["Date", "setInterval"]);
+    order.enterPrice("900");
+
+    order.buyLimit();
+    deepEqual(order.requests.map(({ category }) => category), ["limit-order"]);
+    equal(order.state.isOrdering, true);
+
+    order.respondTo(order.requests[0]).reject();
+    equal(order.state.isOrdering, false);
+    deepEqual(order.sounds, ["failure"]);
+    deepEqual(order.histories, [{
+        createdAt: new Date(1000),
+        description: "BUY / 0.03 / 900",
+        name: "Limit",
+        status: "failed",
+    }]);
+
+    order.buyLimit();
+    deepEqual(order.requests.map(({ category }) => category), ["limit-order", "limit-order"]);
+    equal(order.state.isOrdering, true);
+});
 
 test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
     const order = setup(t);
@@ -293,8 +330,8 @@ function findNode(node: VNode, selector: string): VNode | undefined {
     return node.children?.map((child) => typeof child === "string" ? undefined : findNode(child, selector)).find(Boolean);
 }
 
-function setup(t: TestContext) {
-    t.mock.timers.enable({ apis: ["setInterval"] });
+function setup(t: TestContext, width = "0.01", apis: Array<"Date" | "setInterval"> = ["setInterval"]) {
+    t.mock.timers.enable({ apis, now: 1000 });
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
     t.after(() => {
@@ -308,14 +345,18 @@ function setup(t: TestContext) {
     const buyIFDOCO$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
     const buyTWAP$ = Stream.create<null>();
+    const buyLimit$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
     const clearPosition$ = Stream.create<null>();
+    const priceInput$ = Stream.create<{ target: { value: string } }>();
     const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
+        "#price-input": { input: priceInput$ },
+        ".limit-order-buttons": { ".buy-button": { click: buyLimit$ } },
         ".twap-order-buttons": { ".buy-button": { click: buyTWAP$ } },
         ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
         ".order-buttons": {
@@ -343,7 +384,7 @@ function setup(t: TestContext) {
         },
         state: new StateSource(state$, "state"),
         storage: { local: { getItem: (key: string) =>
-            Stream.of({ "twap-slices": "3", "twap-interval": "1", "order-size": "0.03" }[key] || "0.01"),
+            Stream.of(key === storageKeys.priceWidth ? width : { "twap-slices": "3", "twap-interval": "1", "order-size": "0.03" }[key] || "0.01"),
         } },
     } as unknown as Omit<Sources, "router"> & { history: typeof history$ });
 
@@ -359,7 +400,7 @@ function setup(t: TestContext) {
     const requests: RequestOptions[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
-        if (["ifdoco-order", "market-order", "twap-order", "cancel-orders", "cancel-parent-order"].includes(options.category)) {
+        if (["ifdoco-order", "limit-order", "market-order", "twap-order", "cancel-orders", "cancel-parent-order"].includes(options.category)) {
             requests.push(options);
         }
     } });
@@ -377,10 +418,12 @@ function setup(t: TestContext) {
     return {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
         buyTWAP: () => buyTWAP$.shamefullySendNext(null),
+        buyLimit: () => buyLimit$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
         clearPosition: () => clearPosition$.shamefullySendNext(null),
         get clearPositionDisabled() { return findNode(vNode, "button.clear-button")?.data?.attrs?.disabled; },
         clearOrders: () => clearOrders$.shamefullySendNext(null),
+        enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         requests,
@@ -392,6 +435,7 @@ function setup(t: TestContext) {
             return {
                 fail: () => response$.shamefullySendError(new Error("Network failure")),
                 progress: () => response$.shamefullySendNext({ request } as Response),
+                reject: () => response$.shamefullySendError({ response: { request, status: 400 } }),
                 succeed: (body?: unknown) => {
                     response$.shamefullySendNext({ request, text: JSON.stringify(body) } as unknown as Response);
                     response$.shamefullySendComplete();

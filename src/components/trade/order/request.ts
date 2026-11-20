@@ -8,7 +8,7 @@ import {AccountRequest, unsignedRequests$} from "../../../drivers/httpDriver";
 import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
-import {isValidLimitOrder, isValidMarketOrder} from "./validation";
+import {isValidIFDOCOOrder, isValidLimitOrder, isValidMarketOrder} from "./validation";
 
 export interface OrderRequestBatch {
     requests: RequestInput[];
@@ -74,8 +74,8 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
         withState(actions.onClickLimitSellButton$, (state) => limitOrder(state.price, state.size, "SELL"), isValidLimitOrder),
         withState(actions.onClickStopBuyButton$, (state) => stopOrder(state.triggerPrice, state.size, "BUY")),
         withState(actions.onClickStopSellButton$, (state) => stopOrder(state.triggerPrice, state.size, "SELL")),
-        withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),
-        withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder),
+        withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder, isValidIFDOCOOrder),
+        withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder, isValidIFDOCOOrder),
         actions.onClickClearButton$.compose(sampleCombine(state$))
             .filter(([_, state]) => canClearPosition(state))
             .map(([_, state]) => ({ requests: [clearPositionOrder(state)] })),

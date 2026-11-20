@@ -145,6 +145,6 @@ const resetTwap = (error?: string): Reducer<RootState> => (state) => {
     const trade = state?.trade;
     const order = trade?.orderComponentState;
     if (!trade || !order || !order.twap.remaining) { return state; }
-    const orderComponentState = { ...order, twap: { ...order.twap, remaining: 0, error: error ?? order.twap.error } };
+    const orderComponentState = { ...order, twap: { ...order.twap, remaining: 0, scheduleId: undefined, error: error ?? order.twap.error } };
     return { ...state, trade: { ...trade, orderComponentState } };
 };

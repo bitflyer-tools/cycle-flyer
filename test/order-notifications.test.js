@@ -92,8 +92,8 @@ test('notifies for each other submission and private execution', (t) => {
   trade.submit(marketOrder(0.01, 'BUY')).disconnect();
   trade.submit(limitOrder(100, 0.01, 'BUY')).accept();
   trade.submit(stopOrder(90, 0.01, 'SELL')).accept();
-  trade.submit(twapSliceOrder(0.01, 'SELL')).reject();
-  trade.executionBatch$.shamefullySendNext([{ price: 100 }]);
+  trade.submit(twapSliceOrder(0.01, 'SELL', Symbol())).reject();
+  trade.executionBatch$.shamefullySendNext([{ price: 100, size: 0.01, side: 'BUY' }]);
   trade.childOrderEvent$.shamefullySendNext({ event_type: 'ORDER' });
 
   const execution = { event_type: 'EXECUTION', side: 'BUY', price: 100, size: 0.01 };

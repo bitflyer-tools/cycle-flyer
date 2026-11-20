@@ -1,7 +1,7 @@
 import {button, div, h4, hr, VNode} from "@cycle/dom";
 import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
-import {twapCredentialAvailability} from "../../../credentials";
+import {credentialAvailability} from "../../../credentials";
 import {sideButtons} from "./buttons";
 import {ifdocoSection} from "./ifdocoView";
 import {State} from "./index";
@@ -13,7 +13,7 @@ import {twapSection} from "./twapView";
 import {isValidLimitOrder, isValidMarketOrder} from "./validation";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
-    Stream.combine(state$.compose(dropRepeats(sameViewInputs)), twapCredentialAvailability()).map(([state, canSign]) =>
+    Stream.combine(state$.compose(dropRepeats(sameViewInputs)), credentialAvailability()).map(([state, canSign]) =>
         div(".order", [
             ...(state.orderSigningError
                 ? [div(".order-signing-error", { attrs: { role: "alert" } }, state.orderSigningError)]

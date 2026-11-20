@@ -1,7 +1,7 @@
 import {HTTPSource, RequestOptions} from "@cycle/http";
 import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
-import {credentialsChanging$, currentCredentialVersion} from "../../credentials";
+import {credentialsChanging$, currentCredentialVersion, hasApiCredentials} from "../../credentials";
 import {AccountRequest, isCurrentAccountRequest, unsignedRequests$} from "../../drivers/httpDriver";
 import {getParentOrder} from "../../http";
 import {ParentOrderEvent} from "../../models/orderEvent";
@@ -38,7 +38,7 @@ export const parentOrderDetails = (
     const pending = new Map<string, PendingDetail>();
 
     const load = (id: string, entry: ActiveDetail): RequestOptions[] => {
-        if (entry.loaded || pending.has(id)) { return []; }
+        if (entry.loaded || pending.has(id) || !hasApiCredentials()) { return []; }
         const credentialVersion = currentCredentialVersion();
         if (credentialVersion === null) { return []; }
         const requestId = Symbol();
