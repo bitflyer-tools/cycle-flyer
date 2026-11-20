@@ -2,10 +2,11 @@ import {Response} from "@cycle/http";
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {Board, BoardLevels} from "../../../models/board";
+import {BoardSnapshot} from "../../../models/boardSnapshot";
 import {Execution} from "../../../models/execution";
 import {State} from "./index";
 
-type BoardUpdate = (board: Board) => void;
+type BoardUpdate = (snapshot: BoardSnapshot) => void;
 
 interface PendingSnapshot {
     updates: BoardUpdate[];
@@ -20,9 +21,9 @@ export const synchronizeBoard = <T extends Stream<Response>>(
     const liveReducer$ = deltas$
         .map<Reducer<State>>((delta) => (state) => state && ({ ...state, board: mergeDelta(state.board, delta) }));
     const boardUpdates$ = Stream.merge(
-        deltas$.map<BoardUpdate>((delta) => (board) => mergeDelta(board, delta)),
+        deltas$.map<BoardUpdate>(({ asks, bids }) => (snapshot) => snapshot.merge(asks, bids)),
         executions$.filter((batch) => batch.length > 0)
-            .map<BoardUpdate>((batch) => (board) => board.removeExecutions(batch)),
+            .map<BoardUpdate>((batch) => (snapshot) => snapshot.removeExecutions(batch)),
     );
 
     // Each response stream is announced at request time. Switching drops superseded requests.
@@ -40,9 +41,9 @@ const reconcileSnapshot = (response$: Stream<Response>, boardUpdates$: Stream<Bo
         return pending;
     });
     const snapshot$ = response$.map((response) => (pending: PendingSnapshot) => {
-        const board = decodeSnapshot(response.text);
-        pending.updates.forEach((update) => update(board));
-        return { ...pending, board };
+        const snapshot = decodeSnapshot(response.text);
+        pending.updates.forEach((update) => update(snapshot));
+        return { ...pending, board: snapshot.toBoard() };
     });
 
     return Stream.merge(updates$, snapshot$)
@@ -55,12 +56,12 @@ const reconcileSnapshot = (response$: Stream<Response>, boardUpdates$: Stream<Bo
 
 const mergeDelta = (board: Board, delta: BoardLevels): Board => board.merge(delta.asks, delta.bids);
 
-const decodeSnapshot = (text: string): Board => {
+const decodeSnapshot = (text: string): BoardSnapshot => {
     const snapshot = JSON.parse(text);
     if (!isBoardSide(snapshot?.asks) || !isBoardSide(snapshot?.bids)) {
         throw new Error("Invalid board snapshot");
     }
-    return new Board(snapshot);
+    return new BoardSnapshot(snapshot);
 };
 
 const isBoardSide = (orders: unknown): boolean =>

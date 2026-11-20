@@ -20,6 +20,57 @@ test("replays realtime changes over a delayed snapshot", () => {
     assert.deepEqual(asks(), [[101, 4], [102, 3]]);
 });
 
+test("installs a 100-delta snapshot with one sort per side", () => {
+    const {request, sendDelta, board} = setup();
+    const levels = {
+        asks: Array.from({ length: 1000 }, (_, index) => ({ price: 2999 - index, size: 1 })),
+        bids: Array.from({ length: 1000 }, (_, index) => ({ price: 1000 + index, size: 1 })),
+    };
+    const expected = new Board(levels);
+    const respond = request();
+    Array.from({ length: 100 }, (_, index) => {
+        const size = index % 3 === 1 ? 0 : index + 2;
+        const delta = index % 2 === 0
+            ? { asks: [{ price: 2000, size }], bids: [] }
+            : { asks: [], bids: [{ price: 1999, size }] };
+        sendDelta(delta);
+        expected.merge(delta.asks, delta.bids);
+    });
+
+    const sort = Array.prototype.sort;
+    let askSorts = 0;
+    let bidSorts = 0;
+    Array.prototype.sort = function<T>(this: T[], compare?: (a: T, b: T) => number): T[] {
+        const first = this[0] as BoardOrder | undefined;
+        if (first && first.price >= 2000) { askSorts++; }
+        if (first && first.price < 2000) { bidSorts++; }
+        return sort.call(this, compare);
+    };
+    try {
+        respond(levels.asks, levels.bids);
+    } finally {
+        Array.prototype.sort = sort;
+    }
+    assert.equal(askSorts, 1);
+    assert.equal(bidSorts, 1);
+    assert.deepEqual(board(), expected);
+});
+
+test("preserves duplicate levels within each snapshot or delta", () => {
+    const {request, sendDelta, asks} = setup();
+    const respond = request();
+    sendDelta({
+        asks: [{ price: 102, size: 4 }, { price: 102, size: 0 }, { price: 102, size: 5 }],
+        bids: [],
+    });
+    respond([
+        { price: 101, size: 1 }, { price: 102, size: 1 },
+        { price: 101, size: 2 }, { price: 102, size: 2 },
+    ]);
+
+    assert.deepEqual(asks(), [[101, 1], [101, 2], [102, 4], [102, 5]]);
+});
+
 test("keeps both sides best first after replaying a one-sided delta", () => {
     const {request, update, board} = setup();
     const respond = request();
@@ -135,6 +186,7 @@ const setup = () => {
             };
         },
         responses$$,
+        sendDelta: (delta: BoardLevels) => updates$.shamefullySendNext(delta),
         update: (price: number, size: number) =>
             updates$.shamefullySendNext({ asks: [{ price, size }], bids: [] }),
     };
