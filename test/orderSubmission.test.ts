@@ -11,6 +11,22 @@ import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
 import {storageKeys} from "../src/components/trade/order/intent";
+import {Execution} from "../src/models/execution";
+
+test("blocks both IFDOCO sides until the first public execution arrives", (t) => {
+    const order = setup(t, "10000", null);
+    order.buyIFDOCO();
+    order.sellIFDOCO();
+    deepEqual(order.requests, []);
+    equal(order.state.isOrdering, false);
+
+    order.publishExecution(10000000);
+    order.buyIFDOCO();
+    equal(order.requests[0]?.category, "ifdoco-order");
+    order.respondTo(order.requests[0]).succeed();
+    order.sellIFDOCO();
+    deepEqual(order.requests.map(({ category }) => category), ["ifdoco-order", "ifdoco-order"]);
+});
 
 test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
     const order = setup(t, "-10000");
@@ -154,7 +170,7 @@ test("dispatches every Clear Orders request and stays locked until they all sett
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
 
-function setup(t: TestContext, width = "0.01") {
+function setup(t: TestContext, width = "0.01", initialPrice: number | null = 10000000) {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
     t.after(() => {
@@ -169,6 +185,8 @@ function setup(t: TestContext, width = "0.01") {
     const sellIFDOCO$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
     const clearOrders$ = Stream.create<null>();
+    const executionBatch$ = Stream.create<Execution[]>();
+    const publishExecution = (price: number) => executionBatch$.shamefullySendNext([{ side: "BUY", price }]);
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
@@ -191,7 +209,7 @@ function setup(t: TestContext, width = "0.01") {
             board$: Stream.never(),
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
-            executionBatch$: Stream.never(),
+            executionBatch$,
             parentOrderEvent$: Stream.never(),
             reconnect$: Stream.never(),
         },
@@ -217,6 +235,7 @@ function setup(t: TestContext, width = "0.01") {
     } });
     const sounds: Sound[] = [];
     const audio = main.sound!.subscribe({ next: (sound) => sounds.push(sound) });
+    if (initialPrice !== null) publishExecution(initialPrice);
     t.after(() => {
         audio.unsubscribe();
         http.unsubscribe();
@@ -229,6 +248,7 @@ function setup(t: TestContext, width = "0.01") {
         clearOrders: () => clearOrders$.shamefullySendNext(null),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
+        publishExecution,
         requests,
         sounds,
         respondTo(request: RequestOptions) {

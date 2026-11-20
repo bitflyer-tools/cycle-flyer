@@ -6,7 +6,7 @@ const {intent, storageKeys} = require("../src/components/trade/order/intent");
 const {model} = require("../src/components/trade/order/model");
 const {orderRequests} = require("../src/components/trade/order/request");
 
-function setup(t, storedWidth) {
+function setup(t, storedWidth, currentPrice = 10000000) {
     const widthInput$ = Stream.create();
     const buyClick$ = Stream.create();
     const sellClick$ = Stream.create();
@@ -29,7 +29,7 @@ function setup(t, storedWidth) {
     let state;
     const reducers = model(actions, Stream.never()).subscribe({
         next: (reduce) => {
-            state = { ...reduce(state), currentPrice: 10000000 };
+            state = { ...reduce(state), currentPrice };
             state$.shamefullySendNext(state);
         },
     });
@@ -55,6 +55,11 @@ function setup(t, storedWidth) {
         },
         disabled: () => ifdocoSection(state).children.at(-1).children.map((button) => button.data.attrs.disabled),
         enterWidth: (value) => widthInput$.shamefullySendNext({ target: { value } }),
+        setCurrentPrice: (price) => {
+            currentPrice = price;
+            state = { ...state, currentPrice };
+            state$.shamefullySendNext(state);
+        },
         requests,
     };
 }
@@ -75,8 +80,16 @@ for (const width of ["-10000", "0", "NaN", "Infinity", "-Infinity"]) {
     });
 }
 
-test("IFDOCO sends the expected parent order for each side with a positive width", (t) => {
-    const form = setup(t, "10000");
+test("IFDOCO requires a positive finite market reference price for both sides", (t) => {
+    const form = setup(t, "10000", 0);
+    for (const price of [0, -1, NaN, Infinity, -Infinity]) {
+        form.setCurrentPrice(price);
+        assert.deepEqual(form.disabled(), [true, true]);
+        form.clickBoth();
+        assert.deepEqual(form.requests, []);
+    }
+
+    form.setCurrentPrice(10000000);
     assert.deepEqual(form.disabled(), [false, false]);
     form.clickBoth();
 
