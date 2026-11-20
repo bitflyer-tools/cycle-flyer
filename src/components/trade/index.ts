@@ -43,6 +43,7 @@ export interface Sinks {
 }
 
 export interface State {
+    credentialVersion?: symbol;
     canceledParentOrderIds?: ReadonlyMap<string, number>;
     currentPrice: number | null;
     histories: OrderHistory[];
@@ -60,6 +61,7 @@ export interface State {
 export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
     orderRequests: Stream<OrderRequestBatch>;
 } => {
+    sources.socket.refreshCredentials?.();
     const summaryComponent = isolate(SummaryComponent, {
         state: {
             get: (state: State) => state.summaryComponentState && {
@@ -98,6 +100,7 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
         state: {
             get: (state: State) => state.orderComponentState && {
                 ...state.orderComponentState,
+                credentialVersion: state.credentialVersion,
                 currentPrice: state.currentPrice ?? 0,
                 histories: state.histories,
                 orders: state.orders,

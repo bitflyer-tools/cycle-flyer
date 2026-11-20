@@ -1,10 +1,11 @@
 import * as hash from "hash.js";
 import {Socket} from "socket.io-client";
+import {apiCredentials} from "../credentials";
 
 export const privateChannelNames = ["child_order_events", "parent_order_events"];
 
 export const authenticate = (client: Socket, onAuthenticated: () => void) => {
-    const [apiKey, apiSecret] = [localStorage["api-key"], localStorage["api-secret"]];
+    const { key: apiKey, secret: apiSecret } = apiCredentials();
     if (!apiKey || !apiSecret) { return; }
 
     client.emit("auth", authParams(apiKey, apiSecret), (error: any) => error || onAuthenticated());

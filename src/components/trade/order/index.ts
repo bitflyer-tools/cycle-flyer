@@ -17,6 +17,7 @@ import {twapRequest} from "./twapRequest";
 import {view} from "./view";
 
 export interface State {
+    credentialVersion?: symbol;
     currentPrice: number;
     histories: OrderHistory[];
     ifdocoOrder: IFDOCOrder;

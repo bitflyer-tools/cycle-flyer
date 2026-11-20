@@ -1,11 +1,13 @@
 import {mockDOMSource} from "@cycle/dom";
 import {RequestInput, RequestOptions, Response, ResponseStream} from "@cycle/http";
 import {MainHTTPSource} from "@cycle/http/lib/cjs/MainHTTPSource";
+import {StorageRequest} from "@cycle/storage";
 import {StateSource} from "@cycle/state";
 import {routerify} from "cyclic-router";
 import {deepEqual, equal, match} from "node:assert/strict";
 import {once} from "node:events";
 import {createServer} from "node:http";
+import {createHmac} from "node:crypto";
 import {test, TestContext} from "node:test";
 import {setImmediate as flush} from "node:timers/promises";
 import switchPath from "switch-path";
@@ -14,11 +16,12 @@ import {makeHTTPDriver} from "../src/drivers/httpDriver";
 import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
+import {credentialAwareStorageDriver} from "../src/storage";
 import {storageKeys} from "../src/components/trade/order/intent";
 import {Execution} from "../src/models/execution";
 import type {State as SummaryState} from "../src/components/trade/summary";
 import {view as summaryView} from "../src/components/trade/summary/view";
-import {twapSliceOrder} from "../src/http";
+import {cancelOrders, limitOrder, parentOrdersPageSize, stopOrder, twapSliceOrder} from "../src/http";
 
 test("blocks both IFDOCO sides until the first public execution arrives", (t) => {
     const order = setup(t, "10000", { initialPrice: null });
@@ -217,6 +220,137 @@ test("dispatches every Clear Orders request and stays locked until they all sett
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
 
+test("clears cached account data and ignores late private responses after switching credentials", (t) => {
+    const trade = setup(t, "0.01", { apiKey: "account-a" });
+    const positionRequest = () => trade.polls.filter(({ category }) => category === "positions").at(-1)!;
+    const ordersRequest = () => trade.polls.filter(({ category }) => category === "orders").at(-1)!;
+    const accountA = positionRequest();
+    const accountAOrders = ordersRequest();
+    trade.respondTo(accountA).succeed([{ side: "BUY", size: 0.25, price: 100 }]);
+    trade.respondTo(trade.polls.find(({ category }) => category === "collateral")!)
+        .succeed({ collateral: 1000 });
+    trade.respondTo(accountAOrders).succeed([{ side: "BUY", size: 0.1, price: 100 }]);
+    equal(trade.tradeState.position.size, 0.25);
+    equal(trade.tradeState.summaryComponentState!.collateral, 1000);
+    equal(trade.tradeState.orders.length, 1);
+    const alreadySubscribed = trade.respondTo(accountA);
+    const pendingOrders = trade.respondTo(accountAOrders);
+
+    trade.navigate("/setting");
+    trade.writeCredential("api-key", "account-b");
+    trade.writeCredential("api-secret", "secret-b");
+    equal(trade.tradeState.position.size, 0);
+    trade.navigate("/");
+    const accountB = positionRequest();
+    equal((accountB.headers as Record<string, string>)["ACCESS-KEY"], "account-b");
+    equal(trade.tradeState.summaryComponentState!.collateral, 0);
+    deepEqual(trade.tradeState.orders, []);
+
+    trade.clearPosition();
+    trade.clearOrders();
+    alreadySubscribed.succeed([{ side: "BUY", size: 0.25, price: 100 }]);
+    const fresh = trade.respondTo(accountB);
+    trade.respondTo(accountA).succeed([{ side: "BUY", size: 0.25, price: 100 }]);
+    pendingOrders.succeed([{ side: "BUY", size: 0.1, price: 100 }]);
+    equal(trade.tradeState.position.size, 0);
+    deepEqual(trade.tradeState.orders, []);
+    trade.clearPosition();
+    equal(trade.requests.length, 0);
+
+    fresh.succeed([{ side: "SELL", size: 0.05, price: 110 }]);
+    trade.clearPosition();
+    equal(trade.requests.length, 1);
+    const [order] = trade.requests;
+    deepEqual(JSON.parse(order.send as string), {
+        child_order_type: "MARKET", product_code: "FX_BTC_JPY", side: "BUY", size: 0.05,
+    });
+    assertSignature(order, "account-b", "secret-b");
+});
+
+test("a pending Clear Position order cannot lock or settle a close on another account", (t) => {
+    const trade = setup(t, "0.01", { apiKey: "account-a" });
+    const position = [{ side: "BUY", size: 0.08, price: 40000 }];
+    trade.respondTo(trade.positionRequests[0]).succeed(position);
+    trade.clearPosition();
+    const original = trade.respondTo(trade.requests[0]);
+    equal(trade.tradeState.positionClose?.settled, false);
+
+    trade.navigate("/setting");
+    trade.writeCredential("api-key", "account-b");
+    equal(trade.tradeState.positionClose, undefined);
+    trade.navigate("/");
+    trade.respondTo(trade.positionRequests.at(-1)!).succeed(position);
+    trade.clearPosition();
+    equal(trade.requests.length, 2);
+
+    original.succeed();
+    equal(trade.state.isOrdering, true);
+    equal(trade.tradeState.positionClose?.settled, false);
+    trade.clearPosition();
+    equal(trade.requests.length, 2);
+});
+
+test("continues pagination for the current account when an old parent-order list arrives", (t) => {
+    const trade = setup(t, "0.01", { apiKey: "account-a" });
+    const firstPage = () => trade.polls.filter(({ category }) => category === "parent-orders").at(-1)!;
+    const original = firstPage();
+
+    trade.navigate("/setting");
+    trade.writeCredential("api-key", "account-b");
+    trade.navigate("/");
+    const current = trade.respondTo(firstPage());
+    const fullPage = Array.from({ length: parentOrdersPageSize }, (_, index) =>
+        ({ id: index + 2, parent_order_id: `parent-${index + 2}` }));
+    trade.respondTo(original).succeed(fullPage);
+    equal(trade.polls.some(({ category }) => category === "parent-orders-page"), false);
+
+    current.succeed(fullPage);
+    const pages = trade.polls.filter(({ category }) => category === "parent-orders-page");
+    equal(pages.length, 1);
+    equal((pages[0].headers as Record<string, string>)["ACCESS-KEY"], "account-b");
+    trade.respondTo(pages[0]).succeed([]);
+});
+
+test("a pending IFDOCO from the previous account cannot lock or update the new account", (t) => {
+    const trade = setup(t, "0.01", { apiKey: "account-a" });
+    trade.buy("ifdoco");
+    equal(trade.state.isOrdering, true);
+    const original = trade.respondTo(trade.requests[0]);
+
+    trade.navigate("/setting");
+    trade.writeCredential("api-key", "account-b");
+    trade.navigate("/");
+    equal(trade.state.isOrdering, false);
+    trade.buy("market");
+    equal(trade.state.isOrdering, true);
+
+    original.fail();
+    equal(trade.state.isOrdering, true);
+    equal(trade.histories.length, 0);
+    equal(trade.sounds.length, 0);
+});
+
+test("rejects a response from before a secret-only change away and back", (t) => {
+    const trade = setup(t, "0.01", { apiKey: "account-a" });
+    const original = trade.polls.find(({ category }) => category === "positions")!;
+    trade.navigate("/setting");
+    trade.writeCredential("api-secret", "replacement");
+    trade.writeCredential("api-secret", "test");
+    trade.navigate("/");
+    trade.respondTo(original).succeed([{ side: "BUY", size: 0.25, price: 100 }]);
+    trade.clearPosition();
+    equal(trade.tradeState.position.size, 0);
+    deepEqual(trade.requests, []);
+});
+
+function assertSignature(order: RequestOptions, key: string, secret: string) {
+    const headers = order.headers as Record<string, string>;
+    const query = new URLSearchParams(Object.entries(order.query ?? {}));
+    const signed = `${headers["ACCESS-TIMESTAMP"]}${order.method}${new URL(order.url).pathname}?${query}${order.send}`;
+    equal(headers["ACCESS-KEY"], key);
+    equal(headers["ACCESS-SIGN"], createHmac("sha256", secret).update(signed).digest("hex"));
+}
+
 test("keeps Clear Position disabled until a full fill is confirmed", (t) => {
     const order = setup(t);
     const position = [{ side: "BUY", size: 0.08, price: 40000 }];
@@ -348,6 +482,9 @@ for (const category of ["limit-order", "cancel-orders", "market-order"] as const
         order.enterPrice("10000");
         const position = [{ side: "BUY", size: 0.08, price: 40000 }];
         if (category === "market-order") order.respondTo(order.positionRequests[0]).succeed(position);
+        const refreshOrders = () => order.respondTo(order.polls.filter(({ category }) => category === "orders").at(-1)!)
+            .succeed([{ side: "BUY", size: 0.1, price: 10000 }]);
+        refreshOrders();
         const submit = {
             "limit-order": () => order.buy("limit"),
             "cancel-orders": order.clearOrders,
@@ -382,6 +519,7 @@ for (const category of ["limit-order", "cancel-orders", "market-order"] as const
             return;
         }
 
+        refreshOrders();
         const received = once(server, "request");
         submit();
         await received;
@@ -412,13 +550,42 @@ for (const route of ["/", "/setting"]) {
     });
 }
 
+test("ignores write deadlines from the previous account", (t) => {
+    const trade = setup(t);
+    const pending = [
+        cancelOrders(),
+        limitOrder(10000, 0.01, "BUY"),
+        stopOrder(110000, 0.01, "BUY"),
+        twapSliceOrder(0.01, "BUY", Symbol()),
+    ]
+        .map((request) => trade.respondTo({ ...request, _namespace: ["trade"] }));
+
+    trade.navigate("/setting");
+    trade.writeCredential("api-key", "account-b");
+    const timeout = Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" });
+    pending.forEach((response) => response.fail(timeout));
+    trade.navigate("/");
+
+    deepEqual(trade.histories, []);
+    deepEqual(trade.sounds, []);
+});
+
 function setup(t: TestContext, width = "0.01", options: {
+    apiKey?: string;
     initialPrice?: number | null;
     writeOrigin?: string;
 } = {}) {
-    const { initialPrice = 10000000, writeOrigin } = options;
+    const { apiKey = "test", initialPrice = 10000000, writeOrigin } = options;
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-key": "test", "api-secret": "test" } });
+    const credentials: Record<string, string | undefined> = { "api-key": apiKey, "api-secret": "test" };
+    Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: Object.assign(credentials, { setItem: (key: string, value: string) => { credentials[key] = value; } }),
+    });
+    const storageWrites$ = Stream.create<StorageRequest>();
+    const apiKeyInput$ = Stream.create<{target: {value: string}}>();
+    const apiSecretInput$ = Stream.create<{target: {value: string}}>();
+    credentialAwareStorageDriver(storageWrites$);
     t.after(() => {
         if (originalStorage) {
             Object.defineProperty(globalThis, "localStorage", originalStorage);
@@ -462,7 +629,10 @@ function setup(t: TestContext, width = "0.01", options: {
     const main: Sinks = routerify(Root, switchPath)({
         DOM: mockDOMSource({ ".___trade": new Proxy({}, { get: (_, selector) =>
             typeof selector === "string" && selector.startsWith(".___cycle") ? orderEvents : undefined,
-        }) }),
+        }), ".___setting": {
+            "#api-key-input": { input: apiKeyInput$ },
+            "#api-secret-input": { input: apiSecretInput$ },
+        } }),
         HTTP: source,
         history: history$,
         socket: {
@@ -474,7 +644,7 @@ function setup(t: TestContext, width = "0.01", options: {
             reconnect$: Stream.never(),
         },
         state: new StateSource(state$, "state"),
-        storage: { local: { getItem: (key: string) => Stream.of(key === storageKeys.priceWidth ? width : "0.01") } },
+        storage: { local: { getItem: (key: string) => Stream.of(key in credentials ? credentials[key] : key === storageKeys.priceWidth ? width : "0.01") } },
     } as unknown as Omit<Sources, "router"> & { history: typeof history$ });
 
     let state: { trade?: TradeState } | undefined;
@@ -486,11 +656,11 @@ function setup(t: TestContext, width = "0.01", options: {
             }
         },
     });
+    const polls: RequestOptions[] = [];
     const requests: RequestOptions[] = [];
-    const positionRequests: RequestOptions[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
-        if (options.category === "positions") { positionRequests.push(options); }
+        if (options.method === "GET") { polls.push(options); }
         if (["ifdoco-order", "market-order", "limit-order", "stop-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
             requests.push(options);
             if (writeOrigin) {
@@ -499,9 +669,11 @@ function setup(t: TestContext, width = "0.01", options: {
         }
     } });
     const sounds: Sound[] = [];
+    const storage = main.storage.subscribe({ next: (write) => storageWrites$.shamefullySendNext(write) });
     const audio = main.sound!.subscribe({ next: (sound) => sounds.push(sound) });
     if (initialPrice !== null) publishExecution(initialPrice);
     t.after(() => {
+        storage.unsubscribe();
         audio.unsubscribe();
         http.unsubscribe();
         reducers.unsubscribe();
@@ -510,13 +682,16 @@ function setup(t: TestContext, width = "0.01", options: {
     return {
         buy: (category: keyof typeof buy$) => buy$[category].shamefullySendNext(null),
         clearPosition: () => clearPosition$.shamefullySendNext(null),
-        positionRequests,
+        get positionRequests() { return polls.filter(({ category }) => category === "positions"); },
         clearOrders: () => clearOrders$.shamefullySendNext(null),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
+        polls,
         publishExecution,
         requests,
+        writeCredential: (key: "api-key" | "api-secret", value: string) =>
+            (key === "api-key" ? apiKeyInput$ : apiSecretInput$).shamefullySendNext({ target: { value } }),
         sounds,
         respondTo(request: RequestOptions) {
             const response$ = Object.assign(Stream.createWithMemory<Response>(), { request: { ...request } });

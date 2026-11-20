@@ -3,6 +3,7 @@ import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import sampleCombine from "xstream/extra/sampleCombine";
+import {apiCredentials, credentialChanges$} from "../../../credentials";
 import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
@@ -44,8 +45,9 @@ export const submissions = (requests$: Stream<OrderRequestBatch>, http: HTTPSour
         .compose(flattenConcurrently);
 
     const idle = { batch: null as Submission[] | null, remaining: [] as symbol[] };
-    return Stream.merge(completed$, requested$)
+    return Stream.merge(completed$, requested$, credentialChanges$.mapTo(null))
         .fold((pending, event) => {
+            if (event === null) { return idle; }
             if (typeof event === "symbol") {
                 const remaining = pending.remaining.filter((id) => id !== event);
                 return remaining.length ? { ...pending, remaining } : idle;
@@ -67,6 +69,9 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
             .filter(([_, state]) => isValid(state))
             .map(([_, state]) => ({ requests: [toRequest(state)] }));
 
+    const accountIsCurrent = (state: State) =>
+        state.credentialVersion === undefined || state.credentialVersion === apiCredentials().version;
+
     return Stream.merge(
         withState(actions.onClickMarketBuyButton$, (state) => marketOrder(state.size, "BUY"), isValidOrderSize),
         withState(actions.onClickMarketSellButton$, (state) => marketOrder(state.size, "SELL"), isValidOrderSize),
@@ -77,12 +82,14 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
         withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder, isValidIFDOCOOrder),
         withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder, isValidIFDOCOOrder),
         actions.onClickClearButton$.compose(sampleCombine(state$))
-            .filter(([_, state]) => canClearPosition(state))
+            .filter(([_, state]) => accountIsCurrent(state) && canClearPosition(state))
             .map(([_, { position }]) => ({
                 closePositionSize: position.size,
                 requests: [marketOrder(position.size, position.side === "BUY" ? "SELL" : "BUY")],
             })),
         actions.onClickClearOrderButton$.compose(sampleCombine(state$))
+            .filter(([_, state]) => accountIsCurrent(state)
+                && state.orders.length + Object.keys(state.parentStopOrders).length > 0)
             .map(([_, state]) => ({
                 requests: [cancelOrders(), ...Object.keys(state.parentStopOrders).map(cancelParentOrder)],
             })),
