@@ -1,15 +1,24 @@
-import {Response, ResponseStream} from "@cycle/http";
+import {HTTPSource, Response, ResponseStream} from "@cycle/http";
 import {MemoryStream, Stream} from "xstream";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
+import {isWriteDeadlineError} from "../../../drivers/httpDriver";
 import {createOrderHistory, OrderHistory} from "../../../models/orderHistory";
 
 type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 
-type OrderStatus = "success" | "failed";
+type OrderStatus = "success" | "failed" | "unconfirmed";
 
 export interface OrderOutcome {
     status: OrderStatus;
     histories: OrderHistory[];
 }
+
+export const orderOutcomes = (http: HTTPSource): Stream<OrderOutcome> =>
+    Stream.merge(
+        http.select("market-order").map((response$) => createChildOrderOutcome("Market", response$)),
+        http.select("limit-order").map((response$) => createChildOrderOutcome("Limit", response$)),
+        http.select("stop-order").map(createParentOrderOutcome),
+    ).compose(flattenConcurrently);
 
 export const createChildOrderOutcome = (name: string, stream$: HTTPResponse$): Stream<OrderOutcome> =>
     createOutcome(stream$, (body, status) => {
@@ -30,6 +39,20 @@ export const createParentOrderOutcome = (stream$: HTTPResponse$): Stream<OrderOu
         ),
     );
 
+export const createCancellationTimeoutHistory = (stream$: HTTPResponse$): Stream<OrderHistory> =>
+    stream$.mapTo<OrderHistory | null>(null)
+        .replaceError((error) => {
+            if (!isWriteDeadlineError(error)) return Stream.empty();
+            const parentOrderId = JSON.parse(stream$.request.send as string).parent_order_id;
+            return Stream.of<OrderHistory | null>({
+                createdAt: new Date(),
+                description: parentOrderId || "All child orders",
+                name: "Cancel",
+                status: "unconfirmed",
+            });
+        })
+        .filter((history): history is OrderHistory => history !== null);
+
 const createOutcome = (
     stream$: HTTPResponse$,
     createHistories: (body: string, status: OrderStatus) => OrderHistory[],
@@ -37,7 +60,7 @@ const createOutcome = (
     stream$
         .last()
         .mapTo<OrderStatus>("success")
-        .replaceError(() => Stream.of<OrderStatus>("failed"))
+        .replaceError((error) => Stream.of<OrderStatus>(isWriteDeadlineError(error) ? "unconfirmed" : "failed"))
         .map((status) => ({ status, histories: createHistories(stream$.request.send as string, status) }));
 
 const orderNames: { [conditionType: string]: string } = {
