@@ -1,12 +1,14 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {apiCredentials} from "../../credentials";
+import {Execution} from "../../models/execution";
 import {Order} from "../../models/order";
 import {createOrderHistory} from "../../models/orderHistory";
 import {putParentOrder, retainActive} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
 import {State} from "./index";
 import {Actions} from "./intent";
+import {checkPriceAlert, isExecutionPrice} from "./priceAlert";
 
 const defaultState: State = {
     currentPrice: null,
@@ -15,6 +17,7 @@ const defaultState: State = {
     parentStopOrders: {},
     position: new Position([]),
     price: 0,
+    lastExecutionPrice: 0,
 };
 
 export const resetAccountState = (state: State, version: symbol): State => {
@@ -44,13 +47,13 @@ export const resetAccountState = (state: State, version: symbol): State => {
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
     const { version } = apiCredentials();
-    const defaultReducer$ = Stream.of((state: State) => resetAccountState(state || defaultState, version));
+    const defaultReducer$ = Stream.of((state: State) => resetAccountState(startTradeSession(state), version));
 
     const currentPriceReducer$ = actions.onExecutionBatch$
         .filter((executions) => executions.length > 0)
-        .map((executions) => (state: State) => {
-            state.boardComponentState?.board.removeExecutions(executions);
-            return { ...state, currentPrice: executions[executions.length - 1].price };
+        .map((executions) => {
+            const time = new Date();
+            return (state: State) => applyExecutions(state, executions, time);
         });
 
     const myExecutionReducer$ = actions.onMyExecutionCreated$
@@ -104,4 +107,28 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         parentOrderReducer$,
         parentOrdersReducer$,
     ) as Stream<Reducer<State>>;
+};
+
+const startTradeSession = (state: State = defaultState): State => ({
+    ...state,
+    lastExecutionPrice: 0,
+    summaryComponentState: state.summaryComponentState && { ...state.summaryComponentState, priceAlert: null },
+});
+
+const applyExecutions = (state: State, executions: Execution[], time: Date): State => {
+    state.boardComponentState?.board.removeExecutions(executions.filter(({ price }) => isExecutionPrice(price)));
+    return executions.reduce((next, { price }) => applyExecution(next, price, time), state);
+};
+
+const applyExecution = (state: State, price: number, time: Date): State => {
+    if (!isExecutionPrice(price)) { return { ...state, lastExecutionPrice: 0 }; }
+
+    const summary = state.summaryComponentState;
+    const priceAlert = summary && checkPriceAlert(summary.priceAlert, state.lastExecutionPrice, price, time);
+    return {
+        ...state,
+        currentPrice: price,
+        lastExecutionPrice: price,
+        summaryComponentState: summary && { ...summary, priceAlert: priceAlert ?? null },
+    };
 };
