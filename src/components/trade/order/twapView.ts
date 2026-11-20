@@ -16,12 +16,13 @@ export const twapSection = (state: State, canSign: boolean): VNode =>
         ]),
         p(".twap-interval-hint", `Enter an interval greater than 0 and up to ${maximumTwapInterval} seconds.`),
         p(".twap-status", { attrs: { role: "status" } }, twapStatus(state, canSign)),
+        ...(isRunning(state.twap) ? [p(".twap-status", "Schedule edits apply to the next TWAP.")] : []),
         div(".twap-order-buttons.order-buttons", twapButtons(state, canSign)),
     ]);
 
 const twapStatus = (state: State, canSign: boolean): string =>
     isRunning(state.twap)
-        ? `Running: ${state.twap.remaining} / ${state.twap.slices} slices left`
+        ? `Running: ${state.twap.remaining} / ${state.twap.totalSlices} slices left`
         : state.twap.error || (!canSign ? "Configure bitFlyer credentials in Settings to start TWAP." :
             `${sliceSize(state.size, state.twap.slices)} x ${state.twap.slices} every ${state.twap.interval} sec`);
 
