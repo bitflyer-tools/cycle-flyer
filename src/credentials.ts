@@ -126,17 +126,17 @@ const migrateLegacyCredentials = async (): Promise<boolean> => {
         removeLegacyCredentials();
         return false;
     }
+    let migrated = true;
     if (key && secret) {
         if (!bridge) {
             sessionPair = { key, secret };
-        } else if (!await bridge.migrate({ key, secret })) {
-            localStorage.setItem(reentryRequiredKey, "true");
-            removeLegacyCredentials();
-            return false;
+        } else {
+            migrated = await bridge.migrate({ key, secret }).catch(() => false);
         }
     }
     removeLegacyCredentials();
-    return true;
+    if (!migrated) { localStorage.setItem(reentryRequiredKey, "true"); }
+    return migrated;
 };
 
 const removeLegacyCredentials = (): void => {

@@ -311,24 +311,22 @@ test('Electron authorizes a parent order cancellation with the exact request bod
     hmac(request.headers['ACCESS-TIMESTAMP'] + request.method + requestPath + request.send));
 });
 
-test('a failed encrypted write keeps legacy credentials available for retry after restart', async () => {
-  const entries = new Map([['api-key', pair.key], ['api-secret', pair.secret]]);
-  const renderer = createRenderer(entries, {
-    migrate: async () => { throw new Error('Could not write encrypted credentials'); },
-  });
-  assert.equal(await renderer.initializeCredentials(), false);
-  assert.deepEqual([...entries.values()], [pair.key, pair.secret]);
+const migrationFailures = [
+  ['a failed encrypted write', async () => { throw new Error('Could not write encrypted credentials'); }],
+  ['unavailable secure storage', async () => false],
+];
 
-  const restarted = createRenderer(entries, { migrate: async () => true });
-  assert.equal(await restarted.initializeCredentials(), true);
-  assert.equal(entries.size, 0);
+test('failed migration removes plaintext and persists the reentry prompt until save', async (t) => {
+  for (const [name, migrate] of migrationFailures) {
+    await t.test(name, () => assertMigrationRequiresReentry(migrate));
+  }
 });
 
-test('unavailable secure storage removes plaintext and persists the reentry prompt until save', async () => {
+const assertMigrationRequiresReentry = async (migrate) => {
   const entries = new Map([['api-key', pair.key], ['api-secret', pair.secret]]);
-  const renderer = createRenderer(entries, { migrate: async () => false });
+  const renderer = createRenderer(entries, { migrate });
   assert.equal(await renderer.initializeCredentials(), false);
-  assert.deepEqual([...entries.values()], ['true']);
+  assert.deepEqual([...entries], [['bitflyer-credentials-reentry-required', 'true']]);
 
   const restarted = createRenderer(entries, {
     save: async (value) => assert.equal(value.secret, pair.secret),
@@ -347,7 +345,7 @@ test('unavailable secure storage removes plaintext and persists the reentry prom
   assert.equal(await restarted.initializeCredentials(), true);
   assert.equal(entries.size, 0);
   assert.equal(await createRenderer(entries, {}).initializeCredentials(), true);
-});
+};
 
 test('Settings shows empty inputs with password masking even after credentials are saved', async () => {
   const renderer = createRenderer(new Map());
