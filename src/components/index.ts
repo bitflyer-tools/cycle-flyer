@@ -129,6 +129,7 @@ export const Root = (sources: Sources): Sinks => {
 
 const resetAccount: Reducer<RootState> = (state) => {
     if (!state?.trade) { return state; }
+    stopTwap();
     const reset = resetTwap("TWAP stopped because credentials changed.")(state) ?? state;
     const trade = reset.trade ?? state.trade;
     return {
@@ -144,6 +145,7 @@ const resetAccount: Reducer<RootState> = (state) => {
                 ...trade.summaryComponentState,
                 collateral: 0,
             },
+            orderComponentState: trade.orderComponentState && { ...trade.orderComponentState, isOrdering: false },
             position: new Position([]),
             positionCredentialVersion: undefined,
         },

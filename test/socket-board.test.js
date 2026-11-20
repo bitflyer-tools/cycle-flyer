@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { webcrypto } = require('node:crypto');
 const path = require('node:path');
 const { runInNewContext } = require('node:vm');
 const { test } = require('node:test');
@@ -8,6 +9,7 @@ const Stream = require('xstream').default;
 const { outputFiles } = buildSync({
   stdin: {
     contents: [
+      'export { saveCredentials } from "./src/credentials";',
       'export { SocketIOSource } from "./src/drivers/socketIODriver";',
       'export { BoardComponent } from "./src/components/trade/board";',
     ].join('\n'),
@@ -25,9 +27,10 @@ runInNewContext(outputFiles[0].text, {
   module: testModule,
   require,
   setTimeout,
-  localStorage: { 'api-secret': 'test-secret' },
+  crypto: webcrypto,
+  localStorage: { getItem: () => null, removeItem: () => {} },
 });
-const { SocketIOSource, BoardComponent } = testModule.exports;
+const { SocketIOSource, BoardComponent, saveCredentials } = testModule.exports;
 
 const snapshotChannel = 'lightning_board_snapshot_FX_BTC_JPY';
 const boardChannel = 'lightning_board_FX_BTC_JPY';
@@ -38,6 +41,8 @@ function makeSocket() {
   const subscriptions = [];
   return {
     handlers,
+    disconnect() { return this; },
+    connect() { return this; },
     subscriptions,
     on: (event, handler) => handlers.set(event, handler),
     emit: (event, channel) => {
@@ -58,6 +63,46 @@ test('subscribes only to board deltas and executions on connect and reconnect', 
   socket.receive('connect');
   assert.deepEqual(socket.subscriptions, [boardChannel, executionChannel, boardChannel, executionChannel]);
   assert.equal(socket.handlers.has(snapshotChannel), false);
+});
+
+test('ignores events from the previous account until the new socket authenticates', async (t) => {
+  await saveCredentials({ key: 'account-a', secret: 'test-secret' });
+
+  const socket = makeSocket();
+  const authentications = [];
+  const subscribe = socket.emit;
+  socket.connected = true;
+  socket.disconnect = () => socket;
+  socket.connect = () => { socket.receive('connect'); return socket; };
+  socket.emit = (event, value, done) => {
+    if (event === 'auth') {
+      authentications.push({ key: value.api_key, done });
+    } else {
+      subscribe(event, value);
+    }
+  };
+
+  const source = new SocketIOSource(socket);
+  const events = [];
+  const listener = source.childOrderEvent$.subscribe({ next: (event) => events.push(event.id) });
+  t.after(() => listener.unsubscribe());
+  const receive = (id) => socket.receive('child_order_events', [{ id }]);
+
+  socket.receive('connect');
+  await new Promise(setImmediate);
+  authentications[0].done();
+  receive('a');
+  const saving = saveCredentials({ key: 'account-b', secret: 'test-secret' });
+  receive('late-a');
+  await saving;
+  await new Promise(setImmediate);
+  authentications[0].done();
+  receive('before-b-auth');
+  authentications[1].done();
+  receive('b');
+
+  assert.deepEqual(authentications.map(({ key }) => key), ['account-a', 'account-b']);
+  assert.deepEqual(events, ['a', 'b']);
 });
 
 test('initializes from REST and preserves WebSocket deltas and execution pruning during a refresh', () => {

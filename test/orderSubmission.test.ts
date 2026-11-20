@@ -19,7 +19,7 @@ import type {State as SummaryState} from "../src/components/trade/summary";
 import {view as summaryView} from "../src/components/trade/summary/view";
 import {currentCredentialVersion, saveCredentials} from "../src/credentials";
 import {AccountRequest, authorizeRequest, makeHTTPDriver, makeSignedHTTPDriver, unsignedRequests$} from "../src/drivers/httpDriver";
-import {twapSliceOrder} from "../src/http";
+import {cancelOrders, getParentOrders, limitOrder, parentOrdersPageSize, stopOrder, twapSliceOrder} from "../src/http";
 
 test("shows a signing error for a market order without credentials and clears it on retry", async (t) => {
     const order = setup(t);
@@ -40,6 +40,8 @@ test("shows a clear-orders signing error after returning from Settings", async (
     const order = setup(t);
     await saveCredentials({ key: "test-key", secret: "test-secret" });
     t.after(() => saveCredentials(null));
+    order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getorders", category: "orders", _namespace: ["trade"] })
+        .succeed([{ side: "BUY", size: 0.1, price: 100 }]);
     order.clearOrders();
     equal(order.requests[0].category, "cancel-orders");
     equal(order.state.isOrdering, true);
@@ -354,6 +356,49 @@ test("clears the previous account position and only closes a position from the c
     equal((signed.headers as Record<string, string>)["ACCESS-KEY"], "second-key");
 });
 
+test("continues pagination when a previous account's parent-order list arrives", async (t) => {
+    const trade = setup(t);
+    await saveCredentials({ key: "account-a", secret: "secret-a" });
+    t.after(() => saveCredentials(null));
+
+    const list = { ...getParentOrders(), _namespace: ["trade"] };
+    const previous = await authorizeRequest(list) as AccountRequest;
+    await saveCredentials({ key: "account-b", secret: "secret-b" });
+    const current = trade.respondTo(await authorizeRequest(list) as AccountRequest);
+    const fullPage = Array.from({ length: parentOrdersPageSize }, (_, index) =>
+        ({ id: index + 2, parent_order_id: `parent-${index + 2}` }));
+
+    trade.respondTo(previous).succeed(fullPage);
+    equal(trade.pages.length, 0);
+
+    current.succeed(fullPage);
+    equal(trade.pages.length, 1);
+    const page = await authorizeRequest(trade.pages[0]) as AccountRequest;
+    equal((page.headers as Record<string, string>)["ACCESS-KEY"], "account-b");
+    trade.respondTo(page).succeed([]);
+});
+
+test("a pending IFDOCO from the previous account cannot lock or update the new account", async (t) => {
+    const trade = setup(t);
+    await saveCredentials({ key: "account-a", secret: "secret-a" });
+    t.after(() => saveCredentials(null));
+    trade.buy("ifdoco");
+    equal(trade.state.isOrdering, true);
+    const original = trade.respondTo(trade.requests[0]);
+
+    trade.navigate("/setting");
+    await saveCredentials({ key: "account-b", secret: "secret-b" });
+    trade.navigate("/");
+    equal(trade.state.isOrdering, false);
+    trade.buy("market");
+    equal(trade.state.isOrdering, true);
+
+    original.fail();
+    equal(trade.state.isOrdering, true);
+    equal(trade.histories.length, 0);
+    equal(trade.sounds.length, 0);
+});
+
 function rejectUnsigned(request: RequestOptions) {
     return new Promise<void>((resolve, reject) => {
         unsignedRequests$.filter((unsigned) => unsigned === request).take(1).addListener({ next: () => resolve() });
@@ -388,6 +433,10 @@ for (const category of ["limit-order", "cancel-orders"] as const) {
         const address = server.address() as { port: number };
         const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${address.port}` });
         order.enterPrice("10000");
+        if (category === "cancel-orders") {
+            order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getorders", category: "orders", _namespace: ["trade"] })
+                .succeed([{ side: "BUY", size: 0.1, price: 100 }]);
+        }
         const submit = category === "limit-order" ? () => order.buy("limit") : order.clearOrders;
         const path = category === "limit-order" ? "/v1/me/sendchildorder" : "/v1/me/cancelallchildorders";
 
@@ -460,6 +509,27 @@ test("ignores order and cancellation deadlines from the previous account", async
 
     order.navigate("/");
     deepEqual(order.histories, []);
+});
+
+test("ignores write deadlines from the previous account", async (t) => {
+    const trade = setup(t);
+    const pending = [
+        cancelOrders(),
+        limitOrder(10000, 0.01, "BUY"),
+        stopOrder(110000, 0.01, "BUY"),
+        twapSliceOrder(0.01, "BUY", Symbol()),
+    ]
+        .map((request) => trade.respondTo({ ...request, _namespace: ["trade"] }));
+
+    trade.navigate("/setting");
+    await saveCredentials({ key: "account-b", secret: "secret-b" });
+    t.after(() => saveCredentials(null));
+    const timeout = Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" });
+    pending.forEach((response) => response.fail(timeout));
+    trade.navigate("/");
+
+    deepEqual(trade.histories, []);
+    deepEqual(trade.sounds, []);
 });
 
 function setup(t: TestContext, width = "0.01", options: {
@@ -546,8 +616,10 @@ function setup(t: TestContext, width = "0.01", options: {
         },
     });
     const requests: RequestOptions[] = [];
+    const pages: AccountRequest[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
-        const options = request as RequestOptions;
+        const options = request as AccountRequest;
+        if (options.category === "parent-orders-page") { pages.push(options); }
         if (["ifdoco-order", "market-order", "limit-order", "stop-order", "twap-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
             requests.push(options);
             if (writeOrigin) {
@@ -580,6 +652,7 @@ function setup(t: TestContext, width = "0.01", options: {
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
+        pages,
         publishExecution,
         requests,
         sounds,
