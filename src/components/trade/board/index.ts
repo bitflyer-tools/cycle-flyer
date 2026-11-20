@@ -24,7 +24,9 @@ export interface State {
 
 export const BoardComponent = (sources: Sources): Sinks => {
     const actions = intent(sources);
-    const boardReducer$ = synchronizeBoard(sources.socket.board$, sources.HTTP.select("board"));
+    const boardReducer$ = synchronizeBoard(
+        sources.socket.board$, sources.HTTP.select("board"), sources.socket.executionBatch$,
+    );
     const reducer$ = model(actions, boardReducer$);
     const view$ = view(sources.state.stream as any);
     const request$ = request();

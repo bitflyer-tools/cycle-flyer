@@ -7,6 +7,7 @@ import {deepEqual, equal, match} from "node:assert/strict";
 import {once} from "node:events";
 import {createServer} from "node:http";
 import {test, TestContext} from "node:test";
+import {setImmediate as flush} from "node:timers/promises";
 import switchPath from "switch-path";
 import Stream, {MemoryStream} from "xstream";
 import {makeHTTPDriver} from "../src/drivers/httpDriver";
@@ -14,19 +15,35 @@ import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
 import {storageKeys} from "../src/components/trade/order/intent";
+import {Execution} from "../src/models/execution";
 import type {State as SummaryState} from "../src/components/trade/summary";
 import {view as summaryView} from "../src/components/trade/summary/view";
 import {twapSliceOrder} from "../src/http";
 
-test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
-    const order = setup(t, "-10000");
-
-    order.buyIFDOCO();
+test("blocks both IFDOCO sides until the first public execution arrives", (t) => {
+    const order = setup(t, "10000", { initialPrice: null });
+    order.buy("ifdoco");
     order.sellIFDOCO();
     deepEqual(order.requests, []);
     equal(order.state.isOrdering, false);
 
-    order.buyMarket();
+    order.publishExecution(10000000);
+    order.buy("ifdoco");
+    equal(order.requests[0]?.category, "ifdoco-order");
+    order.respondTo(order.requests[0]).succeed();
+    order.sellIFDOCO();
+    deepEqual(order.requests.map(({ category }) => category), ["ifdoco-order", "ifdoco-order"]);
+});
+
+test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
+    const order = setup(t, "-10000");
+
+    order.buy("ifdoco");
+    order.sellIFDOCO();
+    deepEqual(order.requests, []);
+    equal(order.state.isOrdering, false);
+
+    order.buy("market");
     deepEqual(order.requests.map(({ category }) => category), ["market-order"]);
     equal(order.state.isOrdering, true);
 });
@@ -34,10 +51,10 @@ test("rejects invalid IFDOCO clicks without blocking the next market order", (t)
 test("accepts a single IFDOCO submission until its delayed success", (t) => {
     const order = setup(t);
 
-    order.buyIFDOCO();
-    order.buyIFDOCO();
+    order.buy("ifdoco");
+    order.buy("ifdoco");
     order.sellIFDOCO();
-    order.buyMarket();
+    order.buy("market");
 
     deepEqual(order.requests.map(({ category }) => category), ["ifdoco-order"]);
     equal(order.state.isOrdering, true);
@@ -67,24 +84,24 @@ test("accepts a single IFDOCO submission until its delayed success", (t) => {
 test("releases a failed IFDOCO and keeps a later market order locked through stale responses", (t) => {
     const order = setup(t);
 
-    order.buyIFDOCO();
+    order.buy("ifdoco");
     order.respondTo(order.requests[0]).fail();
     equal(order.state.isOrdering, false);
     deepEqual(order.histories.map(({ status }) => status), ["failed", "failed", "failed"]);
 
-    order.buyMarket();
+    order.buy("market");
     const marketResponse = order.respondTo(order.requests[1]);
     const staleResponse = order.respondTo(order.requests[0]);
     staleResponse.succeed();
     equal(order.histories.length, 6);
     equal(order.state.isOrdering, true);
-    order.buyIFDOCO();
+    order.buy("ifdoco");
     equal(order.requests.length, 2);
 
     marketResponse.succeed();
     equal(order.state.isOrdering, false);
     equal(order.histories[0].name, "Market");
-    order.buyIFDOCO();
+    order.buy("ifdoco");
     equal(order.requests.length, 3);
 });
 
@@ -95,7 +112,7 @@ for (const outcome of ["succeed", "fail"] as const) {
 
     test(`keeps IFDOCO pending after returning from settings until the original request settles (${outcome})`, (t) => {
         const order = setup(t);
-        order.buyIFDOCO();
+        order.buy("ifdoco");
         const response = order.respondTo(order.requests[0]);
 
         order.navigate("/setting");
@@ -113,22 +130,38 @@ for (const outcome of ["succeed", "fail"] as const) {
         equal(order.requests.length, 2);
     });
 
-    test(`unlocks IFDOCO when the original request settles in settings (${outcome})`, (t) => {
-        const order = setup(t);
-        order.buyIFDOCO();
+    for (const [category, names] of [
+        ["market", ["Market"]],
+        ["limit", ["Limit"]],
+        ["stop", ["Stop"]],
+        ["ifdoco", ["Stop", "Limit", "Market"]],
+    ] as const) {
+        test(`records a pending ${category} order that settles in settings (${outcome})`, async (t) => {
+            const order = setup(t);
+            order.buy(category);
+            deepEqual(order.requests.map(({ category }) => category), [`${category}-order`]);
+            const response = order.respondTo(order.requests[0]);
 
-        order.navigate("/setting");
-        deepEqual(order.sounds, []);
-        order.respondTo(order.requests[0])[outcome]();
-        deepEqual(order.sounds, [sound]);
-        deepEqual(order.histories.map(({ name, status }) => ({ name, status })), expectedHistories);
-        order.navigate("/");
-        deepEqual(order.sounds, [sound]);
-        equal(order.state.isOrdering, false);
-        deepEqual(order.histories.map(({ name, status }) => ({ name, status })), expectedHistories);
-        order.sellIFDOCO();
-        equal(order.requests.length, 2);
-    });
+            order.navigate("/setting");
+            await flush();
+            response.progress();
+            deepEqual(order.sounds, []);
+            deepEqual(order.histories, []);
+
+            response[outcome]();
+            deepEqual(order.sounds, [sound]);
+            const histories = names.map((name) => ({ name, status }));
+            deepEqual(order.histories.map(({ name, status }) => ({ name, status })), histories);
+
+            order.navigate("/");
+            await flush();
+            deepEqual(order.sounds, [sound]);
+            equal(order.state.isOrdering, false);
+            deepEqual(order.histories.map(({ name, status }) => ({ name, status })), histories);
+            order.buy(category);
+            equal(order.requests.length, 2);
+        });
+    }
 }
 
 test("routes account executions without changing session history or reviving stale responses", (t) => {
@@ -158,7 +191,7 @@ test("records a rejected limit order and permits a retry", (t) => {
     const order = setup(t);
     order.enterPrice("900");
 
-    order.buyLimit();
+    order.buy("limit");
     deepEqual(order.requests.map(({ category }) => category), ["limit-order"]);
     equal(order.state.isOrdering, true);
 
@@ -172,7 +205,7 @@ test("records a rejected limit order and permits a retry", (t) => {
         status: "failed",
     }]);
 
-    order.buyLimit();
+    order.buy("limit");
     deepEqual(order.requests.map(({ category }) => category), ["limit-order", "limit-order"]);
     equal(order.state.isOrdering, true);
 });
@@ -193,7 +226,7 @@ test("dispatches every Clear Orders request and stays locked until they all sett
 
     order.respondTo(order.requests[0]).succeed();
     order.respondTo(order.requests[1]).succeed();
-    order.buyMarket();
+    order.buy("market");
     equal(order.requests.length, 3);
     equal(order.state.isOrdering, true);
     deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-failure"]);
@@ -224,9 +257,9 @@ for (const category of ["limit-order", "cancel-orders"] as const) {
         server.listen(0, "127.0.0.1");
         await once(server, "listening");
         const address = server.address() as { port: number };
-        const order = setup(t, "0.01", `http://127.0.0.1:${address.port}`);
+        const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${address.port}` });
         order.enterPrice("10000");
-        const submit = category === "limit-order" ? order.buyLimit : order.clearOrders;
+        const submit = category === "limit-order" ? () => order.buy("limit") : order.clearOrders;
         const path = category === "limit-order" ? "/v1/me/sendchildorder" : "/v1/me/cancelallchildorders";
 
         const receivedFirst = once(server, "request");
@@ -240,7 +273,8 @@ for (const category of ["limit-order", "cancel-orders"] as const) {
         equal(order.state.isOrdering, false);
         deepEqual(paths, [path]);
         equal(order.requests.length, 1);
-        equal(order.histories[0].status, "unconfirmed");
+        deepEqual(order.histories.map(({ status }) => status), ["unconfirmed"]);
+        deepEqual(order.sounds, category === "limit-order" ? ["failure"] : []);
         summaryView(Stream.of<SummaryState>({
             ...order.tradeState,
             collateral: 0,
@@ -277,7 +311,11 @@ for (const route of ["/", "/setting"]) {
     });
 }
 
-function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
+function setup(t: TestContext, width = "0.01", options: {
+    initialPrice?: number | null;
+    writeOrigin?: string;
+} = {}) {
+    const { initialPrice = 10000000, writeOrigin } = options;
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", {
         configurable: true,
@@ -291,13 +329,19 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
         }
     });
 
-    const buyIFDOCO$ = Stream.create<null>();
+    const buy$ = {
+        ifdoco: Stream.create<null>(),
+        limit: Stream.create<null>(),
+        market: Stream.create<null>(),
+        stop: Stream.create<null>(),
+    };
+    const priceInput$ = Stream.createWithMemory<{ target: { value: string } }>();
+    priceInput$.shamefullySendNext({ target: { value: "100000" } });
     const sellIFDOCO$ = Stream.create<null>();
-    const buyLimit$ = Stream.create<null>();
-    const buyMarket$ = Stream.create<null>();
-    const priceInput$ = Stream.create<{ target: { value: string } }>();
     const refreshExecutions$ = Stream.create<null>();
     const clearOrders$ = Stream.create<null>();
+    const executionBatch$ = Stream.create<Execution[]>();
+    const publishExecution = (price: number) => executionBatch$.shamefullySendNext([{ side: "BUY", price }]);
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const writes$ = Stream.create<RequestInput | null>();
     const transport$ = makeHTTPDriver(250)(writes$).select();
@@ -308,11 +352,13 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
     const orderEvents = {
         "#price-input": { input: priceInput$ },
         ".refresh-executions": { click: refreshExecutions$ },
+        "#trigger-price-input": { input: Stream.of({ target: { value: "110000" } }) },
         ".order-buttons": { ".clear-order-button": { click: clearOrders$ } },
-        ".limit-order-buttons": { ".buy-button": { click: buyLimit$ } },
-        ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
+        ".limit-order-buttons": { ".buy-button": { click: buy$.limit } },
+        ".market-order-buttons": { ".buy-button": { click: buy$.market } },
+        ".stop-order-buttons": { ".buy-button": { click: buy$.stop } },
         ".ranged-ifdoco-order-buttons": {
-            ".buy-button": { click: buyIFDOCO$ },
+            ".buy-button": { click: buy$.ifdoco },
             ".sell-button": { click: sellIFDOCO$ },
         },
     };
@@ -326,7 +372,7 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
             board$: Stream.never(),
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
-            executionBatch$: Stream.never(),
+            executionBatch$,
             parentOrderEvent$: Stream.never(),
             reconnect$: Stream.never(),
         },
@@ -346,8 +392,7 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
     const requests: RequestOptions[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
-        if (["ifdoco-order", "limit-order", "market-order", "cancel-orders", "cancel-parent-order", "executions"]
-            .includes(options.category as string)) {
+        if (["ifdoco-order", "market-order", "limit-order", "stop-order", "cancel-orders", "cancel-parent-order", "executions"].includes(options.category as string)) {
             requests.push(options);
             if (writeOrigin) {
                 writes$.shamefullySendNext({ ...options, url: writeOrigin + new URL(options.url).pathname });
@@ -356,6 +401,7 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
     } });
     const sounds: Sound[] = [];
     const audio = main.sound!.subscribe({ next: (sound) => sounds.push(sound) });
+    if (initialPrice !== null) publishExecution(initialPrice);
     t.after(() => {
         audio.unsubscribe();
         http.unsubscribe();
@@ -363,14 +409,13 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
     });
 
     return {
-        buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
-        buyLimit: () => buyLimit$.shamefullySendNext(null),
-        buyMarket: () => buyMarket$.shamefullySendNext(null),
+        buy: (category: keyof typeof buy$) => buy$[category].shamefullySendNext(null),
         clearOrders: () => clearOrders$.shamefullySendNext(null),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         get executions() { return state!.trade!.executionsComponentState!; },
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
+        publishExecution,
         refreshExecutions: () => refreshExecutions$.shamefullySendNext(null),
         requests,
         sounds,

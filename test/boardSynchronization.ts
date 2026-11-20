@@ -5,6 +5,8 @@ import Stream from "xstream";
 import {State} from "../src/components/trade/board";
 import {synchronizeBoard} from "../src/components/trade/board/synchronizeBoard";
 import {Board, BoardLevels} from "../src/models/board";
+import {BoardOrder} from "../src/models/boardOrder";
+import {Execution} from "../src/models/execution";
 
 test("replays realtime changes over a delayed snapshot", () => {
     const {request, update, asks} = setup();
@@ -16,6 +18,57 @@ test("replays realtime changes over a delayed snapshot", () => {
     respond([{ price: 100, size: 1 }, { price: 101, size: 4 }, { price: 102, size: 1 }]);
 
     assert.deepEqual(asks(), [[101, 4], [102, 3]]);
+});
+
+test("installs a 100-delta snapshot with one sort per side", () => {
+    const {request, sendDelta, board} = setup();
+    const levels = {
+        asks: Array.from({ length: 1000 }, (_, index) => ({ price: 2999 - index, size: 1 })),
+        bids: Array.from({ length: 1000 }, (_, index) => ({ price: 1000 + index, size: 1 })),
+    };
+    const expected = new Board(levels);
+    const respond = request();
+    Array.from({ length: 100 }, (_, index) => {
+        const size = index % 3 === 1 ? 0 : index + 2;
+        const delta = index % 2 === 0
+            ? { asks: [{ price: 2000, size }], bids: [] }
+            : { asks: [], bids: [{ price: 1999, size }] };
+        sendDelta(delta);
+        expected.merge(delta.asks, delta.bids);
+    });
+
+    const sort = Array.prototype.sort;
+    let askSorts = 0;
+    let bidSorts = 0;
+    Array.prototype.sort = function<T>(this: T[], compare?: (a: T, b: T) => number): T[] {
+        const first = this[0] as BoardOrder | undefined;
+        if (first && first.price >= 2000) { askSorts++; }
+        if (first && first.price < 2000) { bidSorts++; }
+        return sort.call(this, compare);
+    };
+    try {
+        respond(levels.asks, levels.bids);
+    } finally {
+        Array.prototype.sort = sort;
+    }
+    assert.equal(askSorts, 1);
+    assert.equal(bidSorts, 1);
+    assert.deepEqual(board(), expected);
+});
+
+test("preserves duplicate levels within each snapshot or delta", () => {
+    const {request, sendDelta, asks} = setup();
+    const respond = request();
+    sendDelta({
+        asks: [{ price: 102, size: 4 }, { price: 102, size: 0 }, { price: 102, size: 5 }],
+        bids: [],
+    });
+    respond([
+        { price: 101, size: 1 }, { price: 102, size: 1 },
+        { price: 101, size: 2 }, { price: 102, size: 2 },
+    ]);
+
+    assert.deepEqual(asks(), [[101, 1], [101, 2], [102, 4], [102, 5]]);
 });
 
 test("keeps both sides best first after replaying a one-sided delta", () => {
@@ -40,6 +93,32 @@ test("initializes from a fresh snapshot and applies subsequent realtime updates"
 
     update(100, 0);
     assert.deepEqual(asks(), []);
+});
+
+test("replays execution pruning on both sides of a delayed snapshot", () => {
+    const {request, execute, asks, bids} = setup();
+    const respond = request();
+
+    execute({ side: "BUY", price: 110 }, { side: "SELL", price: 90 });
+    respond(
+        [{ price: 100, size: 1 }, { price: 110, size: 2 }],
+        [{ price: 95, size: 1 }, { price: 90, size: 2 }],
+    );
+
+    assert.deepEqual(asks(), [[110, 2]]);
+    assert.deepEqual(bids(), [[90, 2]]);
+});
+
+test("replays board deltas and execution batches in arrival order", () => {
+    const {request, execute, update, asks} = setup();
+    const respond = request();
+
+    update(99, 2);
+    execute({ side: "BUY", price: 110 });
+    update(100, 3);
+    respond([{ price: 100, size: 1 }, { price: 110, size: 1 }]);
+
+    assert.deepEqual(asks(), [[100, 3], [110, 1]]);
 });
 
 test("discards an older response when snapshot requests overlap", () => {
@@ -86,23 +165,28 @@ test("keeps the last valid board and replays deltas after malformed snapshots", 
 const setup = () => {
     const updates$ = Stream.create<BoardLevels>();
     const responses$$ = Stream.create<Stream<Response>>();
+    const executions$ = Stream.create<Execution[]>();
     let state = { board: new Board({ asks: [], bids: [] }) } as State;
-    synchronizeBoard(updates$, responses$$).addListener({
+    synchronizeBoard(updates$, responses$$, executions$).addListener({
         next: (reduce) => { state = reduce(state) as State; },
     });
 
     return {
         board: () => state.board,
         asks: () => state.board.asks.map(({price, size}) => [price, size]),
+        bids: () => state.board.bids.map(({price, size}) => [price, size]),
+        execute: (...executions: Execution[]) => executions$.shamefullySendNext(executions),
         request: () => {
             const response$ = Stream.create<Response>();
             responses$$.shamefullySendNext(response$);
-            return (asks: Array<{price: number; size: number}>, text = JSON.stringify({ asks, bids: [] })) => {
+            return (asks: BoardOrder[], bids: BoardOrder[] | string = []) => {
+                const text = typeof bids === "string" ? bids : JSON.stringify({ asks, bids });
                 response$.shamefullySendNext({ text } as Response);
                 response$.shamefullySendComplete();
             };
         },
         responses$$,
+        sendDelta: (delta: BoardLevels) => updates$.shamefullySendNext(delta),
         update: (price: number, size: number) =>
             updates$.shamefullySendNext({ asks: [{ price, size }], bids: [] }),
     };
