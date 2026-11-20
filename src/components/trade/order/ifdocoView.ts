@@ -1,24 +1,29 @@
 import {div, h4, input, label, p, span, VNode} from "@cycle/dom";
 import {sideButtons} from "./buttons";
 import {State} from "./index";
+import {isValidIFDOCOOrder} from "./validation";
 
 export const ifdocoSection = (state: State): VNode => {
     const size = Math.abs(state.size);
+    const hasValidRatio = state.ifdocoOrder.hasValidRatio();
     return div([
         h4(".sub-title", "Ranged IFDOCO"),
-        div(".line", [
+        div(".line", hasValidRatio ? [
             p(".line-number", [
                 lineNumber("Buy", "+", "-", buyLines(state, size)),
                 lineNumber("Sell", "-", "+", sellLines(state, size)),
             ]),
-        ]),
+        ] : [p("#ratio-error", "Enter a numeric profit / loss ratio.")]),
         div(".price-width", [
             label(".label", "Price width"),
             input("#price-width-input", { attrs: { value: state.ifdocoOrder.width }}),
         ]),
         div(".ratio", [
-            label(".label", "Profit / Loss Ratio"),
-            input("#ratio-input", { attrs: { value: state.ifdocoOrder.ratio }}),
+            label(".label", { attrs: { for: "ratio-input" } }, "Profit / Loss Ratio"),
+            input("#ratio-input", { attrs: hasValidRatio ? { value: state.ifdocoOrder.ratio } : {
+                "aria-invalid": "true",
+                "aria-describedby": "ratio-error",
+            }}),
         ]),
         div(".ranged-ifdoco-order-buttons.order-buttons", sideButtons(ifdocoButtonDisabled(state))),
     ]);
@@ -61,4 +66,4 @@ const sellLines = (state: State, size: number): Lines => ({
 });
 
 const ifdocoButtonDisabled = (state: State): boolean =>
-    state.isOrdering || state.size === 0 || !state.ifdocoOrder.hasValidWidth();
+    state.isOrdering || state.size === 0 || !isValidIFDOCOOrder(state);

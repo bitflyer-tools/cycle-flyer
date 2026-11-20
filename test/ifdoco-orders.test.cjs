@@ -8,10 +8,12 @@ const {orderRequests} = require("../src/components/trade/order/request");
 
 function setup(t, storedWidth) {
     const widthInput$ = Stream.create();
+    const ratioInput$ = Stream.create();
     const buyClick$ = Stream.create();
     const sellClick$ = Stream.create();
     const events = {
         "#price-width-input": widthInput$,
+        "#ratio-input": ratioInput$,
         ".ranged-ifdoco-order-buttons .buy-button": buyClick$,
         ".ranged-ifdoco-order-buttons .sell-button": sellClick$,
     };
@@ -54,8 +56,10 @@ function setup(t, storedWidth) {
             sellClick$.shamefullySendNext({});
         },
         disabled: () => ifdocoSection(state).children.at(-1).children.map((button) => button.data.attrs.disabled),
+        enterRatio: (value) => ratioInput$.shamefullySendNext({ target: { value } }),
         enterWidth: (value) => widthInput$.shamefullySendNext({ target: { value } }),
         requests,
+        view: () => ifdocoSection(state),
     };
 }
 
@@ -75,8 +79,28 @@ for (const width of ["-10000", "0", "NaN", "Infinity", "-Infinity"]) {
     });
 }
 
-test("IFDOCO sends the expected parent order for each side with a positive width", (t) => {
+test("IFDOCO rejects invalid ratios and restores the preview and both submissions at 50", (t) => {
     const form = setup(t, "10000");
+    for (const ratio of ["abc", "Infinity", "-Infinity"]) {
+        form.enterRatio(ratio);
+        const preview = form.view().children.find(({ sel }) => sel === "div.line");
+        const ratioField = form.view().children.find(({ sel }) => sel === "div.ratio").children[1];
+        assert.equal(preview.children[0].sel, "p#ratio-error");
+        assert.equal(ratioField.data.attrs["aria-invalid"], "true");
+        assert.deepEqual(form.disabled(), [true, true]);
+        form.clickBoth();
+        assert.deepEqual(form.requests, []);
+    }
+
+    form.enterRatio("50");
+    const preview = form.view().children.find(({ sel }) => sel === "div.line");
+    assert.equal(preview.children[0].sel, "p.line-number");
+    const buyPreview = preview.children[0].children[0].children[1];
+    assert.deepEqual(
+        buyPreview.children.filter(({ sel }) => sel === "span.profit-line" || sel === "span.loss-line")
+            .map(({ text }) => text),
+        ["5000", "5000"],
+    );
     assert.deepEqual(form.disabled(), [false, false]);
     form.clickBoth();
 
