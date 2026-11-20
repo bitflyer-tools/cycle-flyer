@@ -1,16 +1,22 @@
 import {mockDOMSource} from "@cycle/dom";
-import {RequestOptions, Response, ResponseStream} from "@cycle/http";
+import {RequestInput, RequestOptions, Response, ResponseStream} from "@cycle/http";
 import {MainHTTPSource} from "@cycle/http/lib/cjs/MainHTTPSource";
 import {StateSource} from "@cycle/state";
 import {routerify} from "cyclic-router";
-import {deepEqual, equal} from "node:assert/strict";
+import {deepEqual, equal, match} from "node:assert/strict";
+import {once} from "node:events";
+import {createServer} from "node:http";
 import {test, TestContext} from "node:test";
 import switchPath from "switch-path";
 import Stream, {MemoryStream} from "xstream";
+import {makeHTTPDriver} from "../src/drivers/httpDriver";
 import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
 import {storageKeys} from "../src/components/trade/order/intent";
+import type {State as SummaryState} from "../src/components/trade/summary";
+import {view as summaryView} from "../src/components/trade/summary/view";
+import {twapSliceOrder} from "../src/http";
 
 test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
     const order = setup(t, "-10000");
@@ -147,6 +153,12 @@ for (const [submit, entries] of disconnectedOrders) {
             entries.map((entry) => [...entry, "unconfirmed"]),
         );
 
+        summaryView(Stream.of<SummaryState>({
+            ...order.tradeState,
+            collateral: 0,
+            marketState: { health: "", state: "" },
+        })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /"text":"Unconfirmed"/) });
+
         order[submit]();
         equal(order.requests.length, 2);
         order.respondTo(order.requests[1]).succeed();
@@ -184,7 +196,7 @@ test("records a rejected limit order and permits a retry", (t) => {
 
 test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
     const order = setup(t);
-    order.respondTo({ category: "parent-orders", _namespace: ["trade"] }).succeed([
+    order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getparentorders", category: "parent-orders", _namespace: ["trade"] }).succeed([
         { parent_order_id: "JCO-success" },
         { parent_order_id: "JCO-failure" },
     ]);
@@ -211,9 +223,87 @@ test("dispatches every Clear Orders request and stays locked until they all sett
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
 
-function setup(t: TestContext, width = "0.01") {
+for (const category of ["limit-order", "cancel-orders"] as const) {
+    test(`aborts a stalled ${category} and displays it as unconfirmed without retrying`, { timeout: 5_000 }, async (t) => {
+        const paths: string[] = [];
+        const server = createServer((request, response) => {
+            request.resume();
+            paths.push(new URL(request.url!, "http://localhost").pathname);
+            if (paths.length === 1) {
+                return;
+            }
+            response.end();
+        });
+        t.after(() => {
+            server.closeAllConnections();
+            server.close();
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const address = server.address() as { port: number };
+        const order = setup(t, "0.01", `http://127.0.0.1:${address.port}`);
+        order.enterPrice("10000");
+        const submit = category === "limit-order" ? order.buyLimit : order.clearOrders;
+        const path = category === "limit-order" ? "/v1/me/sendchildorder" : "/v1/me/cancelallchildorders";
+
+        const receivedFirst = once(server, "request");
+        submit();
+        submit();
+        equal(order.state.isOrdering, true);
+        order.navigate("/setting");
+        const [, stalledResponse] = await receivedFirst;
+        await once(stalledResponse, "close");
+        order.navigate("/");
+        equal(order.state.isOrdering, false);
+        deepEqual(paths, [path]);
+        equal(order.requests.length, 1);
+        equal(order.histories[0].status, "unconfirmed");
+        summaryView(Stream.of<SummaryState>({
+            ...order.tradeState,
+            collateral: 0,
+            marketState: { health: "", state: "" },
+        })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /Unconfirmed \(timed out\)/) });
+
+        const received = once(server, "request");
+        submit();
+        await received;
+        deepEqual(paths, [path, path]);
+        equal(order.requests.length, 2);
+    });
+}
+
+for (const route of ["/", "/setting"]) {
+    for (const failure of ["deadline", "disconnect"] as const) {
+        test(`records an unconfirmed TWAP slice once after a ${failure} on ${route}`, (t) => {
+            const order = setup(t);
+            const request = twapSliceOrder(0.01, "BUY", Symbol());
+            const response = order.respondTo({ ...request, _namespace: ["trade"] });
+
+            if (route === "/setting") order.navigate(route);
+            if (failure === "deadline") {
+                response.fail(Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }));
+            } else {
+                response.disconnect();
+            }
+            deepEqual(order.histories.map(({ name, status }) => ({ name, status })), [
+                { name: "TWAP", status: "unconfirmed" },
+            ]);
+
+            if (route === "/setting") order.navigate("/");
+            equal(order.histories.length, 1);
+            const label = failure === "deadline" ? "Unconfirmed (timed out)" : "Unconfirmed";
+            summaryView(Stream.of<SummaryState>({
+                ...order.tradeState,
+                collateral: 0,
+                marketState: { health: "", state: "" },
+            })).addListener({ next: (vnode) => equal(JSON.stringify(vnode).includes(`"text":"${label}"`), true) });
+        });
+    }
+}
+
+function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-key": "test", "api-secret": "test" } });
     t.after(() => {
         if (originalStorage) {
             Object.defineProperty(globalThis, "localStorage", originalStorage);
@@ -230,6 +320,9 @@ function setup(t: TestContext, width = "0.01") {
     const priceInput$ = Stream.create<{ target: { value: string } }>();
     const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
+    const writes$ = Stream.create<RequestInput | null>();
+    const transport$ = makeHTTPDriver(250)(writes$).select();
+    const source = new MainHTTPSource(Stream.merge(responses$, transport$), "HTTP");
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
@@ -249,7 +342,7 @@ function setup(t: TestContext, width = "0.01") {
         DOM: mockDOMSource({ ".___trade": new Proxy({}, { get: (_, selector) =>
             typeof selector === "string" && selector.startsWith(".___cycle") ? orderEvents : undefined,
         }) }),
-        HTTP: new MainHTTPSource(responses$, "HTTP"),
+        HTTP: source,
         history: history$,
         socket: {
             board$: Stream.never(),
@@ -278,6 +371,9 @@ function setup(t: TestContext, width = "0.01") {
         if (["ifdoco-order", "limit-order", "market-order", "stop-order", "cancel-orders", "cancel-parent-order"]
             .includes(options.category as string)) {
             requests.push(options);
+            if (writeOrigin) {
+                writes$.shamefullySendNext({ ...options, url: writeOrigin + new URL(options.url).pathname });
+            }
         }
     } });
     const sounds: Sound[] = [];
@@ -304,9 +400,8 @@ function setup(t: TestContext, width = "0.01") {
             responses$.shamefullySendNext(response$);
             return {
                 disconnect: () => response$.shamefullySendError(new Error("Disconnected")),
-                fail: () => response$.shamefullySendError(Object.assign(new Error("Rejected"), {
-                    response: { status: 400 },
-                })),
+                fail: (error: Error = Object.assign(new Error("Rejected"), { response: { status: 400 } })) =>
+                    response$.shamefullySendError(error),
                 progress: () => response$.shamefullySendNext({ request } as Response),
                 reject: () => response$.shamefullySendError({ response: { request, status: 400 } }),
                 succeed: (body?: unknown) => {

@@ -1,6 +1,5 @@
 import {makeDOMDriver} from "@cycle/dom";
 import {captureClicks, HistoryDriver, HistoryInput, makeHistoryDriver} from "@cycle/history";
-import {makeHTTPDriver} from "@cycle/http";
 import {run} from "@cycle/run";
 import {withState} from "@cycle/state";
 import storageDriver from "@cycle/storage";
@@ -8,6 +7,7 @@ import {routerify} from "cyclic-router";
 import Stream from "xstream";
 import switchPath from "switch-path";
 import {Root} from "./components";
+import {makeHTTPDriver} from "./drivers/httpDriver";
 import {makeSocketIODriver} from "./drivers/socketIODriver";
 import {makeSoundDriver} from "./drivers/soundDriver";
 import "./index.styl";

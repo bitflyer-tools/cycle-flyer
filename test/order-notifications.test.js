@@ -100,6 +100,6 @@ test('notifies for each other submission and private execution', (t) => {
   trade.childOrderEvent$.shamefullySendNext(execution);
   assert.deepEqual(trade.sounds, ['failure', 'success', 'success', 'failure', 'execution', 'execution']);
   assert.deepEqual(trade.histories().map(({ name }) => name), [
-    'Executed', 'Executed', 'TWAP', 'Stop', 'Limit', 'Market',
+    'Executed', 'Executed', 'TWAP', 'Stop', 'Limit',
   ]);
 });

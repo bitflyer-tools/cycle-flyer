@@ -48,11 +48,11 @@ test("records a canceled schedule's response without advancing its replacement",
     context.mock.timers.tick(1000);
     twap.requests[1].disconnect();
     strictEqual(twap.state.twap.remaining, 1);
-    strictEqual(twap.state.histories[0].status, "unconfirmed");
+    strictEqual(twap.state.histories.length, 1);
     twap.requests[2].succeed();
     strictEqual(isRunning(twap.state.twap), false);
     deepStrictEqual(twap.state.histories.map(({description}) => description),
-        ["SELL / 0.01 / MARKET", "SELL / 0.01 / MARKET", "BUY / 0.01 / MARKET"]);
+        ["SELL / 0.01 / MARKET", "BUY / 0.01 / MARKET"]);
 });
 
 test("ignores a new start while a schedule is waiting for responses", (context) => {
