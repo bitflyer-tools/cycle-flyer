@@ -10,6 +10,7 @@ import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
 import {parentOrderPages} from "./parentOrderPages";
 import {pollResponse} from "./pollResponse";
 import {privateResponses} from "./privateResponses";
+import {PositionRequest} from "./request";
 
 export interface Actions {
     onCancelParentOrder$: Stream<{ id: string; sequence: number }>;
@@ -21,7 +22,7 @@ export interface Actions {
     onParentOrdersLoaded$: Stream<{ orders: ActiveParentOrder[]; sequence: number }>;
     onParentOrderListSettled$: Stream<null>;
     parentOrderRequests$: Stream<RequestOptions>;
-    onPositionsLoaded$: Stream<Position>;
+    onPositionsLoaded$: Stream<{ position: Position; positionCloseId: symbol | undefined }>;
 }
 
 // Trade state survives navigation, so request and cancellation ordering must survive it too.
@@ -54,8 +55,8 @@ export const intent = (sources: Sources): Actions => {
         sources.socket.parentOrderEvent$, sources.socket.reconnect$,
     );
 
-    const onPositionsLoaded$ = pollResponse(privateResponses(sources.HTTP, "positions"), (json) =>
-        isPositionList(json) ? new Position(json) : undefined);
+    const onPositionsLoaded$ = pollResponse(privateResponses(sources.HTTP, "positions"), (json, request: PositionRequest) =>
+        isPositionList(json) ? { position: new Position(json), positionCloseId: request.positionCloseId } : undefined);
 
     return {
         onCancelParentOrder$,

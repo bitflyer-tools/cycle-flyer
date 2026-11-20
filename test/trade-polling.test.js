@@ -144,7 +144,7 @@ for (const { component, category, first, invalid, next, read, expected } of test
       next: (reduce) => { state = reduce(state); },
       error: (error) => { throw error; },
     });
-    const respond = (text) => responses.shamefullySendNext(Stream.of({ text }));
+    const respond = (text) => responses.shamefullySendNext(Object.assign(Stream.of({ text }), { request: { category } }));
 
     try {
       respond(JSON.stringify(first));
@@ -166,10 +166,14 @@ for (const { component, category, first, invalid, next, read, expected } of test
   });
 }
 
+const positionCloseId = Symbol('position close');
 const accountPolls = [
   ['orders', 'onOrdersLoaded$', (price) => [{ price }], (orders) => orders[0].price],
   ['positions', 'onPositionsLoaded$',
-    (price) => [{ side: 'BUY', price, size: 1 }], (position) => position.price],
+    (price) => [{ side: 'BUY', price, size: 1 }], (result) => {
+      assert.equal(result.positionCloseId, positionCloseId);
+      return result.position.price;
+    }],
 ];
 
 for (const [category, action, payload, read] of accountPolls) {
@@ -185,7 +189,7 @@ for (const [category, action, payload, read] of accountPolls) {
     t.after(() => subscription.unsubscribe());
 
     const announce = (value, delay) => {
-      const response = Stream.create();
+      const response = Object.assign(Stream.create(), { request: { category, positionCloseId } });
       responses.shamefullySendNext(response);
       setTimeout(() => {
         response.shamefullySendNext({ text: JSON.stringify(payload(value)) });
