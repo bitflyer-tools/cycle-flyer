@@ -8,6 +8,8 @@ const switchPath = require("switch-path").default;
 const Stream = require("xstream").default;
 const {Root} = require("../src/components");
 const {parsePriceAlertLevel} = require("../src/components/trade/priceAlert");
+const {view} = require("../src/components/trade/summary/view");
+const {Position} = require("../src/models/position");
 
 function setup(t) {
     const storageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
@@ -76,6 +78,31 @@ test("alert levels require a positive whole JPY amount and a crossing direction"
     }
     assert.equal(parsePriceAlertLevel(100, ""), null);
     assert.deepEqual(parsePriceAlertLevel(100, "up"), { threshold: 100, direction: "up" });
+});
+
+test("the summary renders alert setup and dismissal at an unchanged price", () => {
+    const initialState = {
+        collateral: 0,
+        currentPrice: 99,
+        histories: [],
+        marketState: {},
+        position: new Position([]),
+        priceAlert: null,
+    };
+    const activeState = {
+        ...initialState,
+        priceAlert: { threshold: 100, direction: "up", status: "active" },
+    };
+    const controls = [];
+
+    view(Stream.of(initialState, activeState, { ...activeState }, initialState)).addListener({
+        next: (summary) => {
+            const alert = summary.children.find((child) => child.sel === "div.price-alert");
+            controls.push(alert.children[1].sel);
+        },
+    });
+
+    assert.deepEqual(controls, ["form.price-alert-form", "button.dismiss-price-alert", "form.price-alert-form"]);
 });
 
 test("an upward touch disarms the alert and emits one sound", (t) => {
