@@ -1,6 +1,7 @@
 import {Response, ResponseStream} from "@cycle/http";
 import {MemoryStream, Stream} from "xstream";
 import {createOrderHistory, OrderHistory} from "../../../models/orderHistory";
+import {isCurrentResponse} from "../privateResponses";
 
 type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 
@@ -38,6 +39,7 @@ const createOutcome = (
         .last()
         .mapTo<OrderStatus>("success")
         .replaceError(() => Stream.of<OrderStatus>("failed"))
+        .filter(() => isCurrentResponse(stream$))
         .map((status) => ({ status, histories: createHistories(stream$.request.send as string, status) }));
 
 const orderNames: { [conditionType: string]: string } = {

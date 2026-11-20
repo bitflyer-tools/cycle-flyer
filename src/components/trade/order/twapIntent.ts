@@ -8,6 +8,7 @@ import {Sources} from "../index";
 import {State} from "./index";
 import {clicks, numberInputs} from "./events";
 import {createChildOrderOutcome, OrderOutcome} from "./history";
+import {privateResponses} from "../privateResponses";
 
 export interface TwapSchedule {
     id: symbol;
@@ -40,7 +41,7 @@ export const twapIntent = (sources: Sources, state$: Stream<State>): TwapActions
         .take(1)
         .map((value) => +value)
         .map((interval) => isValidTwapInterval(interval) ? interval : 0),
-    onTwapSliceOutcome$: sources.HTTP.select("twap-order")
+    onTwapSliceOutcome$: privateResponses(sources.HTTP, "twap-order")
         .map((response$) => {
             const {scheduleId} = response$.request as TwapSliceRequest;
             return createChildOrderOutcome("TWAP", response$).map((outcome) => ({ ...outcome, scheduleId }));

@@ -3,7 +3,6 @@ import {captureClicks, HistoryDriver, HistoryInput, makeHistoryDriver} from "@cy
 import {makeHTTPDriver} from "@cycle/http";
 import {run} from "@cycle/run";
 import {withState} from "@cycle/state";
-import storageDriver from "@cycle/storage";
 import {routerify} from "cyclic-router";
 import Stream from "xstream";
 import switchPath from "switch-path";
@@ -11,6 +10,7 @@ import {Root} from "./components";
 import {makeSocketIODriver} from "./drivers/socketIODriver";
 import {makeSoundDriver} from "./drivers/soundDriver";
 import "./index.styl";
+import {credentialAwareStorageDriver} from "./storage";
 
 /**
  * Normalize pathname for SPA routing in Electron file:// protocol
@@ -67,5 +67,5 @@ run(routerify(withState(Root), switchPath), {
     history: captureClicks(wrapHistoryDriver(makeHistoryDriver())),
     socket: makeSocketIODriver(),
     sound: makeSoundDriver(),
-    storage: storageDriver,
+    storage: credentialAwareStorageDriver,
 });

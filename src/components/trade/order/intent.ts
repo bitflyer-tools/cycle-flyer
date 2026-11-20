@@ -6,6 +6,7 @@ import {State} from "./index";
 import {clicks, numberInputs, sizePresetClicks} from "./events";
 import {createChildOrderOutcome, createParentOrderOutcome, OrderOutcome} from "./history";
 import {TwapActions, twapIntent} from "./twapIntent";
+import {privateResponses} from "../privateResponses";
 
 export interface Actions extends TwapActions {
     onCancelOrders$: Stream<null>;
@@ -38,15 +39,15 @@ export const storageKeys = {
 };
 
 export const intent = (sources: Sources, state$: Stream<State>): Actions => {
-    const onCancelOrders$ = sources.HTTP.select("cancel-orders")
+    const onCancelOrders$ = privateResponses(sources.HTTP, "cancel-orders")
         .map((response$) => response$.replaceError(() => Stream.never()))
         .flatten()
         .mapTo(null);
 
     const onOrderOutcome$ = Stream.merge(
-        sources.HTTP.select("market-order").map((stream) => createChildOrderOutcome("Market", stream)),
-        sources.HTTP.select("limit-order").map((stream) => createChildOrderOutcome("Limit", stream)),
-        sources.HTTP.select("stop-order").map(createParentOrderOutcome),
+        privateResponses(sources.HTTP, "market-order").map((stream) => createChildOrderOutcome("Market", stream)),
+        privateResponses(sources.HTTP, "limit-order").map((stream) => createChildOrderOutcome("Limit", stream)),
+        privateResponses(sources.HTTP, "stop-order").map(createParentOrderOutcome),
     ).compose(flattenConcurrently);
 
     return {

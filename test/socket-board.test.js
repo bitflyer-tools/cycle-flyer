@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { webcrypto } = require('node:crypto');
 const path = require('node:path');
 const { runInNewContext } = require('node:vm');
 const { test } = require('node:test');
@@ -21,11 +22,13 @@ const { outputFiles } = buildSync({
   write: false,
 });
 const testModule = { exports: {} };
+const credentials = { 'api-secret': 'test-secret' };
 runInNewContext(outputFiles[0].text, {
   module: testModule,
   require,
   setTimeout,
-  localStorage: { 'api-secret': 'test-secret' },
+  crypto: webcrypto,
+  localStorage: credentials,
 });
 const { SocketIOSource, BoardComponent } = testModule.exports;
 
@@ -58,6 +61,45 @@ test('subscribes only to board deltas and executions on connect and reconnect', 
   socket.receive('connect');
   assert.deepEqual(socket.subscriptions, [boardChannel, executionChannel, boardChannel, executionChannel]);
   assert.equal(socket.handlers.has(snapshotChannel), false);
+});
+
+test('ignores events from the previous account until the new socket authenticates', (t) => {
+  credentials['api-key'] = 'account-a';
+  t.after(() => { delete credentials['api-key']; });
+
+  const socket = makeSocket();
+  const authentications = [];
+  const subscribe = socket.emit;
+  socket.connected = true;
+  socket.disconnect = () => socket;
+  socket.connect = () => { socket.receive('connect'); return socket; };
+  socket.emit = (event, value, done) => {
+    if (event === 'auth') {
+      authentications.push({ key: value.api_key, done });
+    } else {
+      subscribe(event, value);
+    }
+  };
+
+  const source = new SocketIOSource(socket);
+  const events = [];
+  const listener = source.childOrderEvent$.subscribe({ next: (event) => events.push(event.id) });
+  t.after(() => listener.unsubscribe());
+  const receive = (id) => socket.receive('child_order_events', [{ id }]);
+
+  socket.receive('connect');
+  authentications[0].done();
+  receive('a');
+  credentials['api-key'] = 'account-b';
+  receive('late-a');
+  source.refreshCredentials();
+  authentications[0].done();
+  receive('before-b-auth');
+  authentications[1].done();
+  receive('b');
+
+  assert.deepEqual(authentications.map(({ key }) => key), ['account-a', 'account-b']);
+  assert.deepEqual(events, ['a', 'b']);
 });
 
 test('initializes from REST and preserves WebSocket deltas during a refresh', () => {

@@ -1,8 +1,10 @@
 import {mockDOMSource} from "@cycle/dom";
 import {RequestOptions, Response, ResponseStream} from "@cycle/http";
 import {MainHTTPSource} from "@cycle/http/lib/cjs/MainHTTPSource";
+import {StorageRequest} from "@cycle/storage";
 import {StateSource} from "@cycle/state";
 import {routerify} from "cyclic-router";
+import {createHmac} from "node:crypto";
 import {deepEqual, equal} from "node:assert/strict";
 import {test, TestContext} from "node:test";
 import switchPath from "switch-path";
@@ -10,6 +12,7 @@ import Stream, {MemoryStream} from "xstream";
 import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
+import {credentialAwareStorageDriver} from "../src/storage";
 import {storageKeys} from "../src/components/trade/order/intent";
 
 test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
@@ -154,9 +157,100 @@ test("dispatches every Clear Orders request and stays locked until they all sett
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
 
-function setup(t: TestContext, width = "0.01") {
+test("clears cached account data and ignores late private responses after switching credentials", (t) => {
+    const trade = setup(t, "0.01", "account-a");
+    const positionRequest = () => trade.polls.filter(({ category }) => category === "positions").at(-1)!;
+    const accountA = positionRequest();
+    trade.respondTo(accountA).succeed([{ side: "BUY", size: 0.25, price: 100 }]);
+    trade.respondTo(trade.polls.find(({ category }) => category === "collateral")!)
+        .succeed({ collateral: 1000 });
+    trade.respondTo(trade.polls.find(({ category }) => category === "orders")!)
+        .succeed([{ side: "BUY", size: 0.1, price: 100 }]);
+    equal(trade.tradeState.position.size, 0.25);
+    equal(trade.tradeState.summaryComponentState!.collateral, 1000);
+    equal(trade.tradeState.orders.length, 1);
+    const alreadySubscribed = trade.respondTo(accountA);
+
+    trade.navigate("/setting");
+    trade.writeCredential("api-key", "account-b");
+    trade.writeCredential("api-secret", "secret-b");
+    equal(trade.tradeState.position.size, 0);
+    trade.navigate("/");
+    const accountB = positionRequest();
+    equal((accountB.headers as Record<string, string>)["ACCESS-KEY"], "account-b");
+    equal(trade.tradeState.summaryComponentState!.collateral, 0);
+    deepEqual(trade.tradeState.orders, []);
+
+    trade.clearPosition();
+    trade.clearOrders();
+    alreadySubscribed.succeed([{ side: "BUY", size: 0.25, price: 100 }]);
+    const fresh = trade.respondTo(accountB);
+    trade.respondTo(accountA).succeed([{ side: "BUY", size: 0.25, price: 100 }]);
+    equal(trade.tradeState.position.size, 0);
+    trade.clearPosition();
+    equal(trade.requests.length, 0);
+
+    fresh.succeed([{ side: "SELL", size: 0.05, price: 110 }]);
+    trade.clearPosition();
+    equal(trade.requests.length, 1);
+    const [order] = trade.requests;
+    deepEqual(JSON.parse(order.send as string), {
+        child_order_type: "MARKET", product_code: "FX_BTC_JPY", side: "BUY", size: 0.05,
+    });
+    assertSignature(order, "account-b", "secret-b");
+});
+
+test("a pending IFDOCO from the previous account cannot lock or update the new account", (t) => {
+    const trade = setup(t, "0.01", "account-a");
+    trade.buyIFDOCO();
+    equal(trade.state.isOrdering, true);
+    const original = trade.respondTo(trade.requests[0]);
+
+    trade.navigate("/setting");
+    trade.writeCredential("api-key", "account-b");
+    trade.navigate("/");
+    equal(trade.state.isOrdering, false);
+    trade.buyMarket();
+    equal(trade.state.isOrdering, true);
+
+    original.fail();
+    equal(trade.state.isOrdering, true);
+    equal(trade.histories.length, 0);
+    equal(trade.sounds.length, 0);
+});
+
+test("rejects a response from before a secret-only change away and back", (t) => {
+    const trade = setup(t, "0.01", "account-a");
+    const original = trade.polls.find(({ category }) => category === "positions")!;
+    trade.navigate("/setting");
+    trade.writeCredential("api-secret", "replacement");
+    trade.writeCredential("api-secret", "test");
+    trade.navigate("/");
+    trade.respondTo(original).succeed([{ side: "BUY", size: 0.25, price: 100 }]);
+    trade.clearPosition();
+    equal(trade.tradeState.position.size, 0);
+    deepEqual(trade.requests, []);
+});
+
+function assertSignature(order: RequestOptions, key: string, secret: string) {
+    const headers = order.headers as Record<string, string>;
+    const query = new URLSearchParams(Object.entries(order.query ?? {}));
+    const signed = `${headers["ACCESS-TIMESTAMP"]}${order.method}${new URL(order.url).pathname}?${query}${order.send}`;
+    equal(headers["ACCESS-KEY"], key);
+    equal(headers["ACCESS-SIGN"], createHmac("sha256", secret).update(signed).digest("hex"));
+}
+
+function setup(t: TestContext, width = "0.01", apiKey?: string) {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
+    const credentials: Record<string, string | undefined> = { "api-key": apiKey, "api-secret": "test" };
+    Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: Object.assign(credentials, { setItem: (key: string, value: string) => { credentials[key] = value; } }),
+    });
+    const storageWrites$ = Stream.create<StorageRequest>();
+    const apiKeyInput$ = Stream.create<{target: {value: string}}>();
+    const apiSecretInput$ = Stream.create<{target: {value: string}}>();
+    credentialAwareStorageDriver(storageWrites$);
     t.after(() => {
         if (originalStorage) {
             Object.defineProperty(globalThis, "localStorage", originalStorage);
@@ -168,13 +262,14 @@ function setup(t: TestContext, width = "0.01") {
     const buyIFDOCO$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
+    const clearPosition$ = Stream.create<null>();
     const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
-        ".order-buttons": { ".clear-order-button": { click: clearOrders$ } },
+        ".order-buttons": { ".clear-order-button": { click: clearOrders$ }, ".clear-button": { click: clearPosition$ } },
         ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buyIFDOCO$ },
@@ -184,7 +279,10 @@ function setup(t: TestContext, width = "0.01") {
     const main: Sinks = routerify(Root, switchPath)({
         DOM: mockDOMSource({ ".___trade": new Proxy({}, { get: (_, selector) =>
             typeof selector === "string" && selector.startsWith(".___cycle") ? orderEvents : undefined,
-        }) }),
+        }), ".___setting": {
+            "#api-key-input": { keyup: apiKeyInput$ },
+            "#api-secret-input": { keyup: apiSecretInput$ },
+        } }),
         HTTP: new MainHTTPSource(responses$, "HTTP"),
         history: history$,
         socket: {
@@ -196,7 +294,7 @@ function setup(t: TestContext, width = "0.01") {
             reconnect$: Stream.never(),
         },
         state: new StateSource(state$, "state"),
-        storage: { local: { getItem: (key: string) => Stream.of(key === storageKeys.priceWidth ? width : "0.01") } },
+        storage: { local: { getItem: (key: string) => Stream.of(key in credentials ? credentials[key] : key === storageKeys.priceWidth ? width : "0.01") } },
     } as unknown as Omit<Sources, "router"> & { history: typeof history$ });
 
     let state: { trade?: TradeState } | undefined;
@@ -208,16 +306,20 @@ function setup(t: TestContext, width = "0.01") {
             }
         },
     });
+    const polls: RequestOptions[] = [];
     const requests: RequestOptions[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
+        if (options.method === "GET") { polls.push(options); }
         if (["ifdoco-order", "market-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
             requests.push(options);
         }
     } });
     const sounds: Sound[] = [];
+    const storage = main.storage.subscribe({ next: (write) => storageWrites$.shamefullySendNext(write) });
     const audio = main.sound!.subscribe({ next: (sound) => sounds.push(sound) });
     t.after(() => {
+        storage.unsubscribe();
         audio.unsubscribe();
         http.unsubscribe();
         reducers.unsubscribe();
@@ -226,10 +328,14 @@ function setup(t: TestContext, width = "0.01") {
     return {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
+        clearPosition: () => clearPosition$.shamefullySendNext(null),
         clearOrders: () => clearOrders$.shamefullySendNext(null),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
+        polls,
         requests,
+        writeCredential: (key: "api-key" | "api-secret", value: string) =>
+            (key === "api-key" ? apiKeyInput$ : apiSecretInput$).shamefullySendNext({ target: { value } }),
         sounds,
         respondTo(request: RequestOptions) {
             const response$ = Object.assign(Stream.createWithMemory<Response>(), { request: { ...request } });

@@ -1,5 +1,6 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
+import {apiCredentials} from "../../credentials";
 import {Order} from "../../models/order";
 import {createOrderHistory} from "../../models/orderHistory";
 import {putParentOrder, retainActive} from "../../models/parentStopOrders";
@@ -16,8 +17,34 @@ const defaultState: State = {
     price: 0,
 };
 
+export const resetAccountState = (state: State, version: symbol): State => {
+    if (state.credentialVersion === version) { return state; }
+
+    const account = { histories: [], orders: [], parentStopOrders: {}, position: new Position([]) };
+    const { orderComponentState, summaryComponentState } = state;
+    return {
+        ...state,
+        ...account,
+        credentialVersion: version,
+        canceledParentOrderIds: undefined,
+        orderComponentState: orderComponentState && {
+            ...orderComponentState,
+            ...account,
+            isOrdering: false,
+            twap: { ...orderComponentState.twap, remaining: 0, scheduleId: undefined },
+        },
+        summaryComponentState: summaryComponentState && {
+            ...summaryComponentState,
+            histories: account.histories,
+            position: account.position,
+            collateral: 0,
+        },
+    };
+};
+
 export const model = (actions: Actions): Stream<Reducer<State>> => {
-    const defaultReducer$ = Stream.of((state: State) => state || defaultState);
+    const { version } = apiCredentials();
+    const defaultReducer$ = Stream.of((state: State) => resetAccountState(state || defaultState, version));
 
     const currentPriceReducer$ = actions.onExecutionBatch$
         .filter((executions) => executions.length > 0)
