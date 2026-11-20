@@ -1,14 +1,16 @@
 import {div, h4, input, label, p, span, VNode} from "@cycle/dom";
 import {sideButtons} from "./buttons";
 import {State} from "./index";
+import {isValidIFDOCOOrder} from "./validation";
 
-export const ifdocoSection = (state: State): VNode =>
-    div([
+export const ifdocoSection = (state: State): VNode => {
+    const size = Math.abs(state.size);
+    return div([
         h4(".sub-title", "Ranged IFDOCO"),
         div(".line", [
             p(".line-number", [
-                lineNumber("Buy", "+", "-", buyLines(state)),
-                lineNumber("Sell", "-", "+", sellLines(state)),
+                lineNumber("Buy", "+", "-", buyLines(state, size)),
+                lineNumber("Sell", "-", "+", sellLines(state, size)),
             ]),
         ]),
         div(".price-width", [
@@ -21,6 +23,7 @@ export const ifdocoSection = (state: State): VNode =>
         ]),
         div(".ranged-ifdoco-order-buttons.order-buttons", sideButtons(ifdocoButtonDisabled(state))),
     ]);
+};
 
 interface Lines {
     loss: number;
@@ -44,19 +47,19 @@ const lineNumber = (side: string, profitSign: string, lossSign: string, lines: L
         ]),
     ]);
 
-const buyLines = (state: State): Lines => ({
+const buyLines = (state: State, size: number): Lines => ({
     loss: state.ifdocoOrder.lossDifference(),
-    lossLine: state.ifdocoOrder.buyLoss(state.currentPrice, state.size),
+    lossLine: state.ifdocoOrder.buyLoss(state.currentPrice, size),
     profit: state.ifdocoOrder.profitDifference(),
-    profitLine: state.ifdocoOrder.buyProfit(state.currentPrice, state.size),
+    profitLine: state.ifdocoOrder.buyProfit(state.currentPrice, size),
 });
 
-const sellLines = (state: State): Lines => ({
+const sellLines = (state: State, size: number): Lines => ({
     loss: state.ifdocoOrder.lossDifference(),
-    lossLine: state.ifdocoOrder.sellLoss(state.currentPrice, state.size),
+    lossLine: state.ifdocoOrder.sellLoss(state.currentPrice, size),
     profit: state.ifdocoOrder.profitDifference(),
-    profitLine: state.ifdocoOrder.sellProfit(state.currentPrice, state.size),
+    profitLine: state.ifdocoOrder.sellProfit(state.currentPrice, size),
 });
 
 const ifdocoButtonDisabled = (state: State): boolean =>
-    state.isOrdering || state.size === 0 || state.ifdocoOrder.width === 0;
+    state.isOrdering || !isValidIFDOCOOrder(state);

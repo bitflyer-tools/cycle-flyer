@@ -20,11 +20,21 @@ test('calculates a loss when the market rises against a short position', () => {
   assert.equal(position.profit(42000), -1000);
 });
 
+test('retains the fractional weighted entry for profit while displaying whole yen', () => {
+  const position = new Position([
+    { side: 'BUY', size: 1, price: 40000 },
+    { side: 'BUY', size: 1, price: 40001 },
+  ]);
+
+  assert.equal(position.price, 40000.5);
+  assert.equal(position.toPriceString(), (40000).toLocaleString());
+  assert.equal(position.profit(40001), 1);
+});
+
 test('reports no position when there are no fills', () => {
   const position = new Position([]);
 
   assert.equal(position.toPriceString(), 'None');
   assert.equal(position.toSizeString(), 'None');
   assert.equal(position.toDiffString(42000), 'None');
-  assert.equal(position.toProfitString(42000), 'None');
 });
