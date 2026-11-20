@@ -6,12 +6,15 @@ import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
+import {credentialChanges$} from "../credentials";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
+import {resetAccountState} from "./trade/model";
 import {createCancellationOutcome, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
 import {OrderRequestBatch, submissions} from "./trade/order/request";
+import {privateResponses} from "./trade/privateResponses";
 
 interface RootState {
     trade?: TradeState;
@@ -64,8 +67,8 @@ export const Root = (sources: Sources): Sinks => {
     const orderOutcome$ = Stream.merge(
         submittedOrderOutcomes(sources.HTTP),
         Stream.merge(
-            sources.HTTP.select("cancel-orders"),
-            sources.HTTP.select("cancel-parent-order"),
+            privateResponses(sources.HTTP, "cancel-orders"),
+            privateResponses(sources.HTTP, "cancel-parent-order"),
         ).map(createCancellationOutcome).compose(flattenConcurrently),
     );
     const orderHistoryReducer$ = Stream.merge(
@@ -107,6 +110,8 @@ export const Root = (sources: Sources): Sinks => {
         state: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
             sources.state.isolateSink(orderHistoryReducer$, tradeScope),
+            credentialChanges$.map((version): Reducer<RootState> => (state) =>
+                state?.trade ? { ...state, trade: resetAccountState(state.trade, version) } : state),
         ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
     };

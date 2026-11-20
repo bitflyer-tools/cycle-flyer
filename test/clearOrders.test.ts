@@ -149,6 +149,10 @@ function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = tr
         },
         storage: { local: { getItem: () => Stream.never() } },
     } as unknown as Parameters<typeof intent>[0];
+    Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: { "api-key": "test-key", "api-secret": "test-secret" },
+    });
     const state$ = Stream.createWithMemory<State>();
     const actions = intent(sources, state$);
     let currentState: State & TradeState;
@@ -174,10 +178,6 @@ function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = tr
     currentState = { ...currentState!, parentStopOrders };
     state$.shamefullySendNext(currentState);
 
-    Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: { "api-key": "test-key", "api-secret": "test-secret" },
-    });
     const detailRequests = new Map<string, RequestOptions>();
     const pageRequests: RequestOptions[] = [];
     tradeActions.parentOrderRequests$.addListener({
