@@ -6,7 +6,7 @@ import sampleCombine from "xstream/extra/sampleCombine";
 import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
-import {isValidLimitOrder, isValidMarketOrder} from "./validation";
+import {isValidIFDOCOOrder, isValidLimitOrder, isValidMarketOrder} from "./validation";
 
 export interface OrderRequestBatch {
     requests: RequestInput[];
@@ -54,8 +54,6 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
         click$.compose(sampleCombine(state$))
             .filter(([_, state]) => isValid(state))
             .map(([_, state]) => ({ requests: [toRequest(state)] }));
-
-    const isValidIFDOCOOrder = (state: State) => state.ifdocoOrder.hasValidWidth();
 
     return Stream.merge(
         withState(actions.onClickMarketBuyButton$, (state) => marketOrder(state.size, "BUY"), isValidMarketOrder),
