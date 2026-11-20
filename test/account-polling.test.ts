@@ -9,7 +9,7 @@ import {request as summaryRequest} from "../src/components/trade/summary/request
 const pollers = [
     {
         categories: ["orders", "parent-orders", "positions"],
-        requests: () => tradeRequest({
+        requests: (settled$: Stream<null>) => tradeRequest({
             onCancelParentOrder$: Stream.never(),
             onExecutionBatch$: Stream.never(),
             onMyExecutionCreated$: Stream.never(),
@@ -18,6 +18,7 @@ const pollers = [
             onPositionsLoaded$: Stream.never(),
             onMyOrderChanged$: Stream.never(),
             onParentOrdersLoaded$: Stream.never(),
+            onParentOrderListSettled$: settled$,
             parentOrderRequests$: Stream.never(),
         }),
         interval: 10000,
@@ -43,7 +44,8 @@ pollers.forEach(({categories, requests, interval}) => {
         });
         t.mock.timers.enable({apis: ["Date", "setInterval"], now: 1000});
 
-        const stream = requests();
+        const settled$ = Stream.create<null>();
+        const stream = requests(settled$);
         const emitted: RequestOptions[] = [];
         t.mock.timers.tick(1000);
         const subscription = stream.subscribe({
@@ -55,11 +57,13 @@ pollers.forEach(({categories, requests, interval}) => {
         });
         try {
             assertPoll(emitted.splice(0), categories, keys);
+            settled$.shamefullySendNext(null);
             [1, 2].forEach((tick) => {
                 keys["api-key"] = `key-${tick}`;
                 keys["api-secret"] = `secret-${tick}`;
                 t.mock.timers.tick(interval);
                 assertPoll(emitted.splice(0), categories, keys);
+                settled$.shamefullySendNext(null);
             });
         } finally {
             subscription.unsubscribe();
