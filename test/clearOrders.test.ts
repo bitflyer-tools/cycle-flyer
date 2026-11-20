@@ -26,6 +26,41 @@ test("Clear Orders cancels a standalone stop by parent order ID", () => {
     });
 });
 
+test("Clear Orders cancels every active parent order across two pages", () => {
+    const {click, lists, pages, pageRequests, parentResponses, requests, state} = clearOrders(["JCO-old"], false, false);
+    const orders = Array.from({ length: 101 }, (_, index) => ({
+        id: 101 - index,
+        parent_order_id: `JCO-${101 - index}`,
+        parent_order_state: "ACTIVE",
+        parent_order_type: "STOP",
+    }));
+    const firstPage = () => lists.shamefullySendNext(Stream.of<unknown>({ text: JSON.stringify(orders.slice(0, 100)) }));
+
+    firstPage();
+    deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-old"]);
+    deepStrictEqual(pageRequests[0].query, {
+        product_code: "FX_BTC_JPY", parent_order_state: "ACTIVE", count: 100, before: 2,
+    });
+    pages.shamefullySendNext(Object.assign(Stream.throw(new Error("Page failed")), { request: pageRequests[0] }));
+    deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-old"]);
+
+    firstPage();
+    const lastPage = { text: JSON.stringify(orders.slice(100)) };
+    const respond = (request: RequestOptions) =>
+        pages.shamefullySendNext(Object.assign(Stream.of<unknown>(lastPage), { request }));
+    respond(pageRequests[0]);
+    deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-old"]);
+    respond(pageRequests[1]);
+    strictEqual(pageRequests.length, 2);
+
+    click();
+    const parentRequests = requests.filter(({url}) => new URL(url).pathname === "/v1/me/cancelparentorder");
+    deepStrictEqual(parentRequests.map(({send}) => JSON.parse(send).parent_order_id),
+        orders.map(({parent_order_id}) => parent_order_id));
+    parentRequests.forEach((request) => parentResponses.shamefullySendNext(Stream.of<unknown>({ request })));
+    deepStrictEqual(Object.keys(state().parentStopOrders), []);
+});
+
 test("A standalone stop stays visible until its parent cancellation succeeds", () => {
     const {childResponses, parentResponses, requests, state} = clearOrders(["JCO-stop"]);
 
@@ -80,12 +115,13 @@ test("A late active list and its details cannot restore a canceled stop", () => 
     deepStrictEqual(flattenStopOrders(state().parentStopOrders).map(({price}) => price), [200, 300]);
 });
 
-function clearOrders(ids: string[], lastDetailPending = false) {
+function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = true) {
     const clicks$ = Stream.create();
     const childResponses = Stream.create<Stream<unknown>>();
     const parentResponses = Stream.create<Stream<unknown>>();
     const details = Stream.create<Stream<unknown>>();
     const lists = Stream.create<Stream<unknown>>();
+    const pages = Stream.create<Stream<unknown>>();
     const sources = {
         DOM: {
             select(selector: string) {
@@ -100,6 +136,7 @@ function clearOrders(ids: string[], lastDetailPending = false) {
                     "cancel-parent-order": parentResponses,
                     "parent-order": details,
                     "parent-orders": lists,
+                    "parent-orders-page": pages,
                 }[category] || Stream.never();
             },
         },
@@ -142,13 +179,18 @@ function clearOrders(ids: string[], lastDetailPending = false) {
         value: { "api-key": "test-key", "api-secret": "test-secret" },
     });
     const detailRequests = new Map<string, RequestOptions>();
+    const pageRequests: RequestOptions[] = [];
     tradeActions.parentOrderRequests$.addListener({
         next: (request) => {
+            if (request.category === "parent-orders-page") {
+                pageRequests.push(request);
+                return;
+            }
             const {parent_order_id} = request.query as { parent_order_id: string };
             detailRequests.set(parent_order_id, request);
         },
     });
-    lists.shamefullySendNext(Stream.of({ text: JSON.stringify(ids.map((id) => ({ parent_order_id: id }))) }));
+    lists.shamefullySendNext(Stream.of<unknown>({ text: JSON.stringify(ids.map((id) => ({ parent_order_id: id }))) }));
 
     const sendParentDetail = (id: string, price: number) => {
         const request = detailRequests.get(id);
@@ -162,7 +204,9 @@ function clearOrders(ids: string[], lastDetailPending = false) {
 
     const requests: Array<{ url: string; method: string; send: string }> = [];
     orderRequests(actions, state$).addListener({ next: (batch) => requests.push(...batch.requests as typeof requests) });
-    clicks$.shamefullySendNext(null);
+    const click = () => clicks$.shamefullySendNext(null);
+    if (clickOnSetup) { click(); }
 
-    return { childResponses, sendParentDetail, lists, parentResponses, requests, state: () => currentState };
+    return { childResponses, click, sendParentDetail, lists, pages, pageRequests, parentResponses, requests,
+        state: () => currentState };
 }

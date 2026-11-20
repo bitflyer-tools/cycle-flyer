@@ -7,6 +7,7 @@ import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
 import {Sources} from "./index";
 import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
+import {parentOrderPages} from "./parentOrderPages";
 import {pollResponse} from "./pollResponse";
 
 export interface Actions {
@@ -46,13 +47,8 @@ export const intent = (sources: Sources): Actions => {
         .flatten()
         .map((response) => JSON.parse(response.text));
 
-    const onParentOrdersLoaded$ = sources.HTTP.select("parent-orders")
-        .map((response$) => {
-            const sequence = ++parentOrderSequence;
-            return response$.map((response) => ({ orders: JSON.parse(response.text) as ActiveParentOrder[], sequence }))
-                .replaceError(() => Stream.never());
-        })
-        .flatten();
+    const pages = parentOrderPages(sources.HTTP, () => ++parentOrderSequence);
+    const onParentOrdersLoaded$ = pages.loaded$;
 
     const details = parentOrderDetails(
         sources.HTTP, onParentOrdersLoaded$.map(({ orders }) => orders),
@@ -71,7 +67,7 @@ export const intent = (sources: Sources): Actions => {
         onParentOrderLoaded$: details.loaded$,
         onParentOrdersLoaded$,
         onPositionsLoaded$,
-        parentOrderRequests$: details.requests$,
+        parentOrderRequests$: Stream.merge(pages.requests$, details.requests$),
     };
 };
 
