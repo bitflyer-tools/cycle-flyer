@@ -26,6 +26,7 @@ export interface State {
     parentStopOrders: ParentStopOrders;
     position: Position;
     positionCredentialVersion?: number;
+    positionClosePending?: boolean;
     price: number;
     size: number;
     triggerPrice: number;

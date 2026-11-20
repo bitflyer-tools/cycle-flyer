@@ -6,11 +6,10 @@ import {sideButtons} from "./buttons";
 import {ifdocoSection} from "./ifdocoView";
 import {State} from "./index";
 import {numberInput} from "./numberInput";
-import {canClearPosition} from "./request";
 import {sizeSection} from "./sizeView";
 import {stopSection} from "./stopView";
 import {twapSection} from "./twapView";
-import {isValidLimitOrder, isValidOrderSize} from "./validation";
+import {canClearPosition, isValidLimitOrder, isValidOrderSize} from "./validation";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
     Stream.combine(state$.compose(dropRepeats(sameViewInputs)), credentialAvailability()).map(([state, canSign]) =>
@@ -39,7 +38,7 @@ const sameViewInputs = (previous: State, next: State): boolean =>
     && previous.isOrdering === next.isOrdering
     && previous.orderSigningError === next.orderSigningError
     && previous.positionCredentialVersion === next.positionCredentialVersion
-    && Object.is(previous.position.size, next.position.size)
+    && canClearPosition(previous) === canClearPosition(next)
     && Object.is(previous.price, next.price)
     && Object.is(previous.size, next.size)
     && Object.is(previous.triggerPrice, next.triggerPrice)

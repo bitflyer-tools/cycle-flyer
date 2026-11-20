@@ -13,7 +13,7 @@ import {Position} from "../models/position";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
 import {createCancellationTimeoutHistory, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
-import {OrderRequestBatch, submissions, unsignedSubmissions$} from "./trade/order/request";
+import {closePositionOutcomes, OrderRequestBatch, submissions, unsignedSubmissions$} from "./trade/order/request";
 import {stopTwap, twapSigningFailed$} from "./trade/order/twapRequest";
 
 export interface Sources {
@@ -62,6 +62,23 @@ export const Root = (sources: Sources): Sinks => {
 
     const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<OrderRequestBatch>()).flatten();
     const pending$ = submissions(orderRequests$, sources.HTTP);
+    const positionCloseReducer$ = pending$.map((pending) => (state: TradeState | undefined) => {
+        if (!state) return state;
+
+        const submission = pending?.find(({ closePositionSize }) => closePositionSize !== undefined);
+        if (submission?.closePositionSize !== undefined) {
+            return { ...state, positionClose: {
+                id: submission.submissionId, size: submission.closePositionSize, settled: false,
+            } };
+        }
+        return state;
+    });
+    const closeOutcomeReducer$ = closePositionOutcomes(sources.HTTP)
+        .map(({ id, rejected }) => (state: TradeState | undefined) => {
+            const close = state?.positionClose;
+            if (!close || close.id !== id || close.settled) return state;
+            return { ...state, positionClose: { ...close, settled: true, rejected } };
+        });
     const isOrdering$ = pending$.map((pending) => pending !== null);
     const orderSigningError$ = Stream.merge(
         pending$.filter((pending) => pending !== null).mapTo(undefined),
@@ -120,6 +137,8 @@ export const Root = (sources: Sources): Sinks => {
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
             credentialsChanging$.mapTo(resetAccount),
             twapSigningFailed$.mapTo(resetTwap("TWAP stopped because an order could not be signed.")),
+            sources.state.isolateSink(positionCloseReducer$, tradeScope),
+            sources.state.isolateSink(closeOutcomeReducer$, tradeScope),
             sources.state.isolateSink(orderHistoryReducer$, tradeScope),
             sources.state.isolateSink(orderSigningReducer$, tradeScope),
         ),
@@ -148,6 +167,7 @@ const resetAccount: Reducer<RootState> = (state) => {
             orderComponentState: trade.orderComponentState && { ...trade.orderComponentState, isOrdering: false },
             position: new Position([]),
             positionCredentialVersion: undefined,
+            positionClose: undefined,
         },
     };
 };

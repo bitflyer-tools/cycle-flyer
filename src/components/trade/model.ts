@@ -38,7 +38,13 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map((orders: Order[]) => (state: State) => ({ ...state, orders }));
 
     const positionReducer$ = actions.onPositionsLoaded$
-        .map((positionState) => (state: State) => ({ ...state, ...positionState }));
+        .map(({ position, positionCloseId, positionCredentialVersion }) => (state: State) => {
+            const close = state.positionClose;
+            const reconciled = close?.settled && close.id === positionCloseId
+                && (close.rejected || position.size === 0 || (Math.sign(position.size) === Math.sign(close.size)
+                    && Math.abs(position.size) < Math.abs(close.size)));
+            return { ...state, position, positionCredentialVersion, positionClose: reconciled ? undefined : close };
+        });
 
     const cancelParentOrderReducer$ = actions.onCancelParentOrder$
         .map(({ id, sequence }) => (state: State) => {

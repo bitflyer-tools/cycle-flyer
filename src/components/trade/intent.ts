@@ -10,6 +10,7 @@ import {Sources} from "./index";
 import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
 import {parentOrderPages} from "./parentOrderPages";
 import {pollResponse} from "./pollResponse";
+import {PositionRequest} from "./request";
 
 export interface Actions {
     onCancelParentOrder$: Stream<{ id: string; sequence: number }>;
@@ -21,7 +22,7 @@ export interface Actions {
     onParentOrdersLoaded$: Stream<{ orders: ActiveParentOrder[]; sequence: number }>;
     onParentOrderListSettled$: Stream<null>;
     parentOrderRequests$: Stream<RequestOptions>;
-    onPositionsLoaded$: Stream<{ position: Position; positionCredentialVersion: number }>;
+    onPositionsLoaded$: Stream<{ position: Position; positionCredentialVersion: number; positionCloseId: symbol | undefined }>;
 }
 
 // Trade state survives navigation, so request and cancellation ordering must survive it too.
@@ -62,6 +63,7 @@ export const intent = (sources: Sources): Actions => {
         isCurrent(response) && isPositionList(json) ? {
             position: new Position(json),
             positionCredentialVersion: (response.request as AccountRequest).credentialVersion!,
+            positionCloseId: (response.request as PositionRequest).positionCloseId,
         } : undefined);
 
     return {

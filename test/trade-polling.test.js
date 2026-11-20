@@ -175,10 +175,14 @@ for (const { component, category, first, invalid, next, read, expected } of test
   });
 }
 
+const positionCloseId = Symbol('position close');
 const accountPolls = [
   ['orders', 'onOrdersLoaded$', (price) => [{ price }], (orders) => orders[0].price],
   ['positions', 'onPositionsLoaded$',
-    (price) => [{ side: 'BUY', price, size: 1 }], ({ position }) => position.price],
+    (price) => [{ side: 'BUY', price, size: 1 }], (result) => {
+      assert.equal(result.positionCloseId, positionCloseId);
+      return result.position.price;
+    }],
 ];
 
 for (const [category, action, payload, read] of accountPolls) {
@@ -197,7 +201,7 @@ for (const [category, action, payload, read] of accountPolls) {
       const response = Stream.create();
       responses.shamefullySendNext(response);
       setTimeout(() => {
-        response.shamefullySendNext({ text: JSON.stringify(payload(value)), request: { credentialVersion } });
+        response.shamefullySendNext({ text: JSON.stringify(payload(value)), request: { credentialVersion, positionCloseId } });
         response.shamefullySendComplete();
       }, delay);
     };

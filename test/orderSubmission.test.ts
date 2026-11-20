@@ -327,11 +327,13 @@ test("clears the previous account position and only closes a position from the c
     equal(order.clearPositionDisabled, false);
     order.clearPosition();
     const queuedClose = order.requests[0];
-    order.respondTo(queuedClose).succeed();
+    const previousClose = order.respondTo(queuedClose);
+    equal(order.tradeState.positionClose?.settled, false);
 
     order.navigate("/setting");
     const saving = saveCredentials({ key: "second-key", secret: "second-secret" });
     equal(order.tradeState.position.size, 0);
+    equal(Boolean(order.tradeState.positionClose), false);
     order.navigate("/");
     equal(order.clearPositionDisabled, true);
     order.clearPosition();
@@ -354,6 +356,11 @@ test("clears the previous account position and only closes a position from the c
     deepEqual({ side: close.side, size: close.size }, { side: "BUY", size: 0.1 });
     const signed = await authorizeRequest(order.requests[1]) as RequestOptions;
     equal((signed.headers as Record<string, string>)["ACCESS-KEY"], "second-key");
+    previousClose.succeed();
+    equal(order.state.isOrdering, true);
+    equal(order.tradeState.positionClose?.settled, false);
+    order.clearPosition();
+    equal(order.requests.length, 2);
 });
 
 test("continues pagination when a previous account's parent-order list arrives", async (t) => {
@@ -413,7 +420,140 @@ function findNode(node: VNode, selector: string): VNode | undefined {
     return node.children?.map((child) => typeof child === "string" ? undefined : findNode(child, selector)).find(Boolean);
 }
 
-for (const category of ["limit-order", "cancel-orders"] as const) {
+test("keeps Clear Position disabled until a full fill is confirmed", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    const position = [{ side: "BUY", size: 0.08, price: 40000 }];
+    order.respondTo(order.positionRequests[0]).succeed(position);
+    equal(order.tradeState.position.size, 0.08);
+
+    order.clearPosition();
+    order.clearPosition();
+    equal(order.requests.length, 1);
+    const { side, size, child_order_type } = JSON.parse(order.requests[0].send as string);
+    deepEqual({ side, size, child_order_type }, { side: "SELL", size: 0.08, child_order_type: "MARKET" });
+
+    order.respondTo(order.requests[0]).succeed();
+    equal(order.state.isOrdering, false);
+    equal(!!order.tradeState.positionClose, true);
+    order.clearPosition();
+    equal(order.requests.length, 1);
+
+    equal(order.positionRequests.length, 2);
+    order.respondTo(order.positionRequests[1]).succeed([]);
+    equal(order.tradeState.position.size, 0);
+    equal(order.tradeState.positionClose, undefined);
+    order.clearPosition();
+    equal(order.requests.length, 1);
+});
+
+test("uses only the confirmed short remainder after a partial close", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    const position = { side: "SELL", size: 0.08, price: 40000 };
+    const initialPoll = order.positionRequests[0];
+    order.respondTo(initialPoll).succeed([position]);
+    order.clearPosition();
+    order.respondTo(order.requests[0]).succeed();
+
+    const refresh = order.positionRequests.at(-1)!;
+    order.respondTo(initialPoll).succeed([{ ...position, size: 0.04 }]);
+    equal(!!order.tradeState.positionClose, true);
+    order.respondTo(refresh).succeed([position]);
+    equal(!!order.tradeState.positionClose, true);
+    order.clearPosition();
+    equal(order.requests.length, 1);
+
+    t.mock.timers.tick(10000);
+    order.respondTo(order.positionRequests.at(-1)!).succeed([{ ...position, size: 0.03 }]);
+    equal(order.tradeState.positionClose, undefined);
+    order.clearPosition();
+    equal(order.requests.length, 2);
+    const { side, size } = JSON.parse(order.requests[1].send as string);
+    deepEqual({ side, size }, { side: "BUY", size: 0.03 });
+});
+
+test("unlocks an unsigned Clear Position after refreshing the current position", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    const position = [{ side: "BUY", size: 0.08, price: 40000 }];
+    order.respondTo(order.positionRequests[0]).succeed(position);
+    order.clearPosition();
+
+    await rejectUnsigned({ ...order.requests[0], send: {} });
+    equal(order.state.isOrdering, false);
+    equal(order.clearPositionDisabled, true);
+    equal(order.positionRequests.length, 2);
+
+    order.respondTo(order.positionRequests[1]).succeed(position);
+    equal(order.clearPositionDisabled, false);
+    order.clearPosition();
+    equal(order.requests.length, 2);
+});
+
+test("allows retry after a definite rejection and a fresh unchanged position", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    const position = [{ side: "BUY", size: 0.08, price: 40000 }];
+    const initialPoll = order.positionRequests[0];
+    order.respondTo(initialPoll).succeed(position);
+    order.clearPosition();
+
+    order.respondTo(order.requests[0]).reject(400);
+    equal(order.state.isOrdering, false);
+    equal(order.positionRequests.length, 2);
+    order.respondTo(initialPoll).succeed(position);
+    order.clearPosition();
+    equal(order.requests.length, 1);
+
+    order.respondTo(order.positionRequests[1]).succeed({ error_message: "Position unavailable" });
+    order.clearPosition();
+    equal(order.requests.length, 1);
+
+    t.mock.timers.tick(10000);
+    order.respondTo(order.positionRequests.at(-1)!).succeed(position);
+    equal(order.tradeState.positionClose, undefined);
+    order.clearPosition();
+    equal(order.requests.length, 2);
+    const { side, size } = JSON.parse(order.requests[1].send as string);
+    deepEqual({ side, size }, { side: "SELL", size: 0.08 });
+});
+
+for (const failure of ["network", "server"] as const) {
+    test(`waits for position reconciliation after an ambiguous ${failure} failure`, async (t) => {
+        const order = setup(t);
+        await saveCredentials({ key: "test-key", secret: "test-secret" });
+        t.after(() => saveCredentials(null));
+        const position = [{ side: "BUY", size: 0.08, price: 40000 }];
+        order.respondTo(order.positionRequests[0]).succeed(position);
+        order.clearPosition();
+
+        order.navigate("/setting");
+        const response = order.respondTo(order.requests[0]);
+        if (failure === "network") response.fail();
+        else response.reject(503);
+        order.navigate("/");
+        order.clearPosition();
+        equal(order.requests.length, 1);
+
+        order.respondTo(order.positionRequests.at(-1)!).succeed(position);
+        equal(!!order.tradeState.positionClose, true);
+        order.clearPosition();
+        equal(order.requests.length, 1);
+
+        t.mock.timers.tick(10000);
+        order.respondTo(order.positionRequests.at(-1)!).succeed([]);
+        equal(order.tradeState.positionClose, undefined);
+        order.clearPosition();
+        equal(order.requests.length, 1);
+    });
+}
+
+for (const category of ["limit-order", "cancel-orders", "market-order"] as const) {
     test(`aborts a stalled ${category} and displays it as unconfirmed without retrying`, { timeout: 5_000 }, async (t) => {
         const paths: string[] = [];
         const server = createServer((request, response) => {
@@ -433,12 +573,22 @@ for (const category of ["limit-order", "cancel-orders"] as const) {
         const address = server.address() as { port: number };
         const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${address.port}` });
         order.enterPrice("10000");
+        const position = [{ side: "BUY", size: 0.08, price: 40000 }];
+        if (category === "market-order") {
+            await saveCredentials({ key: "test-key", secret: "test-secret" });
+            t.after(() => saveCredentials(null));
+            order.respondTo(order.positionRequests[0]).succeed(position);
+        }
         if (category === "cancel-orders") {
             order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getorders", category: "orders", _namespace: ["trade"] })
                 .succeed([{ side: "BUY", size: 0.1, price: 100 }]);
         }
-        const submit = category === "limit-order" ? () => order.buy("limit") : order.clearOrders;
-        const path = category === "limit-order" ? "/v1/me/sendchildorder" : "/v1/me/cancelallchildorders";
+        const submit = {
+            "limit-order": () => order.buy("limit"),
+            "cancel-orders": order.clearOrders,
+            "market-order": order.clearPosition,
+        }[category];
+        const path = category === "cancel-orders" ? "/v1/me/cancelallchildorders" : "/v1/me/sendchildorder";
 
         const receivedFirst = once(server, "request");
         submit();
@@ -452,12 +602,21 @@ for (const category of ["limit-order", "cancel-orders"] as const) {
         deepEqual(paths, [path]);
         equal(order.requests.length, 1);
         deepEqual(order.histories.map(({ status }) => status), ["unconfirmed"]);
-        deepEqual(order.sounds, category === "limit-order" ? ["failure"] : []);
+        deepEqual(order.sounds, category === "cancel-orders" ? [] : ["failure"]);
         summaryView(Stream.of<SummaryState>({
             ...order.tradeState,
+            priceAlert: order.tradeState.summaryComponentState!.priceAlert,
             collateral: 0,
             marketState: { health: "", state: "" },
         })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /Unconfirmed \(timed out\)/) });
+
+        if (category === "market-order") {
+            order.respondTo(order.positionRequests.at(-1)!).succeed(position);
+            submit();
+            equal(order.requests.length, 1);
+            equal(order.tradeState.positionClose?.settled, true);
+            return;
+        }
 
         const received = once(server, "request");
         submit();
@@ -483,6 +642,7 @@ for (const route of ["/", "/setting"]) {
         equal(order.histories.length, 1);
         summaryView(Stream.of<SummaryState>({
             ...order.tradeState,
+            priceAlert: order.tradeState.summaryComponentState!.priceAlert,
             collateral: 0,
             marketState: { health: "", state: "" },
         })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /Unconfirmed \(timed out\)/) });
@@ -616,9 +776,11 @@ function setup(t: TestContext, width = "0.01", options: {
         },
     });
     const requests: RequestOptions[] = [];
+    const polls: AccountRequest[] = [];
     const pages: AccountRequest[] = [];
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as AccountRequest;
+        if (options.category === "positions") { polls.push(options); }
         if (options.category === "parent-orders-page") { pages.push(options); }
         if (["ifdoco-order", "market-order", "limit-order", "stop-order", "twap-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
             requests.push(options);
@@ -648,6 +810,7 @@ function setup(t: TestContext, width = "0.01", options: {
         buyTWAP: () => buyTWAP$.shamefullySendNext(null),
         clearPosition: () => clearPosition$.shamefullySendNext(null),
         get clearPositionDisabled() { return findNode(vNode, "button.clear-button")?.data?.attrs?.disabled; },
+        get positionRequests() { return polls.filter(({ category }) => category === "positions"); },
         clearOrders: () => clearOrders$.shamefullySendNext(null),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
@@ -662,8 +825,10 @@ function setup(t: TestContext, width = "0.01", options: {
             responses$.shamefullySendNext(response$);
             return {
                 fail: (error = new Error("Network failure")) => response$.shamefullySendError(error),
+                reject: (status = 400) => response$.shamefullySendError({
+                    response: { request, status, text: JSON.stringify({ status: -1, error_message: "Order rejected" }) },
+                }),
                 progress: () => response$.shamefullySendNext({ request } as Response),
-                reject: () => response$.shamefullySendError({ response: { request, status: 400 } }),
                 succeed: (body?: unknown) => {
                     response$.shamefullySendNext({ request, text: JSON.stringify(body) } as unknown as Response);
                     response$.shamefullySendComplete();
