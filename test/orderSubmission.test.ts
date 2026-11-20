@@ -10,6 +10,20 @@ import Stream, {MemoryStream} from "xstream";
 import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
+import {storageKeys} from "../src/components/trade/order/intent";
+
+test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
+    const order = setup(t, "-10000");
+
+    order.buyIFDOCO();
+    order.sellIFDOCO();
+    deepEqual(order.requests, []);
+    equal(order.state.isOrdering, false);
+
+    order.buyMarket();
+    deepEqual(order.requests.map(({ category }) => category), ["market-order"]);
+    equal(order.state.isOrdering, true);
+});
 
 test("accepts a single IFDOCO submission until its delayed success", (t) => {
     const order = setup(t);
@@ -110,6 +124,30 @@ for (const outcome of ["succeed", "fail"] as const) {
         equal(order.requests.length, 2);
     });
 }
+
+test("records a rejected limit order and permits a retry", (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: 1000 });
+    const order = setup(t);
+    order.enterPrice("900");
+
+    order.buyLimit();
+    deepEqual(order.requests.map(({ category }) => category), ["limit-order"]);
+    equal(order.state.isOrdering, true);
+
+    order.respondTo(order.requests[0]).reject();
+    equal(order.state.isOrdering, false);
+    deepEqual(order.sounds, ["failure"]);
+    deepEqual(order.histories, [{
+        createdAt: new Date(1000),
+        description: "BUY / 0.01 / 900",
+        name: "Limit",
+        status: "failed",
+    }]);
+
+    order.buyLimit();
+    deepEqual(order.requests.map(({ category }) => category), ["limit-order", "limit-order"]);
+    equal(order.state.isOrdering, true);
+});
 
 test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
     const order = setup(t);
@@ -249,9 +287,9 @@ for (const failure of ["network", "server"] as const) {
     });
 }
 
-function setup(t: TestContext) {
+function setup(t: TestContext, width = "0.01") {
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-secret": "test" } });
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-key": "test", "api-secret": "test" } });
     t.after(() => {
         if (originalStorage) {
             Object.defineProperty(globalThis, "localStorage", originalStorage);
@@ -262,15 +300,19 @@ function setup(t: TestContext) {
 
     const buyIFDOCO$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
+    const buyLimit$ = Stream.create<null>();
     const buyMarket$ = Stream.create<null>();
     const clearPosition$ = Stream.create<null>();
+    const priceInput$ = Stream.create<{ target: { value: string } }>();
     const clearOrders$ = Stream.create<null>();
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
+        "#price-input": { input: priceInput$ },
         ".order-buttons": { ".clear-order-button": { click: clearOrders$ }, ".clear-button": { click: clearPosition$ } },
+        ".limit-order-buttons": { ".buy-button": { click: buyLimit$ } },
         ".market-order-buttons": { ".buy-button": { click: buyMarket$ } },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buyIFDOCO$ },
@@ -292,7 +334,7 @@ function setup(t: TestContext) {
             reconnect$: Stream.never(),
         },
         state: new StateSource(state$, "state"),
-        storage: { local: { getItem: () => Stream.of("0.01") } },
+        storage: { local: { getItem: (key: string) => Stream.of(key === storageKeys.priceWidth ? width : "0.01") } },
     } as unknown as Omit<Sources, "router"> & { history: typeof history$ });
 
     let state: { trade?: TradeState } | undefined;
@@ -309,7 +351,8 @@ function setup(t: TestContext) {
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as RequestOptions;
         if (options.category === "positions") { positionRequests.push(options); }
-        if (["ifdoco-order", "market-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
+        if (["ifdoco-order", "limit-order", "market-order", "cancel-orders", "cancel-parent-order"]
+            .includes(options.category as string)) {
             requests.push(options);
         }
     } });
@@ -323,10 +366,12 @@ function setup(t: TestContext) {
 
     return {
         buyIFDOCO: () => buyIFDOCO$.shamefullySendNext(null),
+        buyLimit: () => buyLimit$.shamefullySendNext(null),
         buyMarket: () => buyMarket$.shamefullySendNext(null),
         clearPosition: () => clearPosition$.shamefullySendNext(null),
         positionRequests,
         clearOrders: () => clearOrders$.shamefullySendNext(null),
+        enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         requests,
@@ -336,8 +381,8 @@ function setup(t: TestContext) {
             responses$.shamefullySendNext(response$);
             return {
                 fail: () => response$.shamefullySendError(new Error("Network failure")),
-                reject: (status: number) => response$.shamefullySendError({
-                    response: { status, text: JSON.stringify({ status: -1, error_message: "Order rejected" }) },
+                reject: (status = 400) => response$.shamefullySendError({
+                    response: { request, status, text: JSON.stringify({ status: -1, error_message: "Order rejected" }) },
                 }),
                 progress: () => response$.shamefullySendNext({ request } as Response),
                 succeed: (body?: unknown) => {

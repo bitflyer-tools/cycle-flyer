@@ -8,7 +8,7 @@ import {State} from "./index";
 import {Actions} from "./intent";
 
 const defaultState: State = {
-    currentPrice: 0,
+    currentPrice: null,
     histories: [],
     orders: [],
     parentStopOrders: {},
@@ -44,17 +44,28 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         });
 
     const cancelParentOrderReducer$ = actions.onCancelParentOrder$
-        .map((id) => (state: State) => {
+        .map(({ id, sequence }) => (state: State) => {
             const parentStopOrders = { ...state.parentStopOrders };
             delete parentStopOrders[id];
-            const canceledParentOrderIds = new Set(state.canceledParentOrderIds).add(id);
+            const canceledParentOrderIds = new Map(state.canceledParentOrderIds).set(id, sequence);
             return { ...state, canceledParentOrderIds, parentStopOrders };
         });
 
     const parentOrdersReducer$ = actions.onParentOrdersLoaded$
-        .map((parentOrders) => (state: State) => {
-            const activeOrders = parentOrders.filter(({ parent_order_id }) => !state.canceledParentOrderIds?.has(parent_order_id));
-            return { ...state, parentStopOrders: retainActive(state.parentStopOrders, activeOrders) };
+        .map(({ orders, sequence }) => (state: State) => {
+            const canceled = state.canceledParentOrderIds;
+            if (!canceled?.size) {
+                return { ...state, parentStopOrders: retainActive(state.parentStopOrders, orders) };
+            }
+            const listedIds = new Set(orders.map(({ parent_order_id }) => parent_order_id));
+            const canceledParentOrderIds = new Map(Array.from(canceled)
+                .filter(([id, canceledAt]) => canceledAt >= sequence || listedIds.has(id)));
+            return {
+                ...state,
+                canceledParentOrderIds,
+                parentStopOrders: retainActive(state.parentStopOrders,
+                    orders.filter(({ parent_order_id }) => !canceled.has(parent_order_id))),
+            };
         });
 
     const parentOrderReducer$ = actions.onParentOrderLoaded$
