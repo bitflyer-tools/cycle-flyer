@@ -15,9 +15,25 @@ import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
 import {storageKeys} from "../src/components/trade/order/intent";
+import {Execution} from "../src/models/execution";
 import type {State as SummaryState} from "../src/components/trade/summary";
 import {view as summaryView} from "../src/components/trade/summary/view";
 import {twapSliceOrder} from "../src/http";
+
+test("blocks both IFDOCO sides until the first public execution arrives", (t) => {
+    const order = setup(t, "10000", { initialPrice: null });
+    order.buyIFDOCO();
+    order.sellIFDOCO();
+    deepEqual(order.requests, []);
+    equal(order.state.isOrdering, false);
+
+    order.publishExecution(10000000);
+    order.buyIFDOCO();
+    equal(order.requests[0]?.category, "ifdoco-order");
+    order.respondTo(order.requests[0]).succeed();
+    order.sellIFDOCO();
+    deepEqual(order.requests.map(({ category }) => category), ["ifdoco-order", "ifdoco-order"]);
+});
 
 test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
     const order = setup(t, "-10000");
@@ -219,7 +235,7 @@ for (const category of ["limit-order", "cancel-orders"] as const) {
         server.listen(0, "127.0.0.1");
         await once(server, "listening");
         const address = server.address() as { port: number };
-        const order = setup(t, "0.01", `http://127.0.0.1:${address.port}`);
+        const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${address.port}` });
         order.enterPrice("10000");
         const submit = category === "limit-order" ? () => order.buy("limit") : order.clearOrders;
         const path = category === "limit-order" ? "/v1/me/sendchildorder" : "/v1/me/cancelallchildorders";
@@ -273,7 +289,11 @@ for (const route of ["/", "/setting"]) {
     });
 }
 
-function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
+function setup(t: TestContext, width = "0.01", options: {
+    initialPrice?: number | null;
+    writeOrigin?: string;
+} = {}) {
+    const { initialPrice = 10000000, writeOrigin } = options;
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-key": "test", "api-secret": "test" } });
     t.after(() => {
@@ -294,6 +314,8 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
     priceInput$.shamefullySendNext({ target: { value: "100000" } });
     const sellIFDOCO$ = Stream.create<null>();
     const clearOrders$ = Stream.create<null>();
+    const executionBatch$ = Stream.create<Execution[]>();
+    const publishExecution = (price: number) => executionBatch$.shamefullySendNext([{ side: "BUY", price }]);
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const writes$ = Stream.create<RequestInput | null>();
     const transport$ = makeHTTPDriver(250)(writes$).select();
@@ -323,7 +345,7 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
             board$: Stream.never(),
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
-            executionBatch$: Stream.never(),
+            executionBatch$,
             parentOrderEvent$: Stream.never(),
             reconnect$: Stream.never(),
         },
@@ -352,6 +374,7 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
     } });
     const sounds: Sound[] = [];
     const audio = main.sound!.subscribe({ next: (sound) => sounds.push(sound) });
+    if (initialPrice !== null) publishExecution(initialPrice);
     t.after(() => {
         audio.unsubscribe();
         http.unsubscribe();
@@ -364,6 +387,7 @@ function setup(t: TestContext, width = "0.01", writeOrigin?: string) {
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
+        publishExecution,
         requests,
         sounds,
         respondTo(request: RequestOptions) {
