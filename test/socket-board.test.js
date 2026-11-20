@@ -37,6 +37,7 @@ function makeSocket() {
   const handlers = new Map();
   const subscriptions = [];
   return {
+    connected: false,
     handlers,
     subscriptions,
     on: (event, handler) => handlers.set(event, handler),
@@ -44,7 +45,10 @@ function makeSocket() {
       assert.equal(event, 'subscribe');
       subscriptions.push(channel);
     },
-    receive: (event, message) => handlers.get(event)?.(message),
+    receive(event, message) {
+      if (event === 'connect' || event === 'disconnect') this.connected = event === 'connect';
+      handlers.get(event)?.(message);
+    },
   };
 }
 
@@ -60,7 +64,7 @@ test('subscribes only to board deltas and executions on connect and reconnect', 
   assert.equal(socket.handlers.has(snapshotChannel), false);
 });
 
-test('initializes from REST and preserves WebSocket deltas during a refresh', () => {
+test('synchronizes each connection with REST and rejects stale snapshots after disconnect', async () => {
   const socket = makeSocket();
   const responses = Stream.create();
   const dom = { select: () => dom, events: () => Stream.never() };
@@ -78,18 +82,30 @@ test('initializes from REST and preserves WebSocket deltas during a refresh', ()
   });
 
   let state;
+  const requests = [];
+  let requestResponse;
+  const requestSubscription = sinks.HTTP.subscribe({
+    next: (value) => {
+      requests.push(value);
+      requestResponse = Stream.create();
+      responses.shamefullySendNext(requestResponse);
+    },
+  });
   const subscription = sinks.state.subscribe({ next: (reduce) => { state = reduce(state); } });
   try {
-    const requests = [];
-    sinks.HTTP.take(1).addListener({ next: (value) => requests.push(value) });
+    assert.equal(requests.length, 0);
+    socket.receive('connect');
+    await Promise.resolve();
     assert.equal(requests.length, 1);
     assert.equal(requests[0].category, 'board');
     assert.match(requests[0].url, /\/v1\/getboard$/);
 
     const snapshot = { asks: [{ price: 102, size: 1 }], bids: [{ price: 100, size: 2 }] };
-    responses.shamefullySendNext(Stream.of({ text: JSON.stringify(snapshot) }));
+    requestResponse.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    requestResponse.shamefullySendComplete();
     assert.equal(state.board.asks[0].size, 1);
     assert.equal(state.board.bids[0].size, 2);
+    assert.equal(state.hasBoardSnapshot, true);
 
     socket.receive(snapshotChannel, { asks: [], bids: [] });
     socket.receive(boardChannel, { asks: [{ price: 102, size: 3 }], bids: [] });
@@ -102,7 +118,29 @@ test('initializes from REST and preserves WebSocket deltas during a refresh', ()
     refresh.shamefullySendNext({ text: JSON.stringify(snapshot) });
     refresh.shamefullySendComplete();
     assert.equal(state.board.asks[0].size, 4);
+
+    const stale = Stream.create();
+    responses.shamefullySendNext(stale);
+    socket.receive('disconnect');
+    assert.equal(state.hasBoardSnapshot, false);
+
+    responses.shamefullySendNext(Stream.of({ text: JSON.stringify(snapshot) }));
+    assert.equal(state.hasBoardSnapshot, false);
+
+    socket.receive('connect');
+    await Promise.resolve();
+    assert.equal(requests.length, 2);
+    stale.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    assert.equal(state.hasBoardSnapshot, false);
+
+    socket.receive(boardChannel, { asks: [{ price: 102, size: 5 }], bids: [] });
+    assert.equal(state.hasBoardSnapshot, false);
+    requestResponse.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    requestResponse.shamefullySendComplete();
+    assert.equal(state.hasBoardSnapshot, true);
+    assert.equal(state.board.asks[0].size, 5);
   } finally {
+    requestSubscription.unsubscribe();
     subscription.unsubscribe();
   }
 });

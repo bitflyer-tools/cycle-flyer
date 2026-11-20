@@ -41,6 +41,7 @@ function tradeHarness(t) {
     HTTP: { select },
     orderRequests: { select: () => Stream.never() },
     socket: {
+      connected$: Stream.of(true),
       board$: Stream.never(),
       execution$: Stream.never(),
       executionBatch$,

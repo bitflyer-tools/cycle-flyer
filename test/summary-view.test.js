@@ -80,7 +80,7 @@ test('renders once across 100 board-only deltas and updates for each summary inp
     asks: [{ price: 102000, size: i + 1 }],
     bids: [],
   }));
-  const boardState$ = synchronizeBoard(Stream.fromArray(deltas), Stream.never())
+  const boardState$ = synchronizeBoard(Stream.fromArray(deltas), Stream.never(), Stream.of(true))
     .fold((state, reducer) => reducer(state), { board: new Board({ asks: [], bids: [] }) });
   const updates$ = Stream.create();
   let boardEmissions = 0;
@@ -90,7 +90,7 @@ test('renders once across 100 board-only deltas and updates for each summary inp
   }), updates$);
   const changes = [];
   view(state$).addListener({ next: (node) => changes.push(node) });
-  assert.equal(boardEmissions, 101);
+  assert.equal(boardEmissions, 102);
   assert.equal(changes.length, 1);
 
   let state = initialSummary;

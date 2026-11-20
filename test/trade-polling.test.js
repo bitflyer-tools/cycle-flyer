@@ -29,7 +29,7 @@ const otherAccountCategories = ['orders', 'positions'];
 const initialCategories = [...accountCategories, 'collateral', 'status', 'board'];
 
 for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'secret']]) {
-  test(`Trade polls with API key ${key ? 'present' : 'absent'} and secret ${secret ? 'present' : 'absent'}`, (t) => {
+  test(`Trade polls with API key ${key ? 'present' : 'absent'} and secret ${secret ? 'present' : 'absent'}`, async (t) => {
     t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
     Object.assign(localStorage, { 'api-key': key, 'api-secret': secret });
     const reconnect$ = Stream.create();
@@ -41,12 +41,13 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
     });
     const categories = [];
     const subscription = Stream.merge(
-      components.trade_request(actions), components.summary_request(), components.board_request(),
+      components.trade_request(actions), components.summary_request(), components.board_request(Stream.of(true)),
     ).subscribe({ next: (request) => categories.push(request.category) });
     t.after(() => subscription.unsubscribe());
     const takeCategories = () => categories.splice(0).sort();
     const authenticated = key && secret;
 
+    await Promise.resolve();
     assert.deepEqual(takeCategories(), (authenticated ? [...initialCategories] : ['board', 'status']).sort());
 
     reconnect$.shamefullySendNext(null);
@@ -129,7 +130,7 @@ for (const { component, category, first, invalid, next, read, expected } of test
     const actions = components[`${component}_intent`]({
       DOM: dom,
       storage: { local: { getItem: () => idle } },
-      socket: { board$: idle, executionBatch$: idle, childOrderEvent$: idle, parentOrderEvent$: idle, reconnect$: idle },
+      socket: { connected$: Stream.of(true), board$: idle, executionBatch$: idle, childOrderEvent$: idle, parentOrderEvent$: idle, reconnect$: idle },
       HTTP: { select: (name) => name === category ? responses : idle },
     });
 

@@ -12,18 +12,28 @@ interface PendingSnapshot {
 export const synchronizeBoard = <T extends Stream<Response>>(
     deltas$: Stream<BoardLevels>,
     responses$$: Stream<T>,
+    connected$: Stream<boolean>,
 ): Stream<Reducer<State>> => {
     const liveReducer$ = deltas$
         .map<Reducer<State>>((delta) => (state) => state && ({ ...state, board: mergeDelta(state.board, delta) }));
 
-    // Each response stream is announced at request time. Switching drops superseded requests.
-    const snapshotReducer$ = responses$$
+    const synchronizedReducer$ = connected$
+        .map((connected) => connected
+            ? snapshotReducers(responses$$, deltas$).startWith(invalidateSnapshot)
+            : Stream.of(invalidateSnapshot))
+        .flatten();
+
+    return Stream.merge(liveReducer$, synchronizedReducer$);
+};
+
+const invalidateSnapshot: Reducer<State> = (state) => state && ({ ...state, hasBoardSnapshot: false });
+
+// Each response stream is announced at request time. Switching drops superseded requests.
+const snapshotReducers = (responses$$: Stream<Stream<Response>>, deltas$: Stream<BoardLevels>): Stream<Reducer<State>> =>
+    responses$$
         .map((response$) => reconcileSnapshot(response$, deltas$))
         .flatten()
         .map<Reducer<State>>((board) => (state) => state && ({ ...state, board, hasBoardSnapshot: true }));
-
-    return Stream.merge(liveReducer$, snapshotReducer$);
-};
 
 const reconcileSnapshot = (response$: Stream<Response>, deltas$: Stream<BoardLevels>): Stream<Board> => {
     const updates$ = deltas$.map((delta) => (pending: PendingSnapshot) => {

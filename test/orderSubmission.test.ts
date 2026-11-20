@@ -180,8 +180,9 @@ test("dispatches every Clear Orders request and stays locked until they all sett
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
 
-test("previews both market sides from synchronized public depth without credentials", (t) => {
+test("previews both market sides from synchronized public depth without credentials", async (t) => {
     const order = setup(t, "0.01", false);
+    await Promise.resolve();
     equal(order.tradeState.boardComponentState?.groupedSize, 100);
     const boardResponse = order.respondTo(order.boardRequest!);
 
@@ -252,6 +253,7 @@ function setup(t: TestContext, width = "0.01", credentials = true) {
         HTTP: new MainHTTPSource(responses$, "HTTP"),
         history: history$,
         socket: {
+            connected$: Stream.of(true),
             board$,
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),

@@ -87,7 +87,7 @@ const setup = () => {
     const updates$ = Stream.create<BoardLevels>();
     const responses$$ = Stream.create<Stream<Response>>();
     let state = { board: new Board({ asks: [], bids: [] }) } as State;
-    synchronizeBoard(updates$, responses$$).addListener({
+    synchronizeBoard(updates$, responses$$, Stream.of(true)).addListener({
         next: (reduce) => { state = reduce(state) as State; },
     });
 

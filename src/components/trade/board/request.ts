@@ -2,7 +2,13 @@ import {RequestOptions} from "@cycle/http";
 import Stream from "xstream";
 import {getBoard} from "../../../http";
 
-export const request = (): Stream<string | RequestOptions | null> => {
-    const board = Stream.periodic(15000).mapTo(getBoard()).startWith(getBoard());
-    return Stream.merge(board) as Stream<string | RequestOptions | null>;
-};
+export const request = (connected$: Stream<boolean>): Stream<string | RequestOptions | null> =>
+    connected$
+        .map((connected) => connected
+            ? Stream.merge(
+                // Let the synchronizer subscribe before the HTTP driver announces the request.
+                Stream.fromPromise(Promise.resolve(getBoard())),
+                Stream.periodic(15000).map(getBoard),
+            )
+            : Stream.never())
+        .flatten();

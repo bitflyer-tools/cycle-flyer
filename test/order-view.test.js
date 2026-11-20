@@ -40,7 +40,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
     DOM: dom,
     HTTP: { select: (category) => category === 'orders' ? orders$ : never() },
     orderRequests: { select: never },
-    socket: { board$, executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
+    socket: { connected$: Stream.of(true), board$, executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
   }, Stream.of(false));
@@ -127,7 +127,7 @@ test('the summary waits for a public execution before valuing an open position',
     DOM: dom,
     HTTP: { select: (category) => ({ positions: positions$, collateral: collateral$ })[category] || never() },
     orderRequests: { select: never },
-    socket: { board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
+    socket: { connected$: Stream.of(true), board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
   }, Stream.of(false));
