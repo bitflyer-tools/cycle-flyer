@@ -6,13 +6,18 @@ const visibleRows = 200;
 const ascendingPrice = (a: BoardOrder, b: BoardOrder): number => a.price - b.price;
 const descendingPrice = (a: BoardOrder, b: BoardOrder): number => b.price - a.price;
 
+export interface BoardLevels {
+    asks: BoardOrder[];
+    bids: BoardOrder[];
+}
+
 export class Board {
     public asks: BoardOrder[];
     public bids: BoardOrder[];
 
-    constructor(json: any) {
-        this.asks = json.asks.map((ask: object) => new BoardOrder(ask)).sort(ascendingPrice);
-        this.bids = json.bids.map((bid: object) => new BoardOrder(bid)).sort(descendingPrice);
+    constructor(json: BoardLevels) {
+        this.asks = json.asks.map((ask) => new BoardOrder(ask)).sort(ascendingPrice);
+        this.bids = json.bids.map((bid) => new BoardOrder(bid)).sort(descendingPrice);
     }
 
     public spread(): number {
@@ -44,21 +49,8 @@ export class Board {
     }
 
     public merge(asks: BoardOrder[], bids: BoardOrder[]): Board {
-        const asksToRemove = new Set(asks.map((ask) => ask.price));
-        const asksToAppend = asks.filter((ask) => ask.size !== 0.0).map((ask) => new BoardOrder(ask));
-        const bidsToRemove = new Set(bids.map((bid) => bid.price));
-        const bidsToAppend = bids.filter((bid) => bid.size !== 0.0).map((bid) => new BoardOrder(bid));
-
-        this.asks = this.asks
-            .filter((ask) => !asksToRemove.has(ask.price))
-            .concat(asksToAppend)
-            .sort(ascendingPrice);
-
-        this.bids = this.bids
-            .filter((bid) => !bidsToRemove.has(bid.price))
-            .concat(bidsToAppend)
-            .sort(descendingPrice);
-
+        this.asks = this.mergeSide(this.asks, asks, ascendingPrice);
+        this.bids = this.mergeSide(this.bids, bids, descendingPrice);
         return this;
     }
 
@@ -68,6 +60,17 @@ export class Board {
 
     public groupedBids(groupPrice: number): BoardOrder[] {
         return this.groupBy(this.bids, groupPrice, -1, floorBy);
+    }
+
+    private mergeSide(
+        orders: BoardOrder[],
+        updates: BoardOrder[],
+        compare: (a: BoardOrder, b: BoardOrder) => number,
+    ): BoardOrder[] {
+        if (updates.length === 0) { return orders; }
+        const pricesToRemove = new Set(updates.map((order) => order.price));
+        const ordersToAppend = updates.filter((order) => order.size !== 0).map((order) => new BoardOrder(order));
+        return orders.filter((order) => !pricesToRemove.has(order.price)).concat(ordersToAppend).sort(compare);
     }
 
     private groupBy(
