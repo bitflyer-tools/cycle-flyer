@@ -1,6 +1,6 @@
 import {ceilBy, floorBy} from "../util";
 import {BoardOrder} from "./boardOrder";
-import {Execution} from "./execution";
+import {Execution, executionPriceLimits} from "./execution";
 
 const visibleRows = 200;
 const ascendingPrice = (a: BoardOrder, b: BoardOrder): number => a.price - b.price;
@@ -35,15 +35,7 @@ export class Board {
     }
 
     public removeExecutions(executions: Execution[]): void {
-        let highestBuy: number | undefined;
-        let lowestSell: number | undefined;
-        executions.forEach(({ side, price }) => {
-            if (side === "BUY") {
-                highestBuy = Math.max(highestBuy ?? price, price);
-            } else {
-                lowestSell = Math.min(lowestSell ?? price, price);
-            }
-        });
+        const { highestBuy, lowestSell } = executionPriceLimits(executions);
         if (highestBuy !== undefined) { this.remove("BUY", highestBuy); }
         if (lowestSell !== undefined) { this.remove("SELL", lowestSell); }
     }

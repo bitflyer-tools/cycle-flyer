@@ -51,6 +51,7 @@ export interface State {
     position: Position;
     positionClose?: { id: symbol; size: number; settled: boolean; rejected?: boolean };
     price: number;
+    lastExecutionPrice: number;
     boardComponentState?: BoardComponentState;
     orderComponentState?: OrderComponentState;
     summaryComponentState?: SummaryComponentState;
@@ -125,12 +126,23 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
         .remember();
     const request$ = request(actions, settledCloseId$);
 
+    const priceAlertSound$ = sources.state.stream
+        .map((state) => state?.summaryComponentState?.priceAlert)
+        .compose(dropRepeats())
+        .drop(1)
+        .filter((alert) => alert?.status === "triggered")
+        .mapTo<Sound>("price-alert");
+
     return {
         DOM: view$,
         HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP),
         orderRequests: orderComponent.orderRequests,
         router: Stream.never(),
-        sound: Stream.merge(orderComponent.sound, actions.onMyExecutionCreated$.mapTo<Sound>("execution")),
+        sound: Stream.merge(
+            orderComponent.sound,
+            actions.onMyExecutionCreated$.mapTo<Sound>("execution"),
+            priceAlertSound$,
+        ),
         state: Stream.merge(
             reducer$,
             boardComponent.state,
