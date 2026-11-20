@@ -6,7 +6,7 @@ import sampleCombine from "xstream/extra/sampleCombine";
 import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
-import {isValidLimitOrder, isValidOrderSize} from "./validation";
+import {isValidIFDOCOOrder, isValidLimitOrder, isValidOrderSize} from "./validation";
 
 export interface OrderRequestBatch {
     requests: RequestInput[];
@@ -62,8 +62,8 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
         withState(actions.onClickLimitSellButton$, (state) => limitOrder(state.price, state.size, "SELL"), isValidLimitOrder),
         withState(actions.onClickStopBuyButton$, (state) => stopOrder(state.triggerPrice, state.size, "BUY"), isValidOrderSize),
         withState(actions.onClickStopSellButton$, (state) => stopOrder(state.triggerPrice, state.size, "SELL"), isValidOrderSize),
-        withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder),
-        withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder),
+        withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder, isValidIFDOCOOrder),
+        withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder, isValidIFDOCOOrder),
         withState(actions.onClickClearButton$, clearPositionOrder),
         actions.onClickClearOrderButton$.compose(sampleCombine(state$))
             .map(([_, state]) => ({
