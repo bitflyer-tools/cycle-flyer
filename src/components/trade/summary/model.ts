@@ -6,7 +6,7 @@ import {Actions} from "./intent";
 
 const defaultState: State = {
     collateral: 0.0,
-    currentPrice: 0,
+    currentPrice: null,
     histories: [],
     marketState: {},
     position: new Position([]),

@@ -1,6 +1,7 @@
 import {div, h4, input, label, p, span, VNode} from "@cycle/dom";
 import {sideButtons} from "./buttons";
 import {State} from "./index";
+import {isValidIFDOCOOrder} from "./validation";
 
 export const ifdocoSection = (state: State): VNode => {
     const size = Math.abs(state.size);
@@ -61,4 +62,4 @@ const sellLines = (state: State, size: number): Lines => ({
 });
 
 const ifdocoButtonDisabled = (state: State): boolean =>
-    state.isOrdering || state.size === 0 || state.ifdocoOrder.width === 0;
+    state.isOrdering || !isValidIFDOCOOrder(state);

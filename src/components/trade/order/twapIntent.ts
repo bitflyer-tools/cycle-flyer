@@ -1,19 +1,31 @@
 import {Stream} from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
-import {loadNumber} from "../../../storage";
+import sampleCombine from "xstream/extra/sampleCombine";
+import {TwapSliceRequest} from "../../../http";
+import {canStart, isValidTwapInterval} from "../../../models/twapOrder";
+import {loadNumber, loadStoredValue} from "../../../storage";
 import {Sources} from "../index";
+import {State} from "./index";
 import {clicks, numberInputs} from "./events";
 import {createChildOrderOutcome, OrderOutcome} from "./history";
 
+export interface TwapSchedule {
+    id: symbol;
+    side: "BUY" | "SELL";
+}
+
+export interface TwapSliceOutcome extends OrderOutcome {
+    scheduleId: symbol;
+}
+
 export interface TwapActions {
-    onClickTwapBuyButton$: Stream<null>;
     onClickTwapCancelButton$: Stream<null>;
-    onClickTwapSellButton$: Stream<null>;
     onTwapIntervalChanged$: Stream<number>;
     onTwapIntervalLoaded$: Stream<number>;
-    onTwapSliceOutcome$: Stream<OrderOutcome>;
+    onTwapSliceOutcome$: Stream<TwapSliceOutcome>;
     onTwapSlicesChanged$: Stream<number>;
     onTwapSlicesLoaded$: Stream<number>;
+    onTwapStarted$: Stream<TwapSchedule>;
 }
 
 export const twapStorageKeys = {
@@ -21,15 +33,25 @@ export const twapStorageKeys = {
     slices: "twap-slices",
 };
 
-export const twapIntent = (sources: Sources): TwapActions => ({
-    onClickTwapBuyButton$: clicks(sources.DOM, ".twap-order-buttons", ".buy-button"),
+export const twapIntent = (sources: Sources, state$: Stream<State>): TwapActions => ({
     onClickTwapCancelButton$: clicks(sources.DOM, ".twap-order-buttons", ".cancel-button"),
-    onClickTwapSellButton$: clicks(sources.DOM, ".twap-order-buttons", ".sell-button"),
     onTwapIntervalChanged$: numberInputs(sources.DOM, "#twap-interval-input"),
-    onTwapIntervalLoaded$: loadNumber(sources.storage, twapStorageKeys.interval),
+    onTwapIntervalLoaded$: loadStoredValue(sources.storage, twapStorageKeys.interval)
+        .take(1)
+        .map((value) => +value)
+        .map((interval) => isValidTwapInterval(interval) ? interval : 0),
     onTwapSliceOutcome$: sources.HTTP.select("twap-order")
-        .map((stream) => createChildOrderOutcome("TWAP", stream))
+        .map((response$) => {
+            const {scheduleId} = response$.request as TwapSliceRequest;
+            return createChildOrderOutcome("TWAP", response$).map((outcome) => ({ ...outcome, scheduleId }));
+        })
         .compose(flattenConcurrently),
     onTwapSlicesChanged$: numberInputs(sources.DOM, "#twap-slices-input"),
     onTwapSlicesLoaded$: loadNumber(sources.storage, twapStorageKeys.slices),
+    onTwapStarted$: Stream.merge(
+        clicks(sources.DOM, ".twap-order-buttons", ".buy-button").mapTo("BUY" as const),
+        clicks(sources.DOM, ".twap-order-buttons", ".sell-button").mapTo("SELL" as const),
+    ).compose(sampleCombine(state$))
+        .filter(([_, state]) => canStart(state.twap, state.size))
+        .map(([side]) => ({ id: Symbol(), side })),
 });
