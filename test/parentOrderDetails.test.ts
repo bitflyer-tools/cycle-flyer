@@ -78,15 +78,30 @@ test("a list started between two cancellations confirms only the earlier cancell
 
 test("reuses 20 loaded details and coalesces duplicate IDs while they are pending", (t) => {
     const trade = setup(t);
+    const state = observeState(t, trade.actions);
     const ids = Array.from({ length: 20 }, (_, index) => `parent-${index}`);
     trade.list([...ids, ids[0]]);
     trade.list(ids);
     deepStrictEqual(trade.requestedIds(), ids);
 
     [...trade.requests].reverse().forEach((input) => trade.complete(input));
+    const retained = state().parentStopOrders;
+    const markers = flattenStopOrders(retained);
     trade.list(ids);
+    strictEqual(state().parentStopOrders, retained);
+    strictEqual(flattenStopOrders(state().parentStopOrders), markers);
+    trade.list([ids[0], ...[...ids].reverse()]);
+    strictEqual(state().parentStopOrders, retained);
     deepStrictEqual(trade.requestedIds(), ids);
     strictEqual(trade.loaded.length, 20);
+
+    const nextIds = [...ids.slice(1), "new-parent"];
+    trade.list(nextIds);
+    const reconciled = state().parentStopOrders;
+    deepStrictEqual(Object.keys(reconciled), nextIds);
+    strictEqual(reconciled[ids[1]], retained[ids[1]]);
+    deepStrictEqual(reconciled["new-parent"], []);
+    deepStrictEqual(trade.requestedIds(), [...ids, "new-parent"]);
 });
 
 test("retries only failed and new details after a list refresh", (t) => {
