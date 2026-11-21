@@ -16,6 +16,7 @@ import {State as TradeState} from "../src/components/trade";
 import {stopSection} from "../src/components/trade/order/stopView";
 import {storageKeys} from "../src/components/trade/order/intent";
 import {Execution} from "../src/models/execution";
+import {HISTORY_LIMIT} from "../src/models/orderHistory";
 import type {State as SummaryState} from "../src/components/trade/summary";
 import {view as summaryView} from "../src/components/trade/summary/view";
 import {currentCredentialVersion, saveCredentials} from "../src/credentials";
@@ -158,6 +159,23 @@ test("accepts a single IFDOCO submission until its delayed success", (t) => {
     sellResponse.succeed();
     equal(order.state.isOrdering, false);
     equal(order.histories.length, 9);
+});
+
+test("bounds the history when an IFDOCO result arrives in settings", (t) => {
+    const order = setup(t);
+    Array.from({ length: HISTORY_LIMIT }, (_, index) => {
+        order.buy("market");
+        order.respondTo(order.requests[index]).succeed();
+    });
+    const previous = order.histories;
+
+    order.buy("ifdoco");
+    order.navigate("/setting");
+    order.respondTo(order.requests[HISTORY_LIMIT]).succeed();
+    order.navigate("/");
+
+    deepEqual(order.histories.slice(0, 3).map(({ name }) => name), ["Stop", "Limit", "Market"]);
+    deepEqual(order.histories.slice(3), previous.slice(0, HISTORY_LIMIT - 3));
 });
 
 test("releases a failed IFDOCO and keeps a later market order locked through stale responses", (t) => {
@@ -729,7 +747,7 @@ for (const category of ["limit-order", "cancel-orders", "market-order"] as const
         server.listen(0, "127.0.0.1");
         await once(server, "listening");
         const address = server.address() as { port: number };
-        const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${address.port}` });
+        const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${address.port}`, apis: [] });
         order.enterPrice("10000");
         const position = [{ side: "BUY", size: 0.08, price: 40000 }];
         if (category === "market-order") {
@@ -787,17 +805,22 @@ for (const category of ["limit-order", "cancel-orders", "market-order"] as const
 for (const route of ["/", "/setting"]) {
     test(`records a TWAP slice deadline once when it expires on ${route}`, (t) => {
         const order = setup(t);
+        Array.from({ length: HISTORY_LIMIT }, (_, index) => {
+            order.buy("market");
+            order.respondTo(order.requests[index]).succeed();
+        });
+        const previous = order.histories;
         const request = twapSliceOrder(0.01, "BUY", Symbol());
         const response = order.respondTo({ ...request, _namespace: ["trade"] });
 
         if (route === "/setting") order.navigate(route);
         response.fail(Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }));
-        deepEqual(order.histories.map(({ name, status }) => ({ name, status })), [
-            { name: "TWAP", status: "unconfirmed" },
-        ]);
+        const { name, status } = order.histories[0];
+        deepEqual({ name, status }, { name: "TWAP", status: "unconfirmed" });
+        deepEqual(order.histories.slice(1), previous.slice(0, HISTORY_LIMIT - 1));
 
         if (route === "/setting") order.navigate("/");
-        equal(order.histories.length, 1);
+        equal(order.histories.length, HISTORY_LIMIT);
         summaryView(Stream.of<SummaryState>({
             ...order.tradeState,
             priceAlert: order.tradeState.summaryComponentState!.priceAlert,
@@ -856,7 +879,7 @@ function setup(t: TestContext, width = "0.01", options: {
     apis?: Array<"Date" | "setInterval">;
 } = {}) {
     const { initialPrice = 10000000, writeOrigin, apis = ["setInterval"] } = options;
-    t.mock.timers.enable({ apis, now: 1000 });
+    if (apis.length > 0) t.mock.timers.enable({ apis, now: 1000 });
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-key": "test", "api-secret": "test" } });
     t.after(() => {
