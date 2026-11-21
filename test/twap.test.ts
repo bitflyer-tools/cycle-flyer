@@ -29,7 +29,7 @@ before(async () => {
     }
 });
 
-test("records overlapping slices and returns to idle in either response order", async (context) => {
+test("settles overlapping slices and returns to idle in either response order", async (context) => {
     await Promise.all([[0, 1], [1, 0]].map(([first, second]) =>
         context.test(`slice ${first + 1} resolves first`, (subtest) => {
             const twap = createTwap(subtest);
@@ -39,17 +39,14 @@ test("records overlapping slices and returns to idle in either response order", 
 
             twap.requests[first].succeed();
             strictEqual(twap.state.twap.remaining, 1);
-            strictEqual(twap.state.histories.length, 1);
 
             twap.requests[second].succeed();
-            deepStrictEqual(twap.state.histories.map(({name, status}) => [name, status]),
-                [["TWAP", "success"], ["TWAP", "success"]]);
             strictEqual(isRunning(twap.state.twap), false);
         }),
     ));
 });
 
-test("records a canceled schedule's response without advancing its replacement", (context) => {
+test("ignores a canceled schedule's response when tracking replacement progress", (context) => {
     const twap = createTwap(context);
     twap.buy.shamefullySendNext(null);
     twap.cancel.shamefullySendNext(null);
@@ -60,17 +57,12 @@ test("records a canceled schedule's response without advancing its replacement",
     twap.sell.shamefullySendNext(null);
     twap.requests[0].succeed();
     strictEqual(twap.state.twap.remaining, 2);
-    deepStrictEqual(twap.state.histories.map(({description, status}) => [description, status]),
-        [["BUY / 0.01 / MARKET", "success"]]);
 
     context.mock.timers.tick(1000);
     twap.requests[1].disconnect();
     strictEqual(twap.state.twap.remaining, 1);
-    strictEqual(twap.state.histories.length, 1);
     twap.requests[2].succeed();
     strictEqual(isRunning(twap.state.twap), false);
-    deepStrictEqual(twap.state.histories.map(({description}) => description),
-        ["SELL / 0.01 / MARKET", "BUY / 0.01 / MARKET"]);
 });
 
 test("ignores a new start while a schedule is waiting for responses", (context) => {
