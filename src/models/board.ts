@@ -61,8 +61,20 @@ export class Board {
     ): BoardOrder[] {
         if (updates.length === 0) { return orders; }
         const pricesToRemove = new Set(updates.map((order) => order.price));
-        const ordersToAppend = updates.filter((order) => order.size !== 0).map((order) => new BoardOrder(order));
-        return orders.filter((order) => !pricesToRemove.has(order.price)).concat(ordersToAppend).sort(compare);
+        const changedOrders = updates.filter((order) => order.size !== 0).map((order) => new BoardOrder(order));
+        if (changedOrders.length > 1) { changedOrders.sort(compare); }
+
+        const merged: BoardOrder[] = [];
+        let next = 0;
+        for (const order of orders) {
+            if (pricesToRemove.has(order.price)) { continue; }
+            while (next < changedOrders.length && compare(changedOrders[next], order) < 0) {
+                merged.push(changedOrders[next++]);
+            }
+            merged.push(order);
+        }
+        while (next < changedOrders.length) { merged.push(changedOrders[next++]); }
+        return merged;
     }
 
     private groupBy(
