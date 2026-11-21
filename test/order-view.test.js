@@ -137,7 +137,12 @@ test('the summary waits for a public execution before valuing an open position',
   const stateSubscription = sinks.state.subscribe({
     next: (reduce) => state$.shamefullySendNext(state = reduce(state)),
   });
-  const domSubscription = sinks.DOM.subscribe({ next: (node) => { [summary] = node.children; } });
+  const domSubscription = sinks.DOM.subscribe({
+    next: (node) => {
+      const sidebar = node.children.find(({ sel }) => sel === 'div.trade-sidebar');
+      summary = sidebar.children.find(({ sel }) => sel === 'div.summary');
+    },
+  });
   t.after(() => {
     domSubscription.unsubscribe();
     stateSubscription.unsubscribe();

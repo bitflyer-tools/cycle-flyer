@@ -11,21 +11,50 @@ test("merge replaces, removes, and sorts levels on both sides", () => {
     });
 
     const result = board.merge(
-        [{ price: 140, size: 7 }, { price: 120, size: 0 }, { price: 110, size: 8 }],
-        [{ price: 70, size: 9 }, { price: 90, size: 0 }, { price: 100, size: 10 }],
+        [{ price: 140, size: 7 }, { price: 110, size: 0 }, { price: 120, size: 8 }, { price: 125, size: 11 }],
+        [{ price: 70, size: 9 }, { price: 100, size: 0 }, { price: 90, size: 10 }, { price: 85, size: 12 }],
     );
 
     strictEqual(result, board);
     deepStrictEqual(board.asks, [
-        new BoardOrder({ price: 110, size: 8 }),
+        new BoardOrder({ price: 120, size: 8 }),
+        new BoardOrder({ price: 125, size: 11 }),
         new BoardOrder({ price: 130, size: 3 }),
         new BoardOrder({ price: 140, size: 7 }),
     ]);
     deepStrictEqual(board.bids, [
-        new BoardOrder({ price: 100, size: 10 }),
+        new BoardOrder({ price: 90, size: 10 }),
+        new BoardOrder({ price: 85, size: 12 }),
         new BoardOrder({ price: 80, size: 6 }),
         new BoardOrder({ price: 70, size: 9 }),
     ]);
+    strictEqual(board.spread(), 30);
+});
+
+test("merge replaces all existing levels at a changed price and retains nonzero updates in input order", () => {
+    const board = new Board({
+        asks: [{ price: 110, size: 1 }, { price: 110, size: 2 }, { price: 120, size: 3 }],
+        bids: [],
+    });
+
+    board.merge([{ price: 110, size: 4 }, { price: 110, size: 0 }, { price: 110, size: 5 }], []);
+
+    deepStrictEqual(board.asks.map(({ size }) => size), [4, 5, 3]);
+});
+
+test("merge replaces one level on a 5,000-level side without sorting", () => {
+    const asks = Array.from({ length: 5_000 }, (_, index) => ({ price: index + 1, size: 1 }));
+    const board = new Board({ asks, bids: [] });
+    const sort = Array.prototype.sort;
+    try {
+        Array.prototype.sort = () => { throw new Error("Unexpected sort for a single update"); };
+        board.merge([{ price: 2_500, size: 2 }], []);
+    } finally {
+        Array.prototype.sort = sort;
+    }
+
+    deepStrictEqual(board.asks, asks.map(({ price }) =>
+        new BoardOrder({ price, size: price === 2_500 ? 2 : 1 })));
 });
 
 test("snapshots order asks and bids best first", () => {

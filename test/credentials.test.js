@@ -18,6 +18,8 @@ const rendererBundle = buildSync({
       export * from './src/drivers/httpDriver';
       export * from './src/drivers/privateChannel';
       export * from './src/http';
+      export { request as boardRequest } from './src/components/trade/board/request';
+      export { request as summaryRequest } from './src/components/trade/summary/request';
       export * from './src/components/trade/order/twapRequest';
       export * from './src/components/trade/order/twapView';
       export * from './src/components/setting/view';
@@ -127,6 +129,9 @@ test('browser signs the actual REST URL and body for each dispatch', async (t) =
   Date.now.mock.mockImplementation(() => 2000);
   const second = await renderer.authorizeRequest(poll);
   const requestPath = '/v1/me/getchildorders?product_code=FX_BTC_JPY&child_order_state=ACTIVE';
+  assert.equal(first.credentialVersion, renderer.currentCredentialVersion());
+  assert.equal(second.credentialVersion, renderer.currentCredentialVersion());
+  assert.equal(first.headers['ACCESS-KEY'], pair.key);
   assert.equal(first.headers['ACCESS-TIMESTAMP'], '1000');
   assert.equal(first.headers['ACCESS-SIGN'], hmac('1000GET' + requestPath));
   assert.equal(second.headers['ACCESS-SIGN'], hmac('2000GET' + requestPath));
@@ -136,6 +141,46 @@ test('browser signs the actual REST URL and body for each dispatch', async (t) =
   assert.equal(order.headers['ACCESS-SIGN'], hmac('2000POST' + new URL(order.url).pathname +
     new URL(order.url).search + order.send));
 });
+
+for (const saved of [false, true]) {
+  test(`initial and periodic public REST polls stay unsigned ${saved ? 'with' : 'without'} saved credentials`, async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const signRest = t.mock.fn();
+    const renderer = createRenderer(new Map(), {
+      hasCredentials: async () => saved,
+      save: async () => {},
+      signRest,
+    });
+    await renderer.saveCredentials(saved ? pair : null);
+    assert.equal(renderer.hasApiCredentials(), saved);
+
+    const board = [];
+    const status = [];
+    const boardSubscription = renderer.boardRequest(renderer.Stream.of(false))
+      .subscribe({ next: (request) => board.push(request) });
+    const statusSubscription = renderer.summaryRequest()
+      .filter((request) => request.category === 'status')
+      .subscribe({ next: (request) => status.push(request) });
+    t.after(() => {
+      boardSubscription.unsubscribe();
+      statusSubscription.unsubscribe();
+    });
+
+    await Promise.resolve();
+    assert.equal(board.length, 1);
+    assert.equal(status.length, 1);
+    t.mock.timers.tick(60000);
+    assert.equal(board.length, 5);
+    assert.equal(status.length, 3);
+    assert.equal(new Set(status).size, status.length);
+    for (const request of [...board, ...status]) {
+      assert.equal(await renderer.authorizeRequest(request), request);
+      assert.deepEqual({ ...request.headers }, { 'Content-Type': 'application/json' });
+      assert.equal('credentialVersion' in request, false);
+    }
+    assert.equal(signRest.mock.callCount(), 0);
+  });
+}
 
 for (const [operation, replacement] of [
   ['replacing', { key: 'another-api-key', secret: 'another-api-secret' }],

@@ -1,4 +1,5 @@
 import {RequestInput, RequestOptions} from "@cycle/http";
+import {hasApiCredentials} from "./credentials";
 
 export const getBoard = (): RequestInput =>
     ({ ...requestInput("board", "/v1/getboard", "GET"), lazy: true });
@@ -11,6 +12,15 @@ export const getCollateral = (): RequestInput =>
 
 export const getPositions = (): RequestInput =>
     requestInput("positions", "/v1/me/getpositions", "GET");
+
+export const executionPageSize = 50;
+
+export const getExecutions = (before?: number): RequestOptions | null => {
+    if (!hasApiCredentials()) { return null; }
+    const page = { count: executionPageSize };
+    return requestInput("executions", "/v1/me/getexecutions", "GET", undefined,
+        before === undefined ? page : { ...page, before });
+};
 
 export const getOrders = (): RequestInput =>
     requestInput("orders", "/v1/me/getchildorders", "GET", undefined, { child_order_state: "ACTIVE" });

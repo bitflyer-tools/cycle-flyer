@@ -1,0 +1,35 @@
+# Contributing
+
+Please follow the [Code of Conduct](CODE_OF_CONDUCT.md). For an overview of the
+Electron shell and Cycle.js renderer, see [Architecture](docs/architecture.md).
+
+## Set up the development environment
+
+Fork the repository, clone your fork, and create a branch from `master`. Use
+Node.js 24, which CI also uses. From the repository root, run:
+
+```sh
+npm ci
+npm run start:electron
+```
+
+To work on the renderer in a browser, run `npm start` and open the local URL
+printed by the dev server. It rebuilds the renderer when source files change.
+Use the Electron app to verify desktop behavior such as saving API credentials.
+
+## Run the checks
+
+```sh
+npm run lint
+npm run test:coverage
+npm run build
+```
+
+For packaging changes, run `npm run make` to build installers or archives for
+your platform under `out/make/`.
+
+## Open a pull request
+
+Push your branch to your fork and open a pull request against
+`bitflyer-tools/cycle-flyer:master`. Explain what changed, why it changed, and
+how you verified it. Link the related issue if there is one.

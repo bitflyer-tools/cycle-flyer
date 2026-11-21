@@ -1,7 +1,7 @@
 import { io, Socket } from "socket.io-client";
 import Stream from "xstream";
 import {credentialsChanged$, currentCredentialVersion} from "../credentials";
-import {BoardLevels} from "../models/board";
+import {BoardLevels, isBoardLevels} from "../models/board";
 import {Execution} from "../models/execution";
 import {ChildOrderEvent, ParentOrderEvent} from "../models/orderEvent";
 import {authenticate, privateChannelNames} from "./privateChannel";
@@ -25,7 +25,9 @@ export class SocketIOSource {
     public parentOrderEvent$: Stream<ParentOrderEvent> = Stream.create();
 
     private channels: { [channelName: string]: (message: any) => void } = {
-        [`lightning_board_${productCode}`]: (message) => this.board$.shamefullySendNext(message),
+        [`lightning_board_${productCode}`]: (message: unknown) => {
+            if (isBoardLevels(message)) { this.board$.shamefullySendNext(message); }
+        },
         [`lightning_executions_${productCode}`]: (messages: Execution[]) => {
             this.executionBatch$.shamefullySendNext(messages);
             sendEach(this.execution$, messages);
