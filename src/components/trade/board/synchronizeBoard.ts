@@ -2,12 +2,14 @@ import {Response} from "@cycle/http";
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {Board, BoardLevels} from "../../../models/board";
 import {BoardSnapshot} from "../../../models/boardSnapshot";
 import {Execution} from "../../../models/execution";
 import {State} from "./index";
 
 type BoardUpdate = (snapshot: BoardSnapshot) => void;
+const snapshotDeadlineMs = 30_000;
 
 interface PendingSnapshot {
     updates: BoardUpdate[];
@@ -38,17 +40,26 @@ export const synchronizeBoard = <T extends Stream<Response>>(
 
 const invalidateSnapshot: Reducer<State> = (state) => state && ({ ...state, hasBoardSnapshot: false });
 
-// Each response stream is announced at request time. Switching drops superseded requests.
 const snapshotReducers = (
     responses$$: Stream<Stream<Response>>,
     boardUpdates$: Stream<BoardUpdate>,
     connection$: Stream<boolean>,
-): Stream<Reducer<State>> =>
-    responses$$
-        .map((response$) => reconcileSnapshot(response$, boardUpdates$, connection$))
-        .flatten()
-        .map<Reducer<State>>(({ board, synchronized }) => (state) =>
-            state && ({ ...state, board, hasBoardSnapshot: synchronized === true }));
+): Stream<Reducer<State>> => {
+    let nextRequest = 0;
+    let latestApplied = 0;
+    return responses$$
+        .map((response$) => {
+            const request = ++nextRequest;
+            return reconcileSnapshot(response$, boardUpdates$, connection$)
+                .map((snapshot) => ({ request, ...snapshot }));
+        })
+        .compose(flattenConcurrently)
+        .filter(({ request }) => request > latestApplied)
+        .map<Reducer<State>>(({ request, board, synchronized }) => {
+            latestApplied = request;
+            return (state) => state && ({ ...state, board, hasBoardSnapshot: synchronized === true });
+        });
+};
 
 const reconcileSnapshot = (
     response$: Stream<Response>,
@@ -73,6 +84,7 @@ const reconcileSnapshot = (
         .fold((pending, update) => update(pending), { updates: [] } as PendingSnapshot)
         .filter((pending): pending is PendingSnapshot & {board: Board} => !!pending.board)
         .take(1)
+        .endWhen(Stream.periodic(snapshotDeadlineMs).take(1))
         .replaceError(() => Stream.empty());
 };
 

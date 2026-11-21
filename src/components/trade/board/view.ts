@@ -131,10 +131,10 @@ const groupMarkerTotals = (orders: ReadonlyArray<Order | StopOrder>, groupedSize
     orders.forEach((order) => {
         const side = order.side;
         if (side !== "BUY" && side !== "SELL") { return; }
-        const isSell = side === "SELL";
-        const price = isSell ? ceilBy(order.price, groupedSize) : floorBy(order.price, groupedSize);
+        const displaysOnAsk = isStop ? side === "BUY" : side === "SELL";
+        const price = displaysOnAsk ? ceilBy(order.price, groupedSize) : floorBy(order.price, groupedSize);
         if (Number.isNaN(price)) { return; }
-        const buckets = isSell !== isStop ? asks : bids;
+        const buckets = displaysOnAsk ? asks : bids;
         buckets.set(price, (buckets.get(price) ?? 0) + order.size);
     });
 

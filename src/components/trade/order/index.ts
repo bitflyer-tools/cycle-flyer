@@ -18,6 +18,7 @@ import {twapRequest} from "./twapRequest";
 import {view} from "./view";
 
 export interface State {
+    credentialVersion?: symbol;
     currentPrice: number;
     histories: OrderHistory[];
     ifdocoOrder: IFDOCOrder;
@@ -26,6 +27,7 @@ export interface State {
     orders: Order[];
     parentStopOrders: ParentStopOrders;
     position: Position;
+    positionClosePending?: boolean;
     price: number;
     size: number;
     triggerPrice: number;

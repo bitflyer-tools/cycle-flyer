@@ -1,3 +1,5 @@
+const { webcrypto } = require('node:crypto');
+const credentials = { 'api-secret': 'test-secret' };
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { runInNewContext } = require('node:vm');
@@ -27,7 +29,8 @@ runInNewContext(outputFiles[0].text, {
   setTimeout,
   setInterval: (...args) => setInterval(...args),
   clearInterval: (...args) => clearInterval(...args),
-  localStorage: { 'api-secret': 'test-secret' },
+  crypto: webcrypto,
+  localStorage: credentials,
 });
 const { SocketIOSource, BoardComponent } = testModule.exports;
 
@@ -66,6 +69,45 @@ test('subscribes only to board deltas and executions on connect and reconnect', 
   assert.equal(socket.handlers.has(snapshotChannel), false);
 });
 
+test('ignores events from the previous account until the new socket authenticates', (t) => {
+  credentials['api-key'] = 'account-a';
+  t.after(() => { delete credentials['api-key']; });
+
+  const socket = makeSocket();
+  const authentications = [];
+  const subscribe = socket.emit;
+  socket.connected = true;
+  socket.disconnect = () => socket;
+  socket.connect = () => { socket.receive('connect'); return socket; };
+  socket.emit = (event, value, done) => {
+    if (event === 'auth') {
+      authentications.push({ key: value.api_key, done });
+    } else {
+      subscribe(event, value);
+    }
+  };
+
+  const source = new SocketIOSource(socket);
+  const events = [];
+  const listener = source.childOrderEvent$.subscribe({ next: (event) => events.push(event.id) });
+  t.after(() => listener.unsubscribe());
+  const receive = (id) => socket.receive('child_order_events', [{ id }]);
+
+  socket.receive('connect');
+  authentications[0].done();
+  receive('a');
+  credentials['api-key'] = 'account-b';
+  receive('late-a');
+  source.refreshCredentials();
+  authentications[0].done();
+  receive('before-b-auth');
+  authentications[1].done();
+  receive('b');
+
+  assert.deepEqual(authentications.map(({ key }) => key), ['account-a', 'account-b']);
+  assert.deepEqual(events, ['a', 'b']);
+});
+
 test('polls REST offline and synchronizes previews only from a fresh connected snapshot', async (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] });
   const socket = makeSocket();
@@ -101,7 +143,10 @@ test('polls REST offline and synchronizes previews only from a fresh connected s
     assert.equal(requests[0].category, 'board');
     assert.match(requests[0].url, /\/v1\/getboard$/);
 
-    const snapshot = { asks: [{ price: 102, size: 1 }], bids: [{ price: 100, size: 2 }] };
+    const snapshot = {
+      asks: [{ price: 102, size: 1 }, { price: 103, size: 2 }],
+      bids: [{ price: 100, size: 2 }],
+    };
     requestResponse.shamefullySendNext({ text: JSON.stringify(snapshot) });
     requestResponse.shamefullySendComplete();
     assert.equal(state.board.asks[0].size, 1);
@@ -131,8 +176,11 @@ test('polls REST offline and synchronizes previews only from a fresh connected s
     responses.shamefullySendNext(refresh);
     socket.receive(executionChannel, [{ side: 'SELL', price: 99 }]);
     socket.receive(boardChannel, { asks: [{ price: 102, size: 4 }], bids: [] });
-    refresh.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    assert.equal(state.board.asks[1].price, 103);
+    refresh.shamefullySendNext({ text: JSON.stringify({ ...snapshot, asks: [snapshot.asks[0]] }) });
     refresh.shamefullySendComplete();
+    assert.equal(state.board.asks.length, 1);
+    assert.equal(state.board.asks[0].price, 102);
     assert.equal(state.board.asks[0].size, 4);
     assert.equal(state.board.bids.length, 0);
     assert.equal(state.hasBoardSnapshot, true);

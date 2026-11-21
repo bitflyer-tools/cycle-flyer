@@ -33,6 +33,8 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
     t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
     Object.assign(localStorage, { 'api-key': key, 'api-secret': secret });
     const reconnect$ = Stream.create();
+    const connected$ = Stream.createWithMemory();
+    connected$.shamefullySendNext(false);
     const parentOrders$ = Stream.create();
     const parentResponse$ = Stream.create();
     const idle = Stream.never();
@@ -42,7 +44,7 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
     });
     const categories = [];
     const subscription = Stream.merge(
-      components.trade_request(actions), components.summary_request(), components.board_request(Stream.of(true)),
+      components.trade_request(actions), components.summary_request(), components.board_request(connected$),
     ).subscribe({ next: (request) => categories.push(request.category) });
     t.after(() => subscription.unsubscribe());
     const takeCategories = () => categories.splice(0).sort();
@@ -54,19 +56,22 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
     if (authenticated) {
       parentOrders$.shamefullySendNext(parentResponse$);
     }
+    connected$.shamefullySendNext(true);
     reconnect$.shamefullySendNext(null);
+    await Promise.resolve();
+    assert.deepEqual(takeCategories(), ['board']);
     t.mock.timers.tick(500);
     assert.deepEqual(takeCategories(), authenticated ? otherAccountCategories : []);
 
     t.mock.timers.tick(9500);
     assert.deepEqual(takeCategories(), authenticated ? otherAccountCategories : []);
-    t.mock.timers.tick(5000);
-    assert.deepEqual(takeCategories(), authenticated ? ['board', 'collateral'] : ['board']);
-
+    t.mock.timers.tick(1000);
     parentResponse$.shamefullySendNext({ text: '[{"parent_order_id":"parent-id"}]' });
     parentResponse$.shamefullySendComplete();
     assert.deepEqual(takeCategories(), authenticated ? ['parent-order', 'parent-orders'] : []);
 
+    t.mock.timers.tick(4000);
+    assert.deepEqual(takeCategories(), authenticated ? ['board', 'collateral'] : ['board']);
     t.mock.timers.tick(15000);
     assert.deepEqual(takeCategories(), (authenticated
       ? ['board', 'collateral', 'status', ...otherAccountCategories, ...otherAccountCategories]
@@ -74,7 +79,7 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
   });
 }
 
-test('loads active orders with their outstanding size and recovers after a failed poll', () => {
+test('keeps active order markers after a failed or malformed poll and applies the next valid poll', () => {
   const responses = Stream.create();
   const idle = Stream.never();
   const actions = components.trade_intent({
@@ -97,6 +102,14 @@ test('loads active orders with their outstanding size and recovers after a faile
 
     responses.shamefullySendNext(Stream.throw(new Error('Order poll failed')));
     assert.equal(state, lastValidState);
+
+    respond([null]);
+    assert.equal(state, lastValidState);
+
+    respond([{ side: 'SELL', price: 51000, outstanding_size: 0.03 }]);
+    assert.deepEqual(Array.from(state.orders, (order) => ({ ...order })), [
+      { side: 'SELL', price: 51000, size: 0.03 },
+    ]);
 
     respond([]);
     assert.equal(state.orders.length, 0);
@@ -145,7 +158,7 @@ for (const { component, category, first, invalid, next, read, expected } of test
       next: (reduce) => { state = reduce(state); },
       error: (error) => { throw error; },
     });
-    const respond = (text) => responses.shamefullySendNext(Stream.of({ text }));
+    const respond = (text) => responses.shamefullySendNext(Object.assign(Stream.of({ text }), { request: { category } }));
 
     try {
       respond(JSON.stringify(first));
@@ -167,10 +180,14 @@ for (const { component, category, first, invalid, next, read, expected } of test
   });
 }
 
+const positionCloseId = Symbol('position close');
 const accountPolls = [
   ['orders', 'onOrdersLoaded$', (price) => [{ price }], (orders) => orders[0].price],
   ['positions', 'onPositionsLoaded$',
-    (price) => [{ side: 'BUY', price, size: 1 }], (position) => position.price],
+    (price) => [{ side: 'BUY', price, size: 1 }], (result) => {
+      assert.equal(result.positionCloseId, positionCloseId);
+      return result.position.price;
+    }],
 ];
 
 for (const [category, action, payload, read] of accountPolls) {
@@ -186,7 +203,7 @@ for (const [category, action, payload, read] of accountPolls) {
     t.after(() => subscription.unsubscribe());
 
     const announce = (value, delay) => {
-      const response = Stream.create();
+      const response = Object.assign(Stream.create(), { request: { category, positionCloseId } });
       responses.shamefullySendNext(response);
       setTimeout(() => {
         response.shamefullySendNext({ text: JSON.stringify(payload(value)) });

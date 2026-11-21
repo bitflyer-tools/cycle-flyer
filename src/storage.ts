@@ -1,6 +1,14 @@
-import {ResponseCollection, StorageRequest, StorageSource} from "@cycle/storage";
+import storageDriver, {ResponseCollection, StorageRequest, StorageSource} from "@cycle/storage";
 import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
+import {apiCredentials} from "./credentials";
+
+export const credentialAwareStorageDriver: typeof storageDriver = (requests$) => {
+    const source = storageDriver(requests$);
+    // The storage driver subscribes first and applies each write synchronously.
+    requests$.addListener({ next: () => { apiCredentials(); } });
+    return source;
+};
 
 export const loadNumber = (
     storage: StorageSource,

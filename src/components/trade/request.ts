@@ -1,16 +1,31 @@
-import {RequestInput} from "@cycle/http";
+import {RequestInput, RequestOptions} from "@cycle/http";
 import Stream from "xstream";
+import sampleCombine from "xstream/extra/sampleCombine";
 import {getOrders, getParentOrders, getPositions, hasApiCredentials} from "../../http";
 import {Actions} from "./intent";
 
-export const request = (actions: Actions): Stream<string | RequestInput | null> => {
+export interface PositionRequest extends RequestOptions {
+    positionCloseId?: symbol;
+}
+
+export const request = (
+    actions: Actions, settledCloseId$: Stream<symbol | undefined> = Stream.of<symbol | undefined>(undefined),
+): Stream<string | RequestInput | null> => {
     const refreshes$ = Stream.merge(Stream.periodic(10000), actions.onMyOrderChanged$)
         .startWith(null)
         .filter(hasApiCredentials)
         .remember();
 
+    const positions$ = Stream.merge(
+        refreshes$.compose(sampleCombine(settledCloseId$)).map(([_, id]) => id),
+        // The initial poll already samples the current close ID.
+        settledCloseId$.drop(1).filter((id) => id !== undefined).filter(hasApiCredentials),
+    ).map((positionCloseId): PositionRequest => ({ ...getPositions() as RequestOptions, positionCloseId }));
+
     return Stream.merge(
-        refreshes$.map(() => Stream.of(getOrders(), getPositions())).flatten(),
+        refreshes$.map(() => getOrders()),
+        actions.onCancelOrders$.filter(hasApiCredentials).map(() => getOrders()),
+        positions$,
         parentOrderRefreshes(refreshes$, actions.onParentOrderListSettled$),
         actions.parentOrderRequests$,
     ) as Stream<string | RequestInput | null>;
