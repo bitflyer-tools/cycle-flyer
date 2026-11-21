@@ -1,9 +1,10 @@
 import {HTTPSource, RequestOptions} from "@cycle/http";
 import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
-import {getParentOrder, hasApiCredentials} from "../../http";
+import {credentialsChanging$, currentCredentialVersion, hasApiCredentials} from "../../credentials";
+import {AccountRequest, isCurrentAccountRequest, unsignedRequests$} from "../../drivers/httpDriver";
+import {getParentOrder} from "../../http";
 import {ParentOrderEvent} from "../../models/orderEvent";
-import {privateResponses} from "./privateResponses";
 
 export interface ActiveParentOrder {
     parent_order_id: string;
@@ -20,7 +21,7 @@ interface PendingDetail {
     requestId: symbol;
 }
 
-type DetailRequest = RequestOptions & { parentOrderDetailRequestId?: symbol };
+type DetailRequest = AccountRequest & { parentOrderDetailRequestId?: symbol };
 
 interface DetailUpdate {
     requests?: RequestOptions[];
@@ -38,8 +39,10 @@ export const parentOrderDetails = (
 
     const load = (id: string, entry: ActiveDetail): RequestOptions[] => {
         if (entry.loaded || pending.has(id) || !hasApiCredentials()) { return []; }
+        const credentialVersion = currentCredentialVersion();
+        if (credentialVersion === null) { return []; }
         const requestId = Symbol();
-        const request: DetailRequest = { ...getParentOrder(id), parentOrderDetailRequestId: requestId };
+        const request: DetailRequest = { ...getParentOrder(id), credentialVersion, parentOrderDetailRequestId: requestId };
         pending.set(id, { entry, requestId });
         return [request];
     };
@@ -68,10 +71,12 @@ export const parentOrderDetails = (
     };
 
     const settle = (request: DetailRequest, detail?: ActiveParentOrder): DetailUpdate => {
-        const id = (request.query as ActiveParentOrder).parent_order_id;
+        const id = new URL(request.url).searchParams.get("parent_order_id");
+        if (!id) { return {}; }
         const previous = pending.get(id);
         if (!previous || previous.requestId !== request.parentOrderDetailRequestId) { return {}; }
         pending.delete(id);
+        if (!isCurrentAccountRequest(request)) { return {}; }
         const entry = active.get(id);
         if (!entry) { return {}; }
         if (entry !== previous.entry) { return { requests: load(id, entry) }; }
@@ -80,7 +85,7 @@ export const parentOrderDetails = (
         return { detail };
     };
 
-    const responses$ = privateResponses(http, "parent-order")
+    const responses$ = http.select("parent-order")
         .map((response$) => response$
             .map((response) => decodeDetail(response.text))
             .replaceError(() => Stream.of<ActiveParentOrder | undefined>(undefined))
@@ -91,6 +96,15 @@ export const parentOrderDetails = (
         activeOrders$.map(reconcile),
         events$.map(invalidate),
         reconnect$.map(() => { active.clear(); return {}; }),
+        credentialsChanging$.map(() => {
+            active.clear();
+            pending.clear();
+            return {};
+        }),
+        unsignedRequests$
+            .filter((request): request is DetailRequest =>
+                typeof request === "object" && (request as DetailRequest).parentOrderDetailRequestId !== undefined)
+            .map((request) => settle(request)),
         responses$,
     );
     return {

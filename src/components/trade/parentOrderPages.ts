@@ -2,18 +2,20 @@ import {HTTPSource, RequestOptions, Response} from "@cycle/http";
 import Stream from "xstream";
 import concat from "xstream/extra/concat";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
-import {getParentOrders, hasApiCredentials, parentOrdersPageSize} from "../../http";
+import {credentialsChanging$} from "../../credentials";
+import {AccountRequest, isCurrentAccountRequest, unsignedRequests$} from "../../drivers/httpDriver";
+import {getParentOrders, parentOrdersPageSize} from "../../http";
 import {ActiveParentOrder} from "./parentOrderDetails";
-import {privateResponses} from "./privateResponses";
 
 const pageTimeoutMs = 15000;
 
 interface ParentOrderList {
     orders: ActiveParentOrder[];
     sequence: number;
+    credentialVersion: number;
 }
 
-interface PageRequest extends RequestOptions {
+interface PageRequest extends AccountRequest {
     parentOrderList?: ParentOrderList;
 }
 
@@ -25,29 +27,38 @@ interface PageResult {
 
 export const parentOrderPages = (http: HTTPSource, nextSequence: () => number) => {
     let latestSequence = 0;
-    const firstPages$ = privateResponses(http, "parent-orders")
+    const firstPages$ = http.select("parent-orders")
+        .filter((response$) => isCurrentAccountRequest(response$.request))
         .map((response$) => {
             latestSequence = nextSequence();
-            return readPage(response$, { orders: [], sequence: latestSequence });
+            return readPage(response$, { orders: [], sequence: latestSequence,
+                credentialVersion: response$.request.credentialVersion! });
         })
         .flatten();
-    const nextPages$ = privateResponses(http, "parent-orders-page")
+    const nextPages$ = http.select("parent-orders-page")
         .map((response$) => {
             const parentOrderList = (response$.request as PageRequest | undefined)?.parentOrderList;
-            return parentOrderList?.sequence === latestSequence
+            return isCurrentAccountRequest(response$.request) && parentOrderList?.sequence === latestSequence
                 ? readPage(response$, parentOrderList)
                 : Stream.empty();
         })
         .compose(flattenConcurrently);
 
     const pages$ = Stream.merge(firstPages$, nextPages$)
-        .filter(({list}) => list.sequence === latestSequence);
+        .filter(({list}) => list.sequence === latestSequence && isCurrentAccountRequest(list));
+    const unsignedPages$ = unsignedRequests$
+        .filter((request) => typeof request !== "string" && isCurrentAccountRequest(request)
+            && (request.category === "parent-orders" || (request.category === "parent-orders-page"
+                && (request as PageRequest).parentOrderList?.sequence === latestSequence)));
     return {
         loaded$: pages$.filter(({before, failed}) => before === undefined && !failed).map(({list}) => list),
-        settled$: pages$.filter(({before}) => before === undefined).mapTo(null),
+        settled$: Stream.merge(pages$.filter(({before}) => before === undefined), unsignedPages$,
+            credentialsChanging$).mapTo(null),
         requests$: pages$
             .filter(({before}) => before !== undefined)
-            .map(({before, list}): PageRequest => ({ ...getParentOrders(before), parentOrderList: list })),
+            .map(({before, list}): PageRequest => ({
+                ...getParentOrders(before), credentialVersion: list.credentialVersion, parentOrderList: list,
+            })),
     };
 };
 
@@ -67,12 +78,9 @@ const parsePage = (response$: Stream<Response> & { request?: RequestOptions }, p
             throw new Error("Invalid active parent order page");
         }
         const before = page.length < parentOrdersPageSize ? undefined : Math.min(...page.map(({id}) => id));
-        const cursor = (response$.request?.query as { before?: number } | undefined)?.before;
-        if (before !== undefined && (!Number.isSafeInteger(before) || (cursor !== undefined && before >= cursor))) {
+        const cursor = response$.request?.url ? new URL(response$.request.url).searchParams.get("before") : null;
+        if (before !== undefined && (!Number.isSafeInteger(before) || (cursor !== null && before >= Number(cursor)))) {
             throw new Error("Invalid active parent order cursor");
-        }
-        if (before !== undefined && !hasApiCredentials()) {
-            return { list: previous, failed: true };
         }
         return { before, list: { ...previous, orders: previous.orders.concat(page) } };
     });

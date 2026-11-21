@@ -1,6 +1,5 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
-import {apiCredentials} from "../../credentials";
 import {Execution, isExecutionPrice} from "../../models/execution";
 import {Order} from "../../models/order";
 import {createOrderHistory} from "../../models/orderHistory";
@@ -20,36 +19,8 @@ const defaultState: State = {
     lastExecutionPrice: 0,
 };
 
-export const resetAccountState = (state: State, version: symbol): State => {
-    if (state.credentialVersion === version) { return state; }
-
-    const account = { histories: [], orders: [], parentStopOrders: {}, position: new Position([]) };
-    const { orderComponentState, summaryComponentState } = state;
-    return {
-        ...state,
-        ...account,
-        credentialVersion: version,
-        canceledParentOrderIds: undefined,
-        positionClose: undefined,
-        orderComponentState: orderComponentState && {
-            ...orderComponentState,
-            ...account,
-            isOrdering: false,
-            positionClosePending: false,
-            twap: { ...orderComponentState.twap, remaining: 0, scheduleId: undefined },
-        },
-        summaryComponentState: summaryComponentState && {
-            ...summaryComponentState,
-            histories: account.histories,
-            position: account.position,
-            collateral: 0,
-        },
-    };
-};
-
 export const model = (actions: Actions): Stream<Reducer<State>> => {
-    const { version } = apiCredentials();
-    const defaultReducer$ = Stream.of((state: State) => resetAccountState(startTradeSession(state), version));
+    const defaultReducer$ = Stream.of(startTradeSession);
 
     const currentPriceReducer$ = actions.onExecutionBatch$
         .filter((executions) => executions.length > 0)
@@ -67,12 +38,12 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         .map((orders: Order[]) => (state: State) => ({ ...state, orders }));
 
     const positionReducer$ = actions.onPositionsLoaded$
-        .map(({ position, positionCloseId }) => (state: State) => {
+        .map(({ position, positionCloseId, positionCredentialVersion }) => (state: State) => {
             const close = state.positionClose;
             const reconciled = close?.settled && close.id === positionCloseId
                 && (close.rejected || position.size === 0 || (Math.sign(position.size) === Math.sign(close.size)
                     && Math.abs(position.size) < Math.abs(close.size)));
-            return { ...state, position, positionClose: reconciled ? undefined : close };
+            return { ...state, position, positionCredentialVersion, positionClose: reconciled ? undefined : close };
         });
 
     const cancelParentOrderReducer$ = actions.onCancelParentOrder$

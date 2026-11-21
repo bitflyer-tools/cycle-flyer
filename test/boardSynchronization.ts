@@ -25,7 +25,7 @@ test("installs snapshots that consistently arrive after the next poll", (t) => {
     t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
     const {request, update, asks} = setup();
     let poll = 0;
-    const subscription = pollBoard().subscribe({
+    const subscription = pollBoard(Stream.never()).subscribe({
         next: () => {
             const respond = request();
             const size = ++poll;

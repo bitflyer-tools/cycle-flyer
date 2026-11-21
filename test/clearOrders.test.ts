@@ -1,6 +1,6 @@
 import {RequestOptions} from "@cycle/http";
 import {deepStrictEqual, strictEqual} from "node:assert/strict";
-import {test} from "node:test";
+import {before, test} from "node:test";
 import Stream from "xstream";
 import {State as TradeState} from "../src/components/trade";
 import {intent as tradeIntent} from "../src/components/trade/intent";
@@ -10,9 +10,23 @@ import {State} from "../src/components/trade/order";
 import {intent} from "../src/components/trade/order/intent";
 import {model} from "../src/components/trade/order/model";
 import {orderRequests} from "../src/components/trade/order/request";
-import {apiCredentials} from "../src/credentials";
+import {currentCredentialVersion, initializeCredentials, saveCredentials} from "../src/credentials";
 import {flattenStopOrders, retainActive} from "../src/models/parentStopOrders";
 import {StopOrder} from "../src/models/stopOrder";
+
+before(async () => {
+    const storage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: { getItem: () => "test-credential", removeItem() {} },
+    });
+    try {
+        await initializeCredentials();
+    } finally {
+        if (storage) { Object.defineProperty(globalThis, "localStorage", storage); }
+        else { Reflect.deleteProperty(globalThis, "localStorage"); }
+    }
+});
 
 test("Clear Orders cancels a standalone stop by parent order ID", () => {
     const {requests} = clearOrders(["JCO-stop"]);
@@ -36,12 +50,12 @@ test("Clear Orders cancels every active parent order across two pages", () => {
         parent_order_state: "ACTIVE",
         parent_order_type: "STOP",
     }));
-    const firstPage = () => lists.shamefullySendNext(Stream.of<unknown>({ text: JSON.stringify(orders.slice(0, 100)) }));
+    const firstPage = () => lists.shamefullySendNext(listResponse(orders.slice(0, 100)));
 
     firstPage();
     deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-old"]);
-    deepStrictEqual(pageRequests[0].query, {
-        product_code: "FX_BTC_JPY", parent_order_state: "ACTIVE", count: 100, before: 2,
+    deepStrictEqual(Object.fromEntries(new URL(pageRequests[0].url).searchParams), {
+        product_code: "FX_BTC_JPY", parent_order_state: "ACTIVE", count: "100", before: "2",
     });
     pages.shamefullySendNext(Object.assign(Stream.throw(new Error("Page failed")), { request: pageRequests[0] }));
     deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-old"]);
@@ -59,17 +73,17 @@ test("Clear Orders cancels every active parent order across two pages", () => {
     const parentRequests = requests.filter(({url}) => new URL(url).pathname === "/v1/me/cancelparentorder");
     deepStrictEqual(parentRequests.map(({send}) => JSON.parse(send).parent_order_id),
         orders.map(({parent_order_id}) => parent_order_id));
-    parentRequests.forEach((request) => parentResponses.shamefullySendNext(Stream.of<unknown>({ request })));
+    parentRequests.forEach((request) => parentResponses.shamefullySendNext(Stream.of<unknown>({ request: { ...request, credentialVersion: currentCredentialVersion()! } })));
     deepStrictEqual(Object.keys(state().parentStopOrders), []);
 });
 
 test("A standalone stop stays visible until its parent cancellation succeeds", () => {
     const {childResponses, parentResponses, requests, state} = clearOrders(["JCO-stop"]);
 
-    childResponses.shamefullySendNext(Stream.of<unknown>({}));
+    childResponses.shamefullySendNext(Stream.of<unknown>({ request: { credentialVersion: currentCredentialVersion()! } }));
     strictEqual(flattenStopOrders(state().parentStopOrders).length, 1);
 
-    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: requests[1] }));
+    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: { ...requests[1], credentialVersion: currentCredentialVersion()! } }));
     deepStrictEqual(flattenStopOrders(state().parentStopOrders), []);
     deepStrictEqual(Object.keys(state().parentStopOrders), []);
 });
@@ -82,7 +96,7 @@ test("Concurrent parent cancellations leave failed orders visible", () => {
     parentResponses.shamefullySendNext(success$);
     parentResponses.shamefullySendNext(failure$);
     failure$.shamefullySendError(new Error("Cancellation failed"));
-    success$.shamefullySendNext({ request: requests[1] });
+    success$.shamefullySendNext({ request: { ...requests[1], credentialVersion: currentCredentialVersion()! } });
 
     deepStrictEqual(flattenStopOrders(state().parentStopOrders).map(({price}) => price), [200]);
     deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-failure", "JCO-pending-detail"]);
@@ -91,7 +105,7 @@ test("Concurrent parent cancellations leave failed orders visible", () => {
 
 test("A late parent detail response cannot restore a canceled stop", () => {
     const {sendParentDetail, parentResponses, requests, state} = clearOrders(["JCO-canceled"]);
-    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: requests[1] }));
+    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: { ...requests[1], credentialVersion: currentCredentialVersion()! } }));
     const canceledState = state();
 
     sendParentDetail("JCO-canceled", 100);
@@ -101,11 +115,11 @@ test("A late parent detail response cannot restore a canceled stop", () => {
 
 test("A late active list and its details cannot restore a canceled stop", () => {
     const {sendParentDetail, lists, parentResponses, requests, state} = clearOrders(["JCO-canceled", "JCO-active"]);
-    const pendingList$ = Stream.create<unknown>();
+    const pendingList$ = Object.assign(Stream.create<unknown>(), { request: { credentialVersion: currentCredentialVersion()! } });
     lists.shamefullySendNext(pendingList$);
-    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: requests[1] }));
+    parentResponses.shamefullySendNext(Stream.of<unknown>({ request: { ...requests[1], credentialVersion: currentCredentialVersion()! } }));
 
-    pendingList$.shamefullySendNext({ text: JSON.stringify([
+    pendingList$.shamefullySendNext({ request: { credentialVersion: currentCredentialVersion()! }, text: JSON.stringify([
         { parent_order_id: "JCO-canceled" },
         { parent_order_id: "JCO-active" },
         { parent_order_id: "JCO-new" },
@@ -129,7 +143,7 @@ test("Clear Orders discards an in-flight child-order poll and requests a fresh l
         deepStrictEqual(state().orders.map(({price}) => price), [100]);
         strictEqual(polls.length, 1);
 
-        childResponses.shamefullySendNext(Stream.of<unknown>({}));
+        childResponses.shamefullySendNext(Stream.of<unknown>({ request: { credentialVersion: currentCredentialVersion()! } }));
         deepStrictEqual(state().orders, []);
         strictEqual(polls.length, 2);
 
@@ -150,32 +164,30 @@ test("Clear Orders invalidates every pending child-order poll and accepts the ne
     orderLists.shamefullySendNext(Stream.of<unknown>(childOrderList(100)));
     stalePolls.forEach((poll$) => orderLists.shamefullySendNext(poll$));
 
-    childResponses.shamefullySendNext(Stream.of<unknown>({}));
-    orderLists.shamefullySendNext(Stream.of<unknown>({ text: "{}" }));
+    childResponses.shamefullySendNext(Stream.of<unknown>({ request: { credentialVersion: currentCredentialVersion()! } }));
+    orderLists.shamefullySendNext(Stream.of<unknown>({ ...childOrderList(0), text: "{}" }));
     stalePolls.forEach((poll$) => poll$.shamefullySendNext(childOrderList(100)));
     deepStrictEqual(state().orders, []);
 
     const freshPoll$ = Stream.create<unknown>();
     orderLists.shamefullySendNext(freshPoll$);
-    orderLists.shamefullySendNext(Stream.of<unknown>({ text: "invalid JSON" }));
+    orderLists.shamefullySendNext(Stream.of<unknown>({ ...childOrderList(0), text: "invalid JSON" }));
     freshPoll$.shamefullySendNext(childOrderList(200));
     deepStrictEqual(state().orders.map(({price}) => price), [200]);
 });
 
-test("A child-order cancellation from previous credentials leaves the current poll active", () => {
+test("A child-order cancellation from previous credentials leaves the current poll active", async (t) => {
     const {childResponses, orderLists, state} = clearOrders([]);
     const cancellation$ = Stream.create<unknown>();
-    childResponses.shamefullySendNext(Object.assign(cancellation$, {
-        request: { credentialVersion: apiCredentials().version },
-    }));
+    const previousVersion = currentCredentialVersion()!;
+    childResponses.shamefullySendNext(cancellation$);
 
-    localStorage["api-key"] = "updated-key";
+    await saveCredentials({ key: "updated-key", secret: "test-secret" });
+    t.after(() => saveCredentials({ key: "test-credential", secret: "test-credential" }));
     orderLists.shamefullySendNext(Stream.of<unknown>(childOrderList(100)));
     const currentPoll$ = Stream.create<unknown>();
-    orderLists.shamefullySendNext(Object.assign(currentPoll$, {
-        request: { credentialVersion: apiCredentials().version },
-    }));
-    cancellation$.shamefullySendNext({});
+    orderLists.shamefullySendNext(currentPoll$);
+    cancellation$.shamefullySendNext({ request: { credentialVersion: previousVersion } });
 
     deepStrictEqual(state().orders.map(({price}) => price), [100]);
     currentPoll$.shamefullySendNext(childOrderList(200));
@@ -203,8 +215,16 @@ test("A failed child-order cancellation leaves the in-flight poll active", () =>
     }
 });
 
+function listResponse(orders: object[]) {
+    const request = { credentialVersion: currentCredentialVersion()! };
+    return Object.assign(Stream.of({ request, text: JSON.stringify(orders) }), { request });
+}
+
 function childOrderList(price: number) {
-    return { text: JSON.stringify([{ price, side: "BUY", outstanding_size: 1 }]) };
+    return {
+        request: { credentialVersion: currentCredentialVersion()! },
+        text: JSON.stringify([{ price, side: "BUY", outstanding_size: 1 }]),
+    };
 }
 
 function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = true) {
@@ -243,10 +263,6 @@ function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = tr
         },
         storage: { local: { getItem: () => Stream.never() } },
     } as unknown as Parameters<typeof intent>[0];
-    Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: { "api-key": "test-key", "api-secret": "test-secret" },
-    });
     const state$ = Stream.createWithMemory<State>();
     const actions = intent(sources, state$);
     let currentState: State & TradeState;
@@ -280,11 +296,11 @@ function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = tr
                 pageRequests.push(request);
                 return;
             }
-            const {parent_order_id} = request.query as { parent_order_id: string };
-            detailRequests.set(parent_order_id, request);
+            const id = new URL(request.url).searchParams.get("parent_order_id")!;
+            detailRequests.set(id, request);
         },
     });
-    lists.shamefullySendNext(Stream.of<unknown>({ text: JSON.stringify(ids.map((id) => ({ parent_order_id: id }))) }));
+    lists.shamefullySendNext(listResponse(ids.map((id) => ({ parent_order_id: id }))));
 
     const sendParentDetail = (id: string, price: number) => {
         const request = detailRequests.get(id);
@@ -293,7 +309,7 @@ function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = tr
             parameters: [{ condition_type: "STOP", trigger_price: price }],
             parent_order_id: id,
         }) });
-        details.shamefullySendNext(Object.assign(response$, { request }));
+        details.shamefullySendNext(Object.assign(response$, { request: { ...request, credentialVersion: currentCredentialVersion()! } }));
     };
 
     const requests: Array<{ url: string; method: string; send: string }> = [];

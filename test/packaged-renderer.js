@@ -19,7 +19,7 @@ const checkRenderer = async () => {
 
   // The inspector can accept requests before Electron loads the app entry point.
   const mainModule = await waitFor(() => process.mainModule, 'the app entry point');
-  const { app, BrowserWindow } = mainModule.require('electron');
+  const { app, BrowserWindow, safeStorage } = mainModule.require('electron');
   await app.whenReady();
 
   assert.equal(app.isPackaged, true);
@@ -56,12 +56,33 @@ const checkRenderer = async () => {
         inputType: 'insertFromPaste',
       }));
     }
-    document.querySelector('.menu-trade').click();
   })()`);
-  await waitFor(() => visible('.content .trade'), 'Trade after returning from Settings');
+  const credentialFile = process.getBuiltinModule('node:path').join(app.getPath('userData'), 'bitflyer-credentials.enc');
+  const { existsSync, readFileSync } = process.getBuiltinModule('node:fs');
+  assert.equal(existsSync(credentialFile), false, 'Pasting leaves the credentials unsaved');
+  await contents.executeJavaScript("document.querySelector('#credentials-form').requestSubmit()");
+
+  const secureStorage = safeStorage.isEncryptionAvailable() &&
+    (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text');
+  const message = secureStorage ? 'Credentials saved.' : 'Could not update credentials.';
+  await waitFor(() => contents.executeJavaScript(
+    `document.querySelector('#credentials-form [role=status]').textContent.startsWith(${JSON.stringify(message)})`
+  ), message);
+
+  assert.equal(existsSync(credentialFile), secureStorage);
+  if (secureStorage) {
+    assert.deepEqual(JSON.parse(safeStorage.decryptString(readFileSync(credentialFile))), {
+      key: 'pasted-test-api-key', secret: 'pasted-test-api-secret',
+    });
+  }
+  assert.deepEqual(await contents.executeJavaScript(
+    "['api-key', 'api-secret'].map((key) => document.querySelector('#' + key + '-input').value)"
+  ), ['', '']);
   assert.deepEqual(await contents.executeJavaScript(
     "['api-key', 'api-secret'].map((key) => localStorage.getItem(key))"
-  ), ['pasted-test-api-key', 'pasted-test-api-secret']);
+  ), [null, null]);
+  await click('.menu-trade');
+  await waitFor(() => visible('.content .trade'), 'Trade after returning from Settings');
 };
 
 const main = async (executable) => {

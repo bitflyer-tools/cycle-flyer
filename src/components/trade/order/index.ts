@@ -17,14 +17,15 @@ import {twapRequest} from "./twapRequest";
 import {view} from "./view";
 
 export interface State {
-    credentialVersion?: symbol;
     currentPrice: number;
     histories: OrderHistory[];
     ifdocoOrder: IFDOCOrder;
     isOrdering: boolean;
     orders: Order[];
+    orderSigningError?: string;
     parentStopOrders: ParentStopOrders;
     position: Position;
+    positionCredentialVersion?: number;
     positionClosePending?: boolean;
     price: number;
     size: number;
