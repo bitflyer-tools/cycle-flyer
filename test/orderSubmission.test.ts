@@ -841,6 +841,7 @@ test("allows retry after a definite rejection and a fresh unchanged position", a
 
     order.respondTo(order.requests[0]).reject(400);
     equal(order.state.isOrdering, false);
+    deepEqual(order.histories.map(({ status }) => status), ["failed"]);
     equal(order.positionRequests.length, 2);
     order.respondTo(initialPoll).succeed(position);
     order.clearPosition();
@@ -859,7 +860,7 @@ test("allows retry after a definite rejection and a fresh unchanged position", a
     deepEqual({ side, size }, { side: "SELL", size: 0.08 });
 });
 
-for (const failure of ["network", "server"] as const) {
+for (const failure of ["network", 408, 503] as const) {
     test(`waits for position reconciliation after an ambiguous ${failure} failure`, async (t) => {
         const order = setup(t);
         await saveCredentials({ key: "test-key", secret: "test-secret" });
@@ -871,8 +872,18 @@ for (const failure of ["network", "server"] as const) {
         order.navigate("/setting");
         const response = order.respondTo(order.requests[0]);
         if (failure === "network") response.disconnect();
-        else response.reject(503);
+        else response.reject(failure);
         order.navigate("/");
+        deepEqual(order.histories.map(({ status, timedOut }) => ({ status, timedOut })), [
+            { status: "unconfirmed", timedOut: undefined },
+        ]);
+        equal(order.tradeState.positionClose?.rejected, false);
+        summaryView(Stream.of<SummaryState>({
+            ...order.tradeState,
+            priceAlert: order.tradeState.summaryComponentState!.priceAlert,
+            collateral: 0,
+            marketState: { health: "", state: "" },
+        })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /"text":"Unconfirmed"/) });
         order.clearPosition();
         equal(order.requests.length, 1);
 

@@ -78,7 +78,9 @@ const createOutcome = (
             const timedOut = isWriteDeadlineError(error);
             const statusCode = error?.statusCode;
             const hasHTTPError = !!error?.response || (statusCode >= 400 && statusCode < 600);
-            const status: OrderStatus = !timedOut && hasHTTPError ? "failed" : "unconfirmed";
+            const isClosePosition = (stream$.request as { closePositionSize?: number }).closePositionSize !== undefined;
+            const rejected = isClosePosition ? isOrderRejection(error?.response) : hasHTTPError;
+            const status: OrderStatus = !timedOut && rejected ? "failed" : "unconfirmed";
             return Stream.of({ status, timedOut });
         })
         .filter(() => isCurrentAccountRequest(stream$.request))
