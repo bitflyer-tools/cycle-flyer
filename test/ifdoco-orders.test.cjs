@@ -138,7 +138,7 @@ test("IFDOCO rejects invalid ratios and restores the preview and both submission
     assert.deepEqual(
         buyPreview.children.filter(({ sel }) => sel === "span.profit-line" || sel === "span.loss-line")
             .map(({ text }) => text),
-        ["5000", "5000"],
+        ["10005000", "9995000"],
     );
     assert.deepEqual(form.disabled(), [false, false]);
     form.clickBoth();
@@ -153,6 +153,33 @@ test("IFDOCO rejects invalid ratios and restores the preview and both submission
     }), [
         [["MARKET", "BUY", undefined], ["LIMIT", "SELL", 10005000], ["STOP", "SELL", 9995000]],
         [["MARKET", "SELL", undefined], ["LIMIT", "BUY", 9995000], ["STOP", "BUY", 10005000]],
+    ]);
+});
+
+test("IFDOCO previews submitted exit prices and scales only P&L with size", (t) => {
+    const form = setup(t, "10000", "0.01", 5000000);
+    const previewValues = () => form.view().children.find(({ sel }) => sel === "div.line")
+        .children[0].children.map((side) => {
+            const spans = side.children[1].children;
+            return [".profit", ".loss", ".profit-line", ".loss-line"]
+                .map((selector) => spans.find(({ sel }) => sel === "span" + selector).text);
+        });
+
+    form.clickBoth();
+    const prices = form.requests.map(({ send }) => {
+        const [, limit, stop] = JSON.parse(send).parameters;
+        return [String(limit.price), String(stop.trigger_price)];
+    });
+    assert.deepEqual(prices, [["5005000", "4995000"], ["4995000", "5005000"]]);
+    assert.deepEqual(previewValues(), [
+        ["+50", "-50", ...prices[0]],
+        ["-50", "+50", ...prices[1]],
+    ]);
+
+    form.enterSize("0.02");
+    assert.deepEqual(previewValues(), [
+        ["+100", "-100", ...prices[0]],
+        ["-100", "+100", ...prices[1]],
     ]);
 });
 

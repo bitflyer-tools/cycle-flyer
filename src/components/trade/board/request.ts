@@ -1,8 +1,6 @@
-import {RequestOptions} from "@cycle/http";
+import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
 import {getBoard} from "../../../http";
 
-export const request = (): Stream<string | RequestOptions | null> => {
-    const board = Stream.periodic(15000).mapTo(getBoard()).startWith(getBoard());
-    return Stream.merge(board) as Stream<string | RequestOptions | null>;
-};
+export const request = (reconnect$: Stream<null>): Stream<RequestInput> =>
+    Stream.merge(Stream.periodic(15000), reconnect$).map(() => getBoard()).startWith(getBoard());
