@@ -13,7 +13,7 @@ import {view} from "./view";
 export interface State {
     collateral: number;
     currentPrice: number | null;
-    histories: OrderHistory[];
+    histories: readonly OrderHistory[];
     marketState: any;
     position: Position;
     priceAlert: PriceAlert | null;

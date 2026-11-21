@@ -4,8 +4,10 @@ import dropRepeats from "xstream/extra/dropRepeats";
 import {State} from "./index";
 import {priceAlertView} from "./priceAlertView";
 
-export const view = (state$: Stream<State>) =>
-    state$.compose(dropRepeats(sameViewInputs)).map((state) =>
+export const view = (state$: Stream<State>) => {
+    const historyList = createHistoryListView();
+
+    return state$.compose(dropRepeats(sameViewInputs)).map((state) =>
         div(".summary", [
             div(".current-price", [
                 span(".label", "Current price"),
@@ -48,19 +50,32 @@ export const view = (state$: Stream<State>) =>
                 span(healthClass(state.marketState.state), state.marketState.state),
             ]),
             hr(),
-            ul(".histories", state.histories.map((history) =>
-                    li(".history", [
-                        span(
-                            "." + history.status,
-                            historyStatus(history.status),
-                        ),
-                        span(".name", history.name),
-                        span(".description", history.description),
-                        span(".created-at", history.createdAt.toLocaleTimeString()),
-                    ]),
-                ),
-            ),
+            historyList(state.histories),
         ]));
+};
+
+const createHistoryListView = () => {
+    let previousHistories: State["histories"] = [];
+    let list = ul(".histories", []);
+
+    return (histories: State["histories"]) => {
+        if (histories === previousHistories) { return list; }
+
+        previousHistories = histories;
+        list = ul(".histories", histories.map((history) =>
+            li(".history", [
+                span(
+                    "." + history.status,
+                    historyStatus(history.status),
+                ),
+                span(".name", history.name),
+                span(".description", history.description),
+                span(".created-at", history.createdAt.toLocaleTimeString()),
+            ]),
+        ));
+        return list;
+    };
+};
 
 const historyStatus = (status: string): string => {
     if (status === "unconfirmed") return "Unconfirmed (timed out)";

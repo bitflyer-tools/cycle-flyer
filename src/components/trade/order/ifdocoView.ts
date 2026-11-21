@@ -25,7 +25,10 @@ export const ifdocoSection = (state: State): VNode => {
                 "aria-describedby": "ratio-error",
             }}),
         ]),
-        div(".ranged-ifdoco-order-buttons.order-buttons", sideButtons(ifdocoButtonDisabled(state))),
+        div(".ranged-ifdoco-order-buttons.order-buttons", sideButtons(
+            ifdocoButtonDisabled(state, "SELL"),
+            ifdocoButtonDisabled(state, "BUY"),
+        )),
     ]);
 };
 
@@ -65,5 +68,5 @@ const sellLines = (state: State, size: number): Lines => ({
     profitLine: state.ifdocoOrder.sellProfitLine(state.currentPrice),
 });
 
-const ifdocoButtonDisabled = (state: State): boolean =>
-    state.isOrdering || !isValidIFDOCOOrder(state);
+const ifdocoButtonDisabled = (state: State, side: "BUY" | "SELL"): boolean =>
+    state.isOrdering || !isValidIFDOCOOrder(state, side);

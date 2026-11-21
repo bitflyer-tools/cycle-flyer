@@ -202,3 +202,42 @@ test("IFDOCO sends the entered size on all three legs for each side", (t) => {
         [["MARKET", "SELL", undefined], ["LIMIT", "BUY", 9995000], ["STOP", "BUY", 10005000]],
     ]);
 });
+
+test("IFDOCO rejects negative and zero exit prices", (t) => {
+    const form = setup(t, "20000002", "0.01");
+    form.enterRatio("50");
+
+    for (const width of ["20000002", "20000000"]) {
+        form.enterWidth(width);
+        assert.deepEqual(form.disabled(), [true, true], width);
+        form.clickBoth();
+        assert.deepEqual(form.requests, [], width);
+    }
+});
+
+test("IFDOCO rejects exit prices that overflow", (t) => {
+    const form = setup(t, "1e306", "0.01", Number.MAX_VALUE);
+    form.enterRatio("50");
+
+    assert.deepEqual(form.disabled(), [true, true]);
+    form.clickBoth();
+    assert.deepEqual(form.requests, []);
+});
+
+for (const [ratio, side, disabled] of [
+    ["25", "SELL", [false, true]],
+    ["75", "BUY", [true, false]],
+]) {
+    test(`IFDOCO submits only the ${side} side when the opposite side has a nonpositive exit`, (t) => {
+        const form = setup(t, "16000000", "0.01");
+        form.enterRatio(ratio);
+
+        assert.deepEqual(form.disabled(), disabled);
+        form.clickBoth();
+        assert.equal(form.requests.length, 1);
+        const [entry, limit, stop] = JSON.parse(form.requests[0].send).parameters;
+        assert.equal(entry.side, side);
+        assert.equal(limit.price, side === "BUY" ? 22000000 : 6000000);
+        assert.equal(stop.trigger_price, side === "BUY" ? 6000000 : 22000000);
+    });
+}

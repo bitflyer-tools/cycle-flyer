@@ -6,19 +6,16 @@ import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
-import {credentialChanges$} from "../credentials";
+import {credentialsChanging$} from "../credentials";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
+import {prependOrderHistories} from "../models/orderHistory";
+import {Position} from "../models/position";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
-import {resetAccountState} from "./trade/model";
 import {createCancellationOutcome, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
-import {closePositionOutcomes, OrderRequestBatch, submissions} from "./trade/order/request";
-import {privateResponses} from "./trade/privateResponses";
-
-interface RootState {
-    trade?: TradeState;
-}
+import {closePositionOutcomes, OrderRequestBatch, submissions, unsignedSubmissions$} from "./trade/order/request";
+import {stopTwap, twapSigningFailed$} from "./trade/order/twapRequest";
 
 export interface Sources {
     DOM: DOMSource;
@@ -38,6 +35,10 @@ export interface Sinks {
     sound?: Stream<Sound>;
 }
 
+interface RootState {
+    trade?: TradeState;
+}
+
 const tradeScope = "trade";
 
 export const Root = (sources: Sources): Sinks => {
@@ -54,10 +55,9 @@ export const Root = (sources: Sources): Sinks => {
                 orderRequests: sources.HTTP,
                 router: sources.router.path(route.path),
             }, isOrdering$);
-            return route.value === trade ? sinks : {
-                ...sinks,
-                state: sinks.state.startWith(clearTwapProgress),
-            };
+            if (route.value === trade) { return sinks; }
+            stopTwap();
+            return { ...sinks, state: sinks.state.startWith(resetTwap()) };
         })
         .remember();
 
@@ -81,21 +81,29 @@ export const Root = (sources: Sources): Sinks => {
             return { ...state, positionClose: { ...close, settled: true, rejected } };
         });
     const isOrdering$ = pending$.map((pending) => pending !== null);
+    const orderSigningError$ = Stream.merge(
+        pending$.filter((pending) => pending !== null).mapTo(undefined),
+        unsignedSubmissions$.map(({ category }) => (category === "cancel-orders" || category === "cancel-parent-order")
+            ? "Could not sign the request to clear orders. Check your bitFlyer credentials in Settings."
+            : "Could not sign the order. Check your bitFlyer credentials in Settings."),
+    );
+    const orderSigningReducer$ = orderSigningError$.map<Reducer<TradeState>>((orderSigningError) =>
+        (state) => state && { ...state, orderSigningError });
     const orderOutcome$ = Stream.merge(
         submittedOrderOutcomes(sources.HTTP),
         Stream.merge(
-            privateResponses(sources.HTTP, "cancel-orders"),
-            privateResponses(sources.HTTP, "cancel-parent-order"),
+            sources.HTTP.select("cancel-orders"),
+            sources.HTTP.select("cancel-parent-order"),
         ).map(createCancellationOutcome).compose(flattenConcurrently),
     );
     const orderHistoryReducer$ = Stream.merge(
-        orderOutcome$.map(({ histories }) => histories.slice().reverse()),
+        orderOutcome$.map(({ histories }) => histories),
         // Keep timeout notices when the trade screen is inactive.
         twapOutcomes(sources.HTTP)
             .filter(({ status }) => status === "unconfirmed")
-            .map(({ histories }) => histories.slice().reverse()),
+            .map(({ histories }) => histories),
     ).map<Reducer<TradeState>>((histories) => (state) =>
-        state && { ...state, histories: histories.concat(state.histories) });
+        state && { ...state, histories: prependOrderHistories(state.histories, histories) });
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>
@@ -126,26 +134,47 @@ export const Root = (sources: Sources): Sinks => {
         ),
         state: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
+            credentialsChanging$.mapTo(resetAccount),
+            twapSigningFailed$.mapTo(resetTwap("TWAP stopped because an order could not be signed.")),
             sources.state.isolateSink(positionCloseReducer$, tradeScope),
             sources.state.isolateSink(closeOutcomeReducer$, tradeScope),
             sources.state.isolateSink(orderHistoryReducer$, tradeScope),
-            credentialChanges$.map((version): Reducer<RootState> => (state) =>
-                state?.trade ? { ...state, trade: resetAccountState(state.trade, version) } : state),
+            sources.state.isolateSink(orderSigningReducer$, tradeScope),
         ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
     };
 };
 
-const clearTwapProgress: Reducer<RootState> = (state) => {
-    const trade = state?.trade;
-    const order = trade?.orderComponentState;
-    if (!trade || !order?.twap.remaining) return state;
-
+const resetAccount: Reducer<RootState> = (state) => {
+    if (!state?.trade) { return state; }
+    stopTwap();
+    const reset = resetTwap("TWAP stopped because credentials changed.")(state) ?? state;
+    const trade = reset.trade ?? state.trade;
     return {
-        ...state,
+        ...reset,
         trade: {
             ...trade,
-            orderComponentState: { ...order, twap: { ...order.twap, remaining: 0, scheduleId: undefined } },
+            canceledParentOrderIds: undefined,
+            histories: [],
+            orders: [],
+            orderSigningError: undefined,
+            parentStopOrders: {},
+            summaryComponentState: trade.summaryComponentState && {
+                ...trade.summaryComponentState,
+                collateral: 0,
+            },
+            orderComponentState: trade.orderComponentState && { ...trade.orderComponentState, isOrdering: false },
+            position: new Position([]),
+            positionCredentialVersion: undefined,
+            positionClose: undefined,
         },
     };
+};
+
+const resetTwap = (error?: string): Reducer<RootState> => (state) => {
+    const trade = state?.trade;
+    const order = trade?.orderComponentState;
+    if (!trade || !order || !order.twap.remaining) { return state; }
+    const orderComponentState = { ...order, twap: { ...order.twap, remaining: 0, scheduleId: undefined, error: error ?? order.twap.error } };
+    return { ...state, trade: { ...trade, orderComponentState } };
 };
