@@ -6,13 +6,16 @@ import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
+import {credentialChanges$} from "../credentials";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
 import {prependOrderHistories} from "../models/orderHistory";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
-import {createCancellationTimeoutHistory, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
-import {OrderRequestBatch, submissions} from "./trade/order/request";
+import {resetAccountState} from "./trade/model";
+import {createCancellationOutcome, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
+import {closePositionOutcomes, OrderRequestBatch, submissions} from "./trade/order/request";
+import {privateResponses} from "./trade/privateResponses";
 
 interface RootState {
     trade?: TradeState;
@@ -61,22 +64,37 @@ export const Root = (sources: Sources): Sinks => {
 
     const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<OrderRequestBatch>()).flatten();
     const pending$ = submissions(orderRequests$, sources.HTTP);
-    const isOrdering$ = pending$.map((pending) => pending !== null);
-    const orderOutcome$ = submittedOrderOutcomes(sources.HTTP);
-    const cancellationHistories$ = Stream.merge(
-        sources.HTTP.select("cancel-orders"),
-        sources.HTTP.select("cancel-parent-order"),
-    ).map(createCancellationTimeoutHistory)
-        .compose(flattenConcurrently)
-        .map((history) => [history]);
+    const positionCloseReducer$ = pending$.map((pending) => (state: TradeState | undefined) => {
+        if (!state) return state;
 
+        const submission = pending?.find(({ closePositionSize }) => closePositionSize !== undefined);
+        if (submission?.closePositionSize !== undefined) {
+            return { ...state, positionClose: {
+                id: submission.submissionId, size: submission.closePositionSize, settled: false,
+            } };
+        }
+        return state;
+    });
+    const closeOutcomeReducer$ = closePositionOutcomes(sources.HTTP)
+        .map(({ id, rejected }) => (state: TradeState | undefined) => {
+            const close = state?.positionClose;
+            if (!close || close.id !== id || close.settled) return state;
+            return { ...state, positionClose: { ...close, settled: true, rejected } };
+        });
+    const isOrdering$ = pending$.map((pending) => pending !== null);
+    const orderOutcome$ = Stream.merge(
+        submittedOrderOutcomes(sources.HTTP),
+        Stream.merge(
+            privateResponses(sources.HTTP, "cancel-orders"),
+            privateResponses(sources.HTTP, "cancel-parent-order"),
+        ).map(createCancellationOutcome).compose(flattenConcurrently),
+    );
     const orderHistoryReducer$ = Stream.merge(
         orderOutcome$.map(({ histories }) => histories),
         // Keep timeout notices when the trade screen is inactive.
         twapOutcomes(sources.HTTP)
             .filter(({ status }) => status === "unconfirmed")
             .map(({ histories }) => histories),
-        cancellationHistories$,
     ).map<Reducer<TradeState>>((histories) => (state) =>
         state && { ...state, histories: prependOrderHistories(state.histories, histories) });
 
@@ -109,7 +127,11 @@ export const Root = (sources: Sources): Sinks => {
         ),
         state: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
+            sources.state.isolateSink(positionCloseReducer$, tradeScope),
+            sources.state.isolateSink(closeOutcomeReducer$, tradeScope),
             sources.state.isolateSink(orderHistoryReducer$, tradeScope),
+            credentialChanges$.map((version): Reducer<RootState> => (state) =>
+                state?.trade ? { ...state, trade: resetAccountState(state.trade, version) } : state),
         ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
     };
