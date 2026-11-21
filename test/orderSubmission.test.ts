@@ -251,6 +251,57 @@ for (const [category, entries] of disconnectedOrders) {
     });
 }
 
+for (const [category, entries] of disconnectedOrders) {
+    test(`records an unconfirmed ${category} order when the HTTP connection drops`, { timeout: 5_000 }, async (t) => {
+        const writes: string[] = [];
+        const server = createServer((request, response) => {
+            request.resume();
+            const path = new URL(request.url!, "http://localhost").pathname;
+            writes.push(`${request.method} ${path}`);
+            if (writes.length > 1) response.end();
+        });
+        t.after(() => {
+            server.closeAllConnections();
+            server.close();
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const { port } = server.address() as { port: number };
+        const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${port}`, writeDeadline: 2_000 });
+        const endpoint = category === "market" ? "sendchildorder" : "sendparentorder";
+        const expectedWrite = `POST /v1/me/${endpoint}`;
+
+        const received = once(server, "request");
+        order.buy(category);
+        equal(order.state.isOrdering, true);
+        const [request] = await received;
+        request.socket.destroy();
+        await order.waitForHistoryCount(entries.length);
+
+        equal(order.state.isOrdering, false);
+        deepEqual(writes, [expectedWrite]);
+        deepEqual(order.sounds, ["failure"]);
+        deepEqual(order.histories.map(({ name, description, status, timedOut }) => [name, description, status, timedOut]),
+            entries.map((entry) => [...entry, "unconfirmed", undefined]));
+        summaryView(Stream.of<SummaryState>({
+            ...order.tradeState,
+            collateral: 0,
+            marketState: { health: "", state: "" },
+        })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /"text":"Unconfirmed"/) });
+
+        order.buy(category);
+        equal(order.state.isOrdering, true);
+        await order.waitForHistoryCount(entries.length * 2);
+        equal(order.state.isOrdering, false);
+        deepEqual(writes, [expectedWrite, expectedWrite]);
+        deepEqual(order.sounds, ["failure", "success"]);
+        deepEqual(order.histories.map(({ status }) => status), [
+            ...entries.map(() => "success"),
+            ...entries.map(() => "unconfirmed"),
+        ]);
+    });
+}
+
 test("records a rejected limit order and permits a retry", (t) => {
     t.mock.timers.enable({ apis: ["Date"], now: 1000 });
     const order = setup(t);
@@ -743,9 +794,10 @@ test("ignores write deadlines from the previous account", (t) => {
 function setup(t: TestContext, width = "0.01", options: {
     apiKey?: string;
     initialPrice?: number | null;
+    writeDeadline?: number;
     writeOrigin?: string;
 } = {}) {
-    const { apiKey = "test", initialPrice = 10000000, writeOrigin } = options;
+    const { apiKey = "test", initialPrice = 10000000, writeDeadline = 250, writeOrigin } = options;
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     const credentials: Record<string, string | undefined> = { "api-key": apiKey, "api-secret": "test" };
     Object.defineProperty(globalThis, "localStorage", {
@@ -782,7 +834,7 @@ function setup(t: TestContext, width = "0.01", options: {
     const publishExecution = (price: number) => executionBatch$.shamefullySendNext([{ side: "BUY", price }]);
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const writes$ = Stream.create<RequestInput | null>();
-    const transport$ = makeHTTPDriver(250)(writes$).select();
+    const transport$ = makeHTTPDriver(writeDeadline)(writes$).select();
     const source = new MainHTTPSource(Stream.merge(responses$, transport$), "HTTP");
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
@@ -865,6 +917,11 @@ function setup(t: TestContext, width = "0.01", options: {
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         enterTriggerPrice: (value: string) => triggerInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
+        waitForHistoryCount: (count: number) => new Promise<void>((resolve) => {
+            const subscription = state$.filter(({ trade }) => trade?.histories.length === count)
+                .take(1).subscribe({ next: () => resolve() });
+            t.after(() => subscription.unsubscribe());
+        }),
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         parentDetails,
         polls,
