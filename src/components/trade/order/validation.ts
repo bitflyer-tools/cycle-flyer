@@ -1,4 +1,5 @@
 import {currentCredentialVersion} from "../../../credentials";
+import {isValidMarketOrderSize} from "../../../models/order";
 import {State} from "./index";
 
 export const canClearPosition = (state: State): boolean =>
@@ -7,6 +8,9 @@ export const canClearPosition = (state: State): boolean =>
 
 export const isValidOrderSize = (state: State): boolean =>
     isPositiveFinite(state.size);
+
+export const isValidMarketOrder = (state: State): boolean =>
+    isValidMarketOrderSize(state.size);
 
 export const isValidLimitOrder = (state: State): boolean =>
     isValidOrderSize(state) && isPositiveFinite(state.price);
