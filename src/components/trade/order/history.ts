@@ -53,19 +53,15 @@ const createParentOrderOutcome = (stream$: HTTPResponse$): Stream<OrderOutcome> 
         ),
     );
 
-export const createCancellationTimeoutHistory = (stream$: HTTPResponse$): Stream<OrderHistory> =>
-    stream$.mapTo<OrderHistory | null>(null)
-        .replaceError((error) => {
-            if (!isWriteDeadlineError(error) || !isCurrentAccountRequest(stream$.request)) return Stream.empty();
-            const parentOrderId = JSON.parse(stream$.request.send as string).parent_order_id;
-            return Stream.of<OrderHistory | null>({
-                createdAt: new Date(),
-                description: parentOrderId || "All child orders",
-                name: "Cancel",
-                status: "unconfirmed",
-            });
-        })
-        .filter((history): history is OrderHistory => history !== null);
+export const createCancellationOutcome = (stream$: HTTPResponse$): Stream<OrderOutcome> =>
+    createOutcome(stream$, (body, status) => [{
+        createdAt: new Date(),
+        description: stream$.request.category === "cancel-parent-order"
+            ? `Parent order ${JSON.parse(body).parent_order_id}`
+            : "All child orders",
+        name: "Cancel",
+        status,
+    }]);
 
 const createOutcome = (
     stream$: HTTPResponse$,

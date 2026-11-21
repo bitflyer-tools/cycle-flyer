@@ -1,12 +1,14 @@
 import {Response} from "@cycle/http";
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {Board, BoardLevels} from "../../../models/board";
 import {BoardSnapshot} from "../../../models/boardSnapshot";
 import {Execution} from "../../../models/execution";
 import {State} from "./index";
 
 type BoardUpdate = (snapshot: BoardSnapshot) => void;
+const snapshotDeadlineMs = 30_000;
 
 interface PendingSnapshot {
     updates: BoardUpdate[];
@@ -26,11 +28,20 @@ export const synchronizeBoard = <T extends Stream<Response>>(
             .map<BoardUpdate>((batch) => (snapshot) => snapshot.removeExecutions(batch)),
     );
 
-    // Each response stream is announced at request time. Switching drops superseded requests.
+    let nextRequest = 0;
+    let latestApplied = 0;
     const snapshotReducer$ = responses$$
-        .map((response$) => reconcileSnapshot(response$, boardUpdates$))
-        .flatten()
-        .map<Reducer<State>>((board) => (state) => state && ({ ...state, board }));
+        .map((response$) => {
+            const request = ++nextRequest;
+            return reconcileSnapshot(response$, boardUpdates$)
+                .map((board) => ({ request, board }));
+        })
+        .compose(flattenConcurrently)
+        .filter(({ request }) => request > latestApplied)
+        .map<Reducer<State>>(({ request, board }) => {
+            latestApplied = request;
+            return (state) => state && ({ ...state, board });
+        });
 
     return Stream.merge(liveReducer$, snapshotReducer$);
 };
@@ -51,6 +62,7 @@ const reconcileSnapshot = (response$: Stream<Response>, boardUpdates$: Stream<Bo
         .map((pending) => pending.board)
         .filter((board): board is Board => !!board)
         .take(1)
+        .endWhen(Stream.periodic(snapshotDeadlineMs).take(1))
         .replaceError(() => Stream.empty());
 };
 

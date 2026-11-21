@@ -133,6 +133,30 @@ test("retries a parent detail whose request could not be signed", (t) => {
     deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["a"]);
 });
 
+test("preserves a stop marker after malformed details and installs the retried detail", (t) => {
+    t.mock.timers.enable({apis: ["setInterval"]});
+    const trade = setup(t);
+    const state = observeState(t, trade.actions);
+    const stop = (trigger_price: number) => ({condition_type: "STOP", side: "SELL", size: 0.1, trigger_price});
+    trade.list(["a"]);
+    trade.respond(trade.requests[0], {parent_order_id: "a", parameters: [stop(100)]});
+    deepStrictEqual(flattenStopOrders(state().parentStopOrders).map(({price}) => price), [100]);
+
+    trade.events.shamefullySendNext({parent_order_id: "a"} as ParentOrderEvent);
+    trade.list(["a"]);
+    const lastValidState = state();
+    trade.respond(trade.requests[1], {parent_order_id: "a", parameters: {}});
+    strictEqual(state(), lastValidState);
+    strictEqual(trade.loaded.length, 1);
+
+    t.mock.timers.tick(10000);
+    strictEqual(trade.listRequests.length, 2);
+    trade.respond(trade.listRequests[1], [{parent_order_id: "a"}]);
+    deepStrictEqual(trade.requestedIds(), ["a", "a", "a"]);
+    trade.respond(trade.requests[2], {parent_order_id: "a", parameters: [stop(200)]});
+    deepStrictEqual(flattenStopOrders(state().parentStopOrders).map(({price}) => price), [200]);
+});
+
 [false, true].forEach((reverse) => {
     test(`keeps both stop markers when details resolve ${reverse ? "in reverse order" : "in request order"}`, (t) => {
         const trade = setup(t);
@@ -375,6 +399,7 @@ const setup = (t: { after: (cleanup: () => void) => void }) => {
         reconnect,
         requestedIds: () => requests.map(requestedId),
         requests,
+        respond,
         send,
         startList: () => {
             const response$ = Stream.create<Response>();

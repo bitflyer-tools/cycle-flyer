@@ -13,6 +13,7 @@ import {pollResponse} from "./pollResponse";
 import {PositionRequest} from "./request";
 
 export interface Actions {
+    onCancelOrders$: Stream<null>;
     onCancelParentOrder$: Stream<{ id: string; sequence: number }>;
     onExecutionBatch$: Stream<Execution[]>;
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
@@ -48,8 +49,18 @@ export const intent = (sources: Sources): Actions => {
         sources.socket.reconnect$,
     ).compose(debounce(500));
 
-    const onOrdersLoaded$ = pollResponse<object[]>(sources.HTTP.select("orders"), (json, response) =>
-        isCurrent(response) ? decodeArray(json) : undefined);
+    const ordersCanceled = Symbol("ordersCanceled");
+    const cancelOrders$ = sources.HTTP.select("cancel-orders")
+        .map((response$) => response$.replaceError(() => Stream.empty()))
+        .compose(flattenConcurrently)
+        .filter(isCurrent)
+        .mapTo<typeof ordersCanceled>(ordersCanceled);
+
+    const orderLists$ = pollResponse<object[] | typeof ordersCanceled>(
+        sources.HTTP.select("orders"),
+        (json, response) => isCurrent(response) ? decodeOrders(json) : undefined,
+        cancelOrders$,
+    );
 
     const pages = parentOrderPages(sources.HTTP, () => ++parentOrderSequence);
     const onParentOrdersLoaded$ = pages.loaded$;
@@ -67,11 +78,12 @@ export const intent = (sources: Sources): Actions => {
         } : undefined);
 
     return {
+        onCancelOrders$: orderLists$.filter((orders) => orders === ordersCanceled).mapTo(null),
         onCancelParentOrder$,
         onExecutionBatch$: sources.socket.executionBatch$,
         onMyExecutionCreated$,
         onMyOrderChanged$,
-        onOrdersLoaded$,
+        onOrdersLoaded$: orderLists$.map<object[]>((orders) => orders === ordersCanceled ? [] : orders),
         onParentOrderLoaded$: details.loaded$,
         onParentOrdersLoaded$,
         onParentOrderListSettled$: pages.settled$,
@@ -80,7 +92,9 @@ export const intent = (sources: Sources): Actions => {
     };
 };
 
-const decodeArray = <T>(json: unknown): T[] | undefined => Array.isArray(json) ? json : undefined;
+const decodeOrders = (json: unknown): object[] | undefined =>
+    Array.isArray(json) && json.every((order) =>
+        order !== null && typeof order === "object" && !Array.isArray(order)) ? json : undefined;
 
 const isPositionList = (positions: unknown): boolean =>
     Array.isArray(positions) && positions.every((position) =>

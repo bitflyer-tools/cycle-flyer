@@ -87,7 +87,7 @@ export const parentOrderDetails = (
 
     const responses$ = http.select("parent-order")
         .map((response$) => response$
-            .map<ActiveParentOrder | undefined>((response) => JSON.parse(response.text))
+            .map((response) => decodeDetail(response.text))
             .replaceError(() => Stream.of<ActiveParentOrder | undefined>(undefined))
             .map((detail) => settle(response$.request, detail)))
         .compose(flattenConcurrently);
@@ -111,4 +111,10 @@ export const parentOrderDetails = (
         loaded$: updates$.map(({ detail }) => Stream.fromArray(detail ? [detail] : [])).flatten(),
         requests$: updates$.map(({ requests }) => Stream.fromArray(requests || [])).flatten(),
     };
+};
+
+const decodeDetail = (text: string): ActiveParentOrder | undefined => {
+    const detail = JSON.parse(text);
+    return Array.isArray(detail?.parameters) && detail.parameters.every((parameter: unknown) =>
+        parameter !== null && typeof parameter === "object" && !Array.isArray(parameter)) ? detail : undefined;
 };

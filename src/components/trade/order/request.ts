@@ -8,7 +8,7 @@ import {AccountRequest, unsignedRequests$} from "../../../drivers/httpDriver";
 import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
-import {canClearPosition, isValidIFDOCOOrder, isValidLimitOrder, isValidOrderSize} from "./validation";
+import {canClearPosition, isValidIFDOCOOrder, isValidLimitOrder, isValidOrderSize, isValidStopOrder} from "./validation";
 
 export interface OrderRequestBatch {
     requests: RequestInput[];
@@ -88,8 +88,10 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
         withState(actions.onClickMarketSellButton$, (state) => marketOrder(state.size, "SELL"), isValidOrderSize),
         withState(actions.onClickLimitBuyButton$, (state) => limitOrder(state.price, state.size, "BUY"), isValidLimitOrder),
         withState(actions.onClickLimitSellButton$, (state) => limitOrder(state.price, state.size, "SELL"), isValidLimitOrder),
-        withState(actions.onClickStopBuyButton$, (state) => stopOrder(state.triggerPrice, state.size, "BUY"), isValidOrderSize),
-        withState(actions.onClickStopSellButton$, (state) => stopOrder(state.triggerPrice, state.size, "SELL"), isValidOrderSize),
+        withState(actions.onClickStopBuyButton$, (state) => stopOrder(state.triggerPrice, state.size, "BUY"),
+            (state) => isValidStopOrder(state, "BUY")),
+        withState(actions.onClickStopSellButton$, (state) => stopOrder(state.triggerPrice, state.size, "SELL"),
+            (state) => isValidStopOrder(state, "SELL")),
         withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder, isValidIFDOCOOrder),
         withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder, isValidIFDOCOOrder),
         actions.onClickClearButton$.compose(sampleCombine(state$))

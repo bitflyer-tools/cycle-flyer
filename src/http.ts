@@ -1,7 +1,7 @@
 import {RequestInput, RequestOptions} from "@cycle/http";
 
 export const getBoard = (): RequestInput =>
-    requestInput("board", "/v1/getboard", "GET");
+    ({ ...requestInput("board", "/v1/getboard", "GET"), lazy: true });
 
 export const getState = (): RequestInput =>
     requestInput("status", "/v1/getboardstate", "GET");

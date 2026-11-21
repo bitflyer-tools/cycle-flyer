@@ -1,13 +1,13 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
-import {Execution} from "../../models/execution";
+import {Execution, isExecutionPrice} from "../../models/execution";
 import {Order} from "../../models/order";
 import {createOrderHistory} from "../../models/orderHistory";
 import {putParentOrder, retainActive} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
 import {State} from "./index";
 import {Actions} from "./intent";
-import {checkPriceAlert, isExecutionPrice} from "./priceAlert";
+import {checkPriceAlert} from "./priceAlert";
 
 const defaultState: State = {
     currentPrice: null,
@@ -95,7 +95,7 @@ const startTradeSession = (state: State = defaultState): State => ({
 });
 
 const applyExecutions = (state: State, executions: Execution[], time: Date): State => {
-    state.boardComponentState?.board.removeExecutions(executions.filter(({ price }) => isExecutionPrice(price)));
+    state.boardComponentState?.board.removeExecutions(executions);
     return executions.reduce((next, { price }) => applyExecution(next, price, time), state);
 };
 

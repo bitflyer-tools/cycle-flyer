@@ -12,7 +12,7 @@ import {Sound} from "../drivers/soundDriver";
 import {Position} from "../models/position";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
-import {createCancellationTimeoutHistory, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
+import {createCancellationOutcome, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
 import {closePositionOutcomes, OrderRequestBatch, submissions, unsignedSubmissions$} from "./trade/order/request";
 import {stopTwap, twapSigningFailed$} from "./trade/order/twapRequest";
 
@@ -88,21 +88,19 @@ export const Root = (sources: Sources): Sinks => {
     );
     const orderSigningReducer$ = orderSigningError$.map<Reducer<TradeState>>((orderSigningError) =>
         (state) => state && { ...state, orderSigningError });
-    const orderOutcome$ = submittedOrderOutcomes(sources.HTTP);
-    const cancellationHistories$ = Stream.merge(
-        sources.HTTP.select("cancel-orders"),
-        sources.HTTP.select("cancel-parent-order"),
-    ).map(createCancellationTimeoutHistory)
-        .compose(flattenConcurrently)
-        .map((history) => [history]);
-
+    const orderOutcome$ = Stream.merge(
+        submittedOrderOutcomes(sources.HTTP),
+        Stream.merge(
+            sources.HTTP.select("cancel-orders"),
+            sources.HTTP.select("cancel-parent-order"),
+        ).map(createCancellationOutcome).compose(flattenConcurrently),
+    );
     const orderHistoryReducer$ = Stream.merge(
         orderOutcome$.map(({ histories }) => histories.slice().reverse()),
         // Keep timeout notices when the trade screen is inactive.
         twapOutcomes(sources.HTTP)
             .filter(({ status }) => status === "unconfirmed")
             .map(({ histories }) => histories.slice().reverse()),
-        cancellationHistories$,
     ).map<Reducer<TradeState>>((histories) => (state) =>
         state && { ...state, histories: histories.concat(state.histories) });
 

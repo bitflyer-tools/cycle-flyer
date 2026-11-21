@@ -28,6 +28,7 @@ export const request = (
 
     return Stream.merge(
         refreshes$.map(() => getOrders()),
+        actions.onCancelOrders$.filter(hasApiCredentials).map(() => getOrders()),
         positions$,
         parentOrderRefreshes(refreshes$, actions.onParentOrderListSettled$),
         actions.parentOrderRequests$,

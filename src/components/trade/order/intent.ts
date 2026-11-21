@@ -1,5 +1,4 @@
 import {Stream} from "xstream";
-import {isCurrentAccountRequest} from "../../../drivers/httpDriver";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
 import {State} from "./index";
@@ -7,7 +6,6 @@ import {clicks, numberInputs, sizePresetClicks} from "./events";
 import {TwapActions, twapIntent} from "./twapIntent";
 
 export interface Actions extends TwapActions {
-    onCancelOrders$: Stream<null>;
     onClickClearButton$: Stream<null>;
     onClickClearOrderButton$: Stream<null>;
     onClickIFDOCOBuyButton$: Stream<null>;
@@ -36,15 +34,8 @@ export const storageKeys = {
 };
 
 export const intent = (sources: Sources, state$: Stream<State>): Actions => {
-    const onCancelOrders$ = sources.HTTP.select("cancel-orders")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .filter((response) => isCurrentAccountRequest(response.request))
-        .mapTo(null);
-
     return {
         ...twapIntent(sources, state$),
-        onCancelOrders$,
         onClickClearButton$: clicks(sources.DOM, ".order-buttons", ".clear-button"),
         onClickClearOrderButton$: clicks(sources.DOM, ".order-buttons", ".clear-order-button"),
         onClickIFDOCOBuyButton$: clicks(sources.DOM, ".ranged-ifdoco-order-buttons", ".buy-button"),

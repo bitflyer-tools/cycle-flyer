@@ -11,6 +11,13 @@ export const isValidOrderSize = (state: State): boolean =>
 export const isValidLimitOrder = (state: State): boolean =>
     isValidOrderSize(state) && isPositiveFinite(state.price);
 
+export const isValidStopOrder = (state: State, side: "BUY" | "SELL"): boolean => {
+    const { triggerPrice, currentPrice } = state;
+    return isValidOrderSize(state)
+        && isPositiveFinite(triggerPrice) && isPositiveFinite(currentPrice)
+        && (side === "BUY" ? triggerPrice > currentPrice : triggerPrice < currentPrice);
+};
+
 export const isValidIFDOCOOrder = (state: State): boolean =>
     isValidOrderSize(state) && isPositiveFinite(state.currentPrice)
     && state.ifdocoOrder.hasValidWidth() && state.ifdocoOrder.hasValidRatio();

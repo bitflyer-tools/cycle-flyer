@@ -56,10 +56,25 @@ test("renders summed active and stop markers on their display sides", () => {
 
     view(Stream.of({ ...state, orders, stopOrders })).addListener({
         next: (board) => deepStrictEqual(markers(board), [
-            ["div.ask", 110, [["span.my-order", "0.75"], ["span.my-stop-order", "12"]]],
-            ["div.ask", 120, []],
-            ["div.bid", 100, [["span.my-order", "3"], ["span.my-stop-order", "48"]]],
-            ["div.bid", 90, []],
+            ["div.ask", 110, [["span.my-order", "0.75"]]],
+            ["div.ask", 120, [["span.my-stop-order", "12"]]],
+            ["div.bid", 100, [["span.my-order", "3"]]],
+            ["div.bid", 90, [["span.my-stop-order", "48"]]],
+        ]),
+    });
+});
+
+test("renders stops at 125 on the visible rows with grouping of 50", () => {
+    const board = new Board({ asks: [{ price: 125, size: 1 }], bids: [{ price: 124, size: 1 }] });
+    const stopOrders = [
+        new StopOrder({ side: "BUY", price: 125, size: 2 }),
+        new StopOrder({ side: "SELL", price: 125, size: 3 }),
+    ];
+
+    view(Stream.of({ ...boardState(), board, groupedSize: 50, stopOrders })).addListener({
+        next: (rendered) => deepStrictEqual(markers(rendered), [
+            ["div.ask", 150, [["span.my-stop-order", "2"]]],
+            ["div.bid", 100, [["span.my-stop-order", "3"]]],
         ]),
     });
 });

@@ -13,6 +13,7 @@ import Stream, {MemoryStream} from "xstream";
 import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
+import {stopSection} from "../src/components/trade/order/stopView";
 import {storageKeys} from "../src/components/trade/order/intent";
 import {Execution} from "../src/models/execution";
 import type {State as SummaryState} from "../src/components/trade/summary";
@@ -20,6 +21,7 @@ import {view as summaryView} from "../src/components/trade/summary/view";
 import {currentCredentialVersion, saveCredentials} from "../src/credentials";
 import {AccountRequest, authorizeRequest, makeHTTPDriver, makeSignedHTTPDriver, unsignedRequests$} from "../src/drivers/httpDriver";
 import {cancelOrders, getParentOrders, limitOrder, parentOrdersPageSize, stopOrder, twapSliceOrder} from "../src/http";
+import {flattenStopOrders} from "../src/models/parentStopOrders";
 
 test("shows a signing error for a market order without credentials and clears it on retry", async (t) => {
     const order = setup(t);
@@ -67,6 +69,49 @@ test("blocks both IFDOCO sides until the first public execution arrives", (t) =>
     order.respondTo(order.requests[0]).succeed();
     order.sellIFDOCO();
     deepEqual(order.requests.map(({ category }) => category), ["ifdoco-order", "ifdoco-order"]);
+});
+
+test("blocks both stop sides for invalid triggers or a missing market price", (t) => {
+    const order = setup(t, "0.01", { initialPrice: null });
+    const assertBothBlocked = () => {
+        const section = stopSection(order.state);
+        const [, buttons] = section.children as VNode[];
+        const [, sell, buy] = buttons.children as VNode[];
+        equal(sell.data?.attrs?.disabled, true);
+        equal(buy.data?.attrs?.disabled, true);
+        order.buy("stop");
+        order.sellStop();
+        deepEqual(order.requests, []);
+    };
+
+    assertBothBlocked();
+    order.publishExecution(100000);
+    for (const value of ["Infinity", "-Infinity", "invalid", "0", "-1", "100000"]) {
+        order.enterTriggerPrice(value);
+        assertBothBlocked();
+    }
+});
+
+test("submits only the stop side matching the trigger direction and preserves the trigger price", (t) => {
+    const order = setup(t, "0.01", { initialPrice: 100000 });
+    order.enterTriggerPrice("110000.25");
+    order.sellStop();
+    deepEqual(order.requests, []);
+    order.buy("stop");
+    order.respondTo(order.requests[0]).succeed();
+
+    order.enterTriggerPrice("90000.75");
+    order.buy("stop");
+    equal(order.requests.length, 1);
+    order.sellStop();
+
+    deepEqual(order.requests.map(({ category, send }) => {
+        const [{ side, trigger_price }] = JSON.parse(send as string).parameters;
+        return { category, side, trigger_price };
+    }), [
+        { category: "stop-order", side: "BUY", trigger_price: 110000.25 },
+        { category: "stop-order", side: "SELL", trigger_price: 90000.75 },
+    ]);
 });
 
 test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
@@ -221,12 +266,21 @@ test("records a rejected limit order and permits a retry", (t) => {
     equal(order.state.isOrdering, true);
 });
 
-test("dispatches every Clear Orders request and stays locked until they all settle", (t) => {
+test("reports mixed Clear Orders results and stays locked until every request settles", async (t) => {
     const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getorders", category: "orders", _namespace: ["trade"] }).succeed([
+        { price: 100, side: "BUY", outstanding_size: 0.01 },
+    ]);
     order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getparentorders", category: "parent-orders", _namespace: ["trade"] }).succeed([
         { parent_order_id: "JCO-success" },
         { parent_order_id: "JCO-failure" },
     ]);
+    order.parentDetails.forEach((request, id) => order.respondTo(request).succeed({
+        parent_order_id: id,
+        parameters: [{ condition_type: "STOP", trigger_price: id === "JCO-success" ? 200 : 300 }],
+    }));
 
     order.clearOrders();
     order.clearOrders();
@@ -234,20 +288,124 @@ test("dispatches every Clear Orders request and stays locked until they all sett
         "cancel-orders", "cancel-parent-order", "cancel-parent-order",
     ]);
     equal(order.state.isOrdering, true);
+    equal(order.tradeState.orders.length, 1);
+    deepEqual(flattenStopOrders(order.tradeState.parentStopOrders).map(({ price }) => price), [200, 300]);
 
-    order.respondTo(order.requests[0]).succeed();
+    order.respondTo(order.requests[2]).fail();
+    equal(order.state.isOrdering, true);
+    deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-success", "JCO-failure"]);
     order.respondTo(order.requests[1]).succeed();
     order.buy("market");
     equal(order.requests.length, 3);
     equal(order.state.isOrdering, true);
     deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-failure"]);
 
-    order.respondTo(order.requests[2]).fail();
+    order.respondTo(order.requests[0]).succeed();
     equal(order.state.isOrdering, false);
-    deepEqual(order.sounds, []);
+    deepEqual(order.tradeState.orders, []);
+    deepEqual(flattenStopOrders(order.tradeState.parentStopOrders).map(({ price }) => price), [300]);
+    deepEqual(order.histories.map(({ name, description, status }) => [name, description, status]), [
+        ["Cancel", "All child orders", "success"],
+        ["Cancel", "Parent order JCO-success", "success"],
+        ["Cancel", "Parent order JCO-failure", "failed"],
+    ]);
+    deepEqual(order.sounds, ["failure", "success", "success"]);
     order.clearOrders();
     deepEqual(order.requests.slice(3).map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
+});
+
+test("reports a failed bulk cancellation and keeps the child orders visible", (t) => {
+    const order = setup(t);
+    order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getorders", category: "orders", _namespace: ["trade"] }).succeed([
+        { price: 100, side: "BUY", outstanding_size: 0.01 },
+    ]);
+    const childOrders = order.tradeState.orders;
+
+    order.clearOrders();
+    order.respondTo(order.requests[0]).fail();
+
+    equal(order.state.isOrdering, false);
+    equal(order.tradeState.orders, childOrders);
+    deepEqual(order.histories.map(({ description, status }) => [description, status]), [
+        ["All child orders", "failed"],
+    ]);
+    deepEqual(order.sounds, ["failure"]);
+});
+
+test("keeps a parent order visible when its cancellation times out", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getparentorders", category: "parent-orders", _namespace: ["trade"] })
+        .succeed([{ parent_order_id: "JCO-timeout" }]);
+    order.respondTo(order.parentDetails.get("JCO-timeout")!).succeed({
+        parent_order_id: "JCO-timeout",
+        parameters: [{ condition_type: "STOP", trigger_price: 200 }],
+    });
+    deepEqual(flattenStopOrders(order.tradeState.parentStopOrders).map(({ price }) => price), [200]);
+
+    order.clearOrders();
+    order.respondTo(order.requests[0]).succeed();
+    order.respondTo(order.requests[1]).fail(
+        Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }),
+    );
+
+    equal(order.state.isOrdering, false);
+    deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-timeout"]);
+    deepEqual(order.histories.map(({ description, status }) => [description, status]), [
+        ["Parent order JCO-timeout", "unconfirmed"],
+        ["All child orders", "success"],
+    ]);
+});
+
+test("ignores Clear Orders results from the previous account", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "account-a", secret: "secret-a" });
+    t.after(() => saveCredentials(null));
+    const parentOrders = order.polls.find(({ category }) => category === "parent-orders")!;
+    order.respondTo(parentOrders).succeed([{ parent_order_id: "JCO-old" }]);
+    order.clearOrders();
+    deepEqual(order.requests.map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
+    const [bulkCancel, parentCancel] = order.requests;
+    const pendingBulkCancel = order.respondTo(bulkCancel);
+    const pendingParentCancel = order.respondTo(parentCancel);
+
+    order.navigate("/setting");
+    await saveCredentials({ key: "account-b", secret: "secret-b" });
+    order.navigate("/");
+    pendingParentCancel.fail();
+    pendingBulkCancel.succeed();
+
+    equal(order.state.isOrdering, false);
+    deepEqual(order.histories, []);
+    deepEqual(order.sounds, []);
+});
+
+test("clears collateral and child orders and ignores late responses after switching credentials", async (t) => {
+    const trade = setup(t);
+    await saveCredentials({ key: "account-a", secret: "secret-a" });
+    t.after(() => saveCredentials(null));
+    const orders = trade.polls.find(({ category }) => category === "orders")!;
+    const collateral = trade.polls.find(({ category }) => category === "collateral")!;
+    const oldVersion = currentCredentialVersion()!;
+    const oldOrders = [{ side: "BUY", size: 0.1, price: 100 }];
+    trade.respondTo(orders).succeed(oldOrders);
+    trade.respondTo(collateral).succeed({ collateral: 1000 });
+    equal(trade.tradeState.orders.length, 1);
+    equal(trade.tradeState.summaryComponentState!.collateral, 1000);
+
+    await saveCredentials({ key: "account-b", secret: "secret-b" });
+    deepEqual(trade.tradeState.orders, []);
+    equal(trade.tradeState.summaryComponentState!.collateral, 0);
+
+    const current = trade.respondTo(orders);
+    trade.respondTo({ ...orders, credentialVersion: oldVersion }).succeed(oldOrders);
+    trade.respondTo({ ...collateral, credentialVersion: oldVersion }).succeed({ collateral: 1000 });
+    deepEqual(trade.tradeState.orders, []);
+    equal(trade.tradeState.summaryComponentState!.collateral, 0);
+    current.succeed([{ side: "SELL", size: 0.2, price: 200 }]);
+    deepEqual(trade.tradeState.orders.map(({ price }) => price), [200]);
 });
 
 test("settles an unsigned parent cancellation while waiting for the rest of Clear Orders", async (t) => {
@@ -602,7 +760,7 @@ for (const category of ["limit-order", "cancel-orders", "market-order"] as const
         deepEqual(paths, [path]);
         equal(order.requests.length, 1);
         deepEqual(order.histories.map(({ status }) => status), ["unconfirmed"]);
-        deepEqual(order.sounds, category === "cancel-orders" ? [] : ["failure"]);
+        deepEqual(order.sounds, ["failure"]);
         summaryView(Stream.of<SummaryState>({
             ...order.tradeState,
             priceAlert: order.tradeState.summaryComponentState!.priceAlert,
@@ -717,6 +875,9 @@ function setup(t: TestContext, width = "0.01", options: {
     };
     const priceInput$ = Stream.createWithMemory<{ target: { value: string } }>();
     priceInput$.shamefullySendNext({ target: { value: "100000" } });
+    const triggerInput$ = Stream.createWithMemory<{ target: { value: string } }>();
+    triggerInput$.shamefullySendNext({ target: { value: "11000000" } });
+    const sellStop$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
     const buyTWAP$ = Stream.create<null>();
     const clearPosition$ = Stream.create<null>();
@@ -732,15 +893,12 @@ function setup(t: TestContext, width = "0.01", options: {
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
         "#price-input": { input: priceInput$ },
-        "#trigger-price-input": { input: Stream.of({ target: { value: "110000" } }) },
-        ".order-buttons": {
-            ".clear-order-button": { click: clearOrders$ },
-            ".clear-button": { click: clearPosition$ },
-        },
+        "#trigger-price-input": { input: triggerInput$ },
+        ".order-buttons": { ".clear-order-button": { click: clearOrders$ }, ".clear-button": { click: clearPosition$ } },
         ".twap-order-buttons": { ".buy-button": { click: buyTWAP$ } },
         ".limit-order-buttons": { ".buy-button": { click: buy$.limit } },
         ".market-order-buttons": { ".buy-button": { click: buy$.market } },
-        ".stop-order-buttons": { ".buy-button": { click: buy$.stop } },
+        ".stop-order-buttons": { ".buy-button": { click: buy$.stop }, ".sell-button": { click: sellStop$ } },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buy$.ifdoco },
             ".sell-button": { click: sellIFDOCO$ },
@@ -778,11 +936,16 @@ function setup(t: TestContext, width = "0.01", options: {
     const requests: RequestOptions[] = [];
     const polls: AccountRequest[] = [];
     const pages: AccountRequest[] = [];
+    const parentDetails = new Map<string, RequestOptions>();
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as AccountRequest;
-        if (options.category === "positions") { polls.push(options); }
         if (options.category === "parent-orders-page") { pages.push(options); }
-        if (["ifdoco-order", "market-order", "limit-order", "stop-order", "twap-order", "cancel-orders", "cancel-parent-order"].includes(options.category as string)) {
+        if (options.method === "GET") { polls.push(options); }
+        if (options.category === "parent-order") {
+            parentDetails.set(new URL(options.url).searchParams.get("parent_order_id")!, options);
+        }
+        if (["ifdoco-order", "market-order", "limit-order", "stop-order", "twap-order", "cancel-orders", "cancel-parent-order"]
+            .includes(options.category as string)) {
             requests.push(options);
             if (writeOrigin) {
                 writes$.shamefullySendNext({
@@ -813,9 +976,12 @@ function setup(t: TestContext, width = "0.01", options: {
         get positionRequests() { return polls.filter(({ category }) => category === "positions"); },
         clearOrders: () => clearOrders$.shamefullySendNext(null),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
+        enterTriggerPrice: (value: string) => triggerInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         pages,
+        parentDetails,
+        polls,
         publishExecution,
         requests,
         sounds,
@@ -835,6 +1001,7 @@ function setup(t: TestContext, width = "0.01", options: {
                 },
             };
         },
+        sellStop: () => sellStop$.shamefullySendNext(null),
         sellIFDOCO: () => sellIFDOCO$.shamefullySendNext(null),
         get signingAlert() { return findNode(vNode, "div.order-signing-error"); },
         get state() { return state!.trade!.orderComponentState!; },
