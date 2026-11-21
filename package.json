@@ -25,7 +25,6 @@
     "@cycle/run": "^5.7.0",
     "@cycle/state": "^1.7.0",
     "@cycle/storage": "^5.1.2",
-    "@types/socket.io-client": "^3.0.0",
     "cyclic-router": "^6.0.0",
     "electron-squirrel-startup": "^1.0.1",
     "hash.js": "^1.1.7",
