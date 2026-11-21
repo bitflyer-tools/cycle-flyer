@@ -1,7 +1,6 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {IFDOCOrder} from "../../../models/ifdocoOrder";
-import {Order} from "../../../models/order";
 import {Position} from "../../../models/position";
 import {defaultTwapOrder} from "../../../models/twapOrder";
 import {State} from "./index";
@@ -25,9 +24,6 @@ const defaultState: State = {
 export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
-    const cancelOrdersReducer$ = actions.onCancelOrders$
-        .map((_) => (state: State) => ({ ...state, orders: [] as Order[] }));
-
     const isOrderingReducer$ = isOrdering$
         .map((isOrdering) => (state: State) => ({ ...state, isOrdering }));
 
@@ -48,7 +44,6 @@ export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Re
 
     return Stream.merge(
         defaultReducer$,
-        cancelOrdersReducer$,
         isOrderingReducer$,
         priceReducer$,
         priceWidthReducer$,

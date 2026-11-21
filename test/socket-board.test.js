@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { webcrypto } = require('node:crypto');
 const path = require('node:path');
 const { runInNewContext } = require('node:vm');
 const { test } = require('node:test');
@@ -21,11 +22,13 @@ const { outputFiles } = buildSync({
   write: false,
 });
 const testModule = { exports: {} };
+const credentials = { 'api-secret': 'test-secret' };
 runInNewContext(outputFiles[0].text, {
   module: testModule,
   require,
   setTimeout,
-  localStorage: { 'api-secret': 'test-secret' },
+  crypto: webcrypto,
+  localStorage: credentials,
 });
 const { SocketIOSource, BoardComponent } = testModule.exports;
 
@@ -60,7 +63,46 @@ test('subscribes only to board deltas and executions on connect and reconnect', 
   assert.equal(socket.handlers.has(snapshotChannel), false);
 });
 
-test('initializes from REST and preserves WebSocket deltas and execution pruning during a refresh', () => {
+test('ignores events from the previous account until the new socket authenticates', (t) => {
+  credentials['api-key'] = 'account-a';
+  t.after(() => { delete credentials['api-key']; });
+
+  const socket = makeSocket();
+  const authentications = [];
+  const subscribe = socket.emit;
+  socket.connected = true;
+  socket.disconnect = () => socket;
+  socket.connect = () => { socket.receive('connect'); return socket; };
+  socket.emit = (event, value, done) => {
+    if (event === 'auth') {
+      authentications.push({ key: value.api_key, done });
+    } else {
+      subscribe(event, value);
+    }
+  };
+
+  const source = new SocketIOSource(socket);
+  const events = [];
+  const listener = source.childOrderEvent$.subscribe({ next: (event) => events.push(event.id) });
+  t.after(() => listener.unsubscribe());
+  const receive = (id) => socket.receive('child_order_events', [{ id }]);
+
+  socket.receive('connect');
+  authentications[0].done();
+  receive('a');
+  credentials['api-key'] = 'account-b';
+  receive('late-a');
+  source.refreshCredentials();
+  authentications[0].done();
+  receive('before-b-auth');
+  authentications[1].done();
+  receive('b');
+
+  assert.deepEqual(authentications.map(({ key }) => key), ['account-a', 'account-b']);
+  assert.deepEqual(events, ['a', 'b']);
+});
+
+test('reconciles the board immediately after reconnect and preserves in-flight updates', () => {
   const socket = makeSocket();
   const responses = Stream.create();
   const dom = { select: () => dom, events: () => Stream.never() };
@@ -79,14 +121,24 @@ test('initializes from REST and preserves WebSocket deltas and execution pruning
 
   let state;
   const subscription = sinks.state.subscribe({ next: (reduce) => { state = reduce(state); } });
+  const refresh = Stream.create();
+  const requests = [];
+  const http = sinks.HTTP.subscribe({
+    next: (request) => {
+      requests.push(request);
+      if (requests.length === 2) responses.shamefullySendNext(refresh);
+    },
+  });
   try {
-    const requests = [];
-    sinks.HTTP.take(1).addListener({ next: (value) => requests.push(value) });
+    socket.receive('connect');
     assert.equal(requests.length, 1);
     assert.equal(requests[0].category, 'board');
     assert.match(requests[0].url, /\/v1\/getboard$/);
 
-    const snapshot = { asks: [{ price: 102, size: 1 }], bids: [{ price: 100, size: 2 }] };
+    const snapshot = {
+      asks: [{ price: 102, size: 1 }, { price: 103, size: 2 }],
+      bids: [{ price: 100, size: 2 }],
+    };
     responses.shamefullySendNext(Stream.of({ text: JSON.stringify(snapshot) }));
     assert.equal(state.board.asks[0].size, 1);
     assert.equal(state.board.bids[0].size, 2);
@@ -96,15 +148,23 @@ test('initializes from REST and preserves WebSocket deltas and execution pruning
     assert.equal(state.board.asks[0].size, 3);
     assert.equal(state.board.bids[0].size, 2);
 
-    const refresh = Stream.create();
-    responses.shamefullySendNext(refresh);
+    socket.receive('disconnect');
+    socket.receive('connect');
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].category, 'board');
+    assert.match(requests[1].url, /\/v1\/getboard$/);
+    assert.equal(state.board.asks[1].price, 103);
+
     socket.receive(executionChannel, [{ side: 'SELL', price: 99 }]);
     socket.receive(boardChannel, { asks: [{ price: 102, size: 4 }], bids: [] });
-    refresh.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    refresh.shamefullySendNext({ text: JSON.stringify({ ...snapshot, asks: [snapshot.asks[0]] }) });
     refresh.shamefullySendComplete();
+    assert.equal(state.board.asks.length, 1);
+    assert.equal(state.board.asks[0].price, 102);
     assert.equal(state.board.asks[0].size, 4);
     assert.equal(state.board.bids.length, 0);
   } finally {
+    http.unsubscribe();
     subscription.unsubscribe();
   }
 });

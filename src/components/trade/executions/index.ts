@@ -4,6 +4,7 @@ import {Reducer, StateSource} from "@cycle/state";
 import Stream from "xstream";
 import sampleCombine from "xstream/extra/sampleCombine";
 import {executionPageSize, getExecutions} from "../../../http";
+import {privateResponses} from "../privateResponses";
 import {view} from "./view";
 
 export interface Execution {
@@ -39,7 +40,7 @@ export const ExecutionsComponent = ({DOM, HTTP, state}: Sources) => {
         .filter(([older, current]) => !current.loading && (!older || current.before !== undefined))
         .map(([older, current]) => getExecutions(older ? current.before : undefined));
 
-    const responses$ = HTTP.select("executions")
+    const responses$ = privateResponses(HTTP, "executions")
         .map((response$) => {
             const {before} = response$.request.query as {before?: number};
             return response$.map((response): Reducer<State> => pageLoaded(readPage(response), before))

@@ -44,12 +44,14 @@ export interface Sinks {
 }
 
 export interface State {
+    credentialVersion?: symbol;
     canceledParentOrderIds?: ReadonlyMap<string, number>;
     currentPrice: number | null;
     histories: OrderHistory[];
     orders: Order[];
     parentStopOrders: ParentStopOrders;
     position: Position;
+    positionClose?: { id: symbol; size: number; settled: boolean; rejected?: boolean };
     price: number;
     lastExecutionPrice: number;
     boardComponentState?: BoardComponentState;
@@ -61,6 +63,7 @@ export interface State {
 export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
     orderRequests: Stream<OrderRequestBatch>;
 } => {
+    sources.socket.refreshCredentials?.();
     const executionsComponent = isolate(ExecutionsComponent, { state: "executionsComponentState" })({
         ...sources,
         DOM: sources.DOM as MainDOMSource,
@@ -103,12 +106,14 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
         state: {
             get: (state: State) => state.orderComponentState && {
                 ...state.orderComponentState,
+                credentialVersion: state.credentialVersion,
                 currentPrice: state.currentPrice ?? 0,
                 histories: state.histories,
                 orders: state.orders,
                 parentStopOrders: state.parentStopOrders,
                 position: state.position,
                 price: state.price,
+                positionClosePending: !!state.positionClose,
             },
             set: (state: State, orderComponentState: OrderComponentState) => ({
                 ...state,
@@ -123,7 +128,12 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
     const actions = intent(sources);
     const reducer$ = model(actions);
     const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM, executionsComponent.DOM);
-    const request$ = request(actions);
+    const settledCloseId$ = sources.state.stream
+        .map((state) => state?.positionClose?.settled ? state.positionClose.id : undefined)
+        .startWith(undefined)
+        .compose(dropRepeats())
+        .remember();
+    const request$ = request(actions, settledCloseId$);
 
     const priceAlertSound$ = sources.state.stream
         .map((state) => state?.summaryComponentState?.priceAlert)

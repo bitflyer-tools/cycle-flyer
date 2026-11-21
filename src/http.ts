@@ -1,13 +1,21 @@
 import {RequestInput, RequestOptions} from "@cycle/http";
 import * as hash from "hash.js";
+import {apiCredentials} from "./credentials";
+
+export interface PrivateRequest extends RequestOptions {
+    credentialVersion?: symbol;
+}
 
 export const getBoard = (): RequestInput =>
-    requestInput("board", "/v1/getboard", "GET");
+    ({ ...requestInput("board", "/v1/getboard", "GET"), lazy: true });
 
 export const getState = (): RequestInput =>
     requestInput("status", "/v1/getboardstate", "GET");
 
-export const hasApiCredentials = (): boolean => getApiKeys().every(Boolean);
+export const hasApiCredentials = (): boolean => {
+    const { key, secret } = apiCredentials();
+    return !!key && !!secret;
+};
 
 export const getCollateral = (): RequestInput =>
     requestInput("collateral", "/v1/me/getcollateral", "GET");
@@ -18,7 +26,7 @@ export const getPositions = (): RequestInput =>
 export const executionPageSize = 50;
 
 export const getExecutions = (before?: number): RequestOptions | null => {
-    if (!getApiKeys().every(Boolean)) { return null; }
+    if (!hasApiCredentials()) { return null; }
     const page = { count: executionPageSize };
     return requestInput("executions", "/v1/me/getexecutions", "GET", undefined,
         before === undefined ? page : { ...page, before });
@@ -130,7 +138,7 @@ export const cancelParentOrder = (parentOrderId: string): RequestInput =>
     });
 
 const requestInput = (category: string, path: string, method: string, json?: object, q?: object) => {
-    const [key, secret] = getApiKeys();
+    const { key, secret, version } = apiCredentials();
 
     const url = `https://api.bitflyer.jp${path}`;
     const query: any = { product_code: "FX_BTC_JPY", ...q };
@@ -146,18 +154,15 @@ const requestInput = (category: string, path: string, method: string, json?: obj
         "Content-Type": "application/json",
     };
 
-    return { category, url, method, headers, send, query };
-};
-
-const getApiKeys = (): string[] => {
-    return [localStorage["api-key"], localStorage["api-secret"]];
+    return { category, url, method, headers, send, query,
+        credentialVersion: path.startsWith("/v1/me/") ? version : undefined };
 };
 
 const signature = (
     method: string,
     path: string,
     query: string,
-    secret: string,
+    secret: string | undefined,
     send: string,
     timestamp: string,
 ): string => {

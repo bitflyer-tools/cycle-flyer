@@ -153,7 +153,10 @@ test('the summary waits for a public execution before valuing an open position',
   };
 
   collateral$.shamefullySendNext(Stream.of({ text: JSON.stringify({ collateral: 2_000_000 }) }));
-  positions$.shamefullySendNext(Stream.of({ text: JSON.stringify([{ side: 'BUY', price: 10_000_000, size: 0.1 }]) }));
+  positions$.shamefullySendNext(Object.assign(
+    Stream.of({ text: JSON.stringify([{ side: 'BUY', price: 10_000_000, size: 0.1 }]) }),
+    { request: { category: 'positions' } },
+  ));
   assert.deepEqual(value('div.current-price'), ['span.number', 'Pending']);
   assert.deepEqual(value('div.position'), ['span.number', (10_000_000).toLocaleString()]);
   assert.deepEqual(value('div.position-size'), ['span.number', '0.1']);

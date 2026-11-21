@@ -4,6 +4,7 @@ import concat from "xstream/extra/concat";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {getParentOrders, hasApiCredentials, parentOrdersPageSize} from "../../http";
 import {ActiveParentOrder} from "./parentOrderDetails";
+import {privateResponses} from "./privateResponses";
 
 const pageTimeoutMs = 15000;
 
@@ -24,13 +25,13 @@ interface PageResult {
 
 export const parentOrderPages = (http: HTTPSource, nextSequence: () => number) => {
     let latestSequence = 0;
-    const firstPages$ = http.select("parent-orders")
+    const firstPages$ = privateResponses(http, "parent-orders")
         .map((response$) => {
             latestSequence = nextSequence();
             return readPage(response$, { orders: [], sequence: latestSequence });
         })
         .flatten();
-    const nextPages$ = http.select("parent-orders-page")
+    const nextPages$ = privateResponses(http, "parent-orders-page")
         .map((response$) => {
             const parentOrderList = (response$.request as PageRequest | undefined)?.parentOrderList;
             return parentOrderList?.sequence === latestSequence
