@@ -1,7 +1,7 @@
 import type {VNode} from "@cycle/dom";
 import type {RequestOptions} from "@cycle/http";
 import {deepStrictEqual, strictEqual} from "node:assert";
-import {test, TestContext} from "node:test";
+import {before, test, TestContext} from "node:test";
 import Stream from "xstream";
 import {State} from "../src/components/trade/order";
 import {intent} from "../src/components/trade/order/intent";
@@ -11,10 +11,23 @@ import {view} from "../src/components/trade/order/view";
 import {twapSection} from "../src/components/trade/order/twapView";
 import {twapRequest} from "../src/components/trade/order/twapRequest";
 import {Sources} from "../src/components/trade";
+import {hasApiCredentials, initializeCredentials} from "../src/credentials";
 import {TwapSliceRequest} from "../src/http";
 import {isRunning} from "../src/models/twapOrder";
 
-Object.defineProperty(globalThis, "localStorage", { value: { "api-key": "test", "api-secret": "test" } });
+before(async () => {
+    const storage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: { getItem: () => "test-credential", removeItem() {} },
+    });
+    try {
+        await initializeCredentials();
+    } finally {
+        if (storage) { Object.defineProperty(globalThis, "localStorage", storage); }
+        else { Reflect.deleteProperty(globalThis, "localStorage"); }
+    }
+});
 
 test("records overlapping slices and returns to idle in either response order", async (context) => {
     await Promise.all([[0, 1], [1, 0]].map(([first, second]) =>
@@ -75,7 +88,7 @@ test("ignores a new start while a schedule is waiting for responses", (context) 
 
 test("uses the starting schedule for progress and requests after inputs change", (context) => {
     const twap = createTwap(context, 10, 3);
-    const status = () => (twapSection(twap.state).children ?? [])
+    const status = () => (twapSection(twap.state, hasApiCredentials()).children ?? [])
         .flatMap((node) => typeof node === "object" && node?.sel === "p.twap-status" ? [node.text] : []);
 
     twap.buy.shamefullySendNext(null);
@@ -193,7 +206,8 @@ const createTwap = (context: TestContext, interval = 1, slices = 2) => {
     };
 };
 
-const fakeResponse = (request: TwapSliceRequest) => {
+const fakeResponse = (input: TwapSliceRequest) => {
+    const request = { ...input, credentialVersion: 0 };
     const response$ = Object.assign(Stream.createWithMemory<{request: TwapSliceRequest}>(), { request });
     return {
         response$,

@@ -10,7 +10,7 @@ const bundle = buildSync({
   format: 'cjs',
   platform: 'node',
   external: ['xstream'],
-  banner: { js: 'const window = {}; const localStorage = { "api-secret": "test" };' },
+  define: { window: 'undefined' },
   loader: { '.styl': 'empty' },
   write: false,
 });
@@ -95,6 +95,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
 
   t.mock.timers.tick(100);
   orders$.shamefullySendNext(Stream.of({
+    request: { credentialVersion: 0 },
     text: JSON.stringify([
       { side: 'BUY', price: 99999, size: 0.1, executed_size: 0.06, outstanding_size: 0.04 },
       { side: 'BUY', price: 99998, size: 0.2, executed_size: 0, outstanding_size: 0.2 },
@@ -147,11 +148,8 @@ test('the summary waits for a public execution before valuing an open position',
     return [field.sel, field.text];
   };
 
-  collateral$.shamefullySendNext(Stream.of({ text: JSON.stringify({ collateral: 2_000_000 }) }));
-  positions$.shamefullySendNext(Object.assign(
-    Stream.of({ text: JSON.stringify([{ side: 'BUY', price: 10_000_000, size: 0.1 }]) }),
-    { request: { category: 'positions' } },
-  ));
+  collateral$.shamefullySendNext(Stream.of({ request: { credentialVersion: 0 }, text: JSON.stringify({ collateral: 2_000_000 }) }));
+  positions$.shamefullySendNext(Stream.of({ request: { credentialVersion: 0 }, text: JSON.stringify([{ side: 'BUY', price: 10_000_000, size: 0.1 }]) }));
   assert.deepEqual(value('div.current-price'), ['span.number', 'Pending']);
   assert.deepEqual(value('div.position'), ['span.number', (10_000_000).toLocaleString()]);
   assert.deepEqual(value('div.position-size'), ['span.number', '0.1']);

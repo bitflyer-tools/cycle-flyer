@@ -1,6 +1,7 @@
 import {isValidMarketOrderSize} from "./order";
 
 export interface TwapOrder {
+    error?: string;
     interval: number;
     remaining: number;
     scheduleId?: symbol;
