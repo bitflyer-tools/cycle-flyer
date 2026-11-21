@@ -3,3 +3,12 @@
   display: grid
   grid-template-columns: 380px 1fr 380px
   grid-template-rows: 1fr
+
+  .trade-sidebar
+    grid-column: 1
+    grid-row: 1
+    min-width: 0
+    max-height: calc(100vh - 60px)
+    overflow-y: auto
+
+@import './executions/index.styl'
