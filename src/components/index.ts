@@ -9,6 +9,7 @@ import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {credentialsChanging$} from "../credentials";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
+import {prependOrderHistories} from "../models/orderHistory";
 import {Position} from "../models/position";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
@@ -96,13 +97,13 @@ export const Root = (sources: Sources): Sinks => {
         ).map(createCancellationOutcome).compose(flattenConcurrently),
     );
     const orderHistoryReducer$ = Stream.merge(
-        orderOutcome$.map(({ histories }) => histories.slice().reverse()),
+        orderOutcome$.map(({ histories }) => histories),
         // Keep timeout notices when the trade screen is inactive.
         twapOutcomes(sources.HTTP)
             .filter(({ status }) => status === "unconfirmed")
-            .map(({ histories }) => histories.slice().reverse()),
+            .map(({ histories }) => histories),
     ).map<Reducer<TradeState>>((histories) => (state) =>
-        state && { ...state, histories: histories.concat(state.histories) });
+        state && { ...state, histories: prependOrderHistories(state.histories, histories) });
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>

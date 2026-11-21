@@ -4,6 +4,7 @@ import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {isCurrentAccountRequest, isWriteDeadlineError} from "../../../drivers/httpDriver";
 import {TwapSliceRequest} from "../../../http";
 import {createOrderHistory, OrderHistory} from "../../../models/orderHistory";
+import {isOrderRejection} from "./rejection";
 
 type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 
@@ -69,7 +70,7 @@ const createOutcome = (
 ): Stream<OrderOutcome> =>
     stream$
         .last()
-        .mapTo<OrderStatus>("success")
+        .map<OrderStatus>((response) => isOrderRejection(response) ? "failed" : "success")
         .replaceError((error) => Stream.of<OrderStatus>(isWriteDeadlineError(error) ? "unconfirmed" : "failed"))
         .filter(() => isCurrentAccountRequest(stream$.request))
         .map((status) => ({ status, histories: createHistories(stream$.request.send as string, status) }));

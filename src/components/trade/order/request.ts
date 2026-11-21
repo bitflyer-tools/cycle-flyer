@@ -1,4 +1,4 @@
-import {HTTPSource, RequestInput, RequestOptions, Response} from "@cycle/http";
+import {HTTPSource, RequestInput, RequestOptions} from "@cycle/http";
 import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
@@ -8,6 +8,7 @@ import {AccountRequest, unsignedRequests$} from "../../../drivers/httpDriver";
 import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
+import {isOrderRejection} from "./rejection";
 import {canClearPosition, isValidIFDOCOOrder, isValidLimitOrder, isValidMarketOrder, isValidStopOrder} from "./validation";
 
 export interface OrderRequestBatch {
@@ -129,17 +130,3 @@ const clearPositionOrder = (state: State): AccountRequest => ({
     ...marketOrder(state.position.size, state.position.side === "BUY" ? "SELL" : "BUY") as RequestOptions,
     credentialVersion: state.positionCredentialVersion,
 });
-
-const isOrderRejection = (response?: Response): boolean => {
-    const status = response?.status ?? 0;
-    const hasDefinitiveStatus = (status >= 200 && status < 300)
-        || (status >= 400 && status < 500 && status !== 408);
-    if (!response || !hasDefinitiveStatus) return false;
-    try {
-        const body = JSON.parse(response.text);
-        return Number.isFinite(body?.status) && body.status < 0
-            && typeof body.error_message === "string" && body.error_message.trim().length > 0;
-    } catch {
-        return false;
-    }
-};
