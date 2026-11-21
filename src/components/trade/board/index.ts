@@ -29,7 +29,7 @@ export const BoardComponent = (sources: Sources): Sinks => {
     );
     const reducer$ = model(actions, boardReducer$);
     const view$ = view(sources.state.stream as any);
-    const request$ = request();
+    const request$ = request(sources.socket.reconnect$);
 
     return {
         DOM: view$,
