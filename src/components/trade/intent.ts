@@ -2,6 +2,7 @@ import {RequestOptions} from "@cycle/http";
 import {Stream} from "xstream";
 import debounce from "xstream/extra/debounce";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
+import {AccountRequest, isCurrentAccountRequest} from "../../drivers/httpDriver";
 import {Execution} from "../../models/execution";
 import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
@@ -9,7 +10,6 @@ import {Sources} from "./index";
 import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
 import {parentOrderPages} from "./parentOrderPages";
 import {pollResponse} from "./pollResponse";
-import {privateResponses} from "./privateResponses";
 import {PositionRequest} from "./request";
 
 export interface Actions {
@@ -23,16 +23,19 @@ export interface Actions {
     onParentOrdersLoaded$: Stream<{ orders: ActiveParentOrder[]; sequence: number }>;
     onParentOrderListSettled$: Stream<null>;
     parentOrderRequests$: Stream<RequestOptions>;
-    onPositionsLoaded$: Stream<{ position: Position; positionCloseId: symbol | undefined }>;
+    onPositionsLoaded$: Stream<{ position: Position; positionCredentialVersion: number; positionCloseId: symbol | undefined }>;
 }
 
 // Trade state survives navigation, so request and cancellation ordering must survive it too.
 let parentOrderSequence = 0;
 
 export const intent = (sources: Sources): Actions => {
-    const onCancelParentOrder$ = privateResponses(sources.HTTP, "cancel-parent-order")
+    const isCurrent = (response: { request: AccountRequest }) => isCurrentAccountRequest(response.request);
+
+    const onCancelParentOrder$ = sources.HTTP.select("cancel-parent-order")
         .map((response$) => response$.replaceError(() => Stream.empty()))
         .compose(flattenConcurrently)
+        .filter(isCurrent)
         .map((response) => ({
             id: JSON.parse(response.request.send as string).parent_order_id as string,
             sequence: ++parentOrderSequence,
@@ -47,13 +50,16 @@ export const intent = (sources: Sources): Actions => {
     ).compose(debounce(500));
 
     const ordersCanceled = Symbol("ordersCanceled");
-    const cancelOrders$ = privateResponses(sources.HTTP, "cancel-orders")
+    const cancelOrders$ = sources.HTTP.select("cancel-orders")
         .map((response$) => response$.replaceError(() => Stream.empty()))
         .compose(flattenConcurrently)
+        .filter(isCurrent)
         .mapTo<typeof ordersCanceled>(ordersCanceled);
 
     const orderLists$ = pollResponse<object[] | typeof ordersCanceled>(
-        privateResponses(sources.HTTP, "orders"), decodeOrders, cancelOrders$,
+        sources.HTTP.select("orders"),
+        (json, response) => isCurrent(response) ? decodeOrders(json) : undefined,
+        cancelOrders$,
     );
 
     const pages = parentOrderPages(sources.HTTP, () => ++parentOrderSequence);
@@ -64,8 +70,12 @@ export const intent = (sources: Sources): Actions => {
         sources.socket.parentOrderEvent$, sources.socket.reconnect$,
     );
 
-    const onPositionsLoaded$ = pollResponse(privateResponses(sources.HTTP, "positions"), (json, request: PositionRequest) =>
-        isPositionList(json) ? { position: new Position(json), positionCloseId: request.positionCloseId } : undefined);
+    const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json, response) =>
+        isCurrent(response) && isPositionList(json) ? {
+            position: new Position(json),
+            positionCredentialVersion: (response.request as AccountRequest).credentialVersion!,
+            positionCloseId: (response.request as PositionRequest).positionCloseId,
+        } : undefined);
 
     return {
         onCancelOrders$: orderLists$.filter((orders) => orders === ordersCanceled).mapTo(null),

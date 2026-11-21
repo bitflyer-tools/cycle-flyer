@@ -12,7 +12,7 @@ export const twapModel = (actions: TwapActions): Stream<Reducer<State>> => {
         .map((slices) => updateTwap((twap) => ({ ...twap, slices })));
 
     const startReducer$ = actions.onTwapStarted$
-        .map(({id}) => updateTwap((twap) => ({ ...twap, remaining: twap.slices, totalSlices: twap.slices, scheduleId: id })));
+        .map(({id}) => updateTwap((twap) => ({ ...twap, error: undefined, remaining: twap.slices, totalSlices: twap.slices, scheduleId: id })));
 
     const sliceReducer$ = actions.onTwapSliceOutcome$
         .map<Reducer<State>>(({scheduleId}) => (state) =>
