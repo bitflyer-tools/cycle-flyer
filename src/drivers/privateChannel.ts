@@ -1,24 +1,23 @@
-import * as hash from "hash.js";
 import {Socket} from "socket.io-client";
-import {apiCredentials} from "../credentials";
+import {currentCredentialVersion, signRealtime} from "../credentials";
 
 export const privateChannelNames = ["child_order_events", "parent_order_events"];
 
-export const authenticate = (client: Socket, onAuthenticated: () => void) => {
-    const { key: apiKey, secret: apiSecret } = apiCredentials();
-    if (!apiKey || !apiSecret) { return; }
+export const authenticate = async (client: Socket, onAuthenticated: () => void): Promise<void> => {
+    const connectionId = client.id;
+    const version = currentCredentialVersion();
+    if (version === null) { return; }
+    try {
+        const params = await signRealtime();
+        if (!params || version !== currentCredentialVersion() || !client.connected || client.id !== connectionId) { return; }
 
-    client.emit("auth", authParams(apiKey, apiSecret), (error: any) => error || onAuthenticated());
+        client.emit("auth", params, (error: any) => {
+            if (!error && client.connected && client.id === connectionId) {
+                onAuthenticated();
+            }
+        });
+    } catch {
+        // eslint-disable-next-line no-console
+        console.error("Unable to sign bitFlyer private-channel authentication.");
+    }
 };
-
-const authParams = (apiKey: string, apiSecret: string) => {
-    const timestamp = Date.now();
-    const nonce = randomHex(16);
-    const signature = hash.hmac((hash as any).sha256, apiSecret).update(`${timestamp}${nonce}`).digest("hex");
-    return { api_key: apiKey, nonce, signature, timestamp };
-};
-
-const randomHex = (bytes: number): string =>
-    Array.from(crypto.getRandomValues(new Uint8Array(bytes)))
-        .map((byte) => byte.toString(16).padStart(2, "0"))
-        .join("");

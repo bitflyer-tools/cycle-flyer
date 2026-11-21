@@ -5,6 +5,8 @@ import {RequestOptions} from "@cycle/http";
 import {StateSource} from "@cycle/state";
 import Stream from "xstream";
 import {Execution, ExecutionsComponent, State} from "../src/components/trade/executions";
+import {saveCredentials} from "../src/credentials";
+import {authorizeRequest, unsignedRequests$} from "../src/drivers/httpDriver";
 import {executionPageSize, getExecutions} from "../src/http";
 
 const execution = (id: number): Execution => ({
@@ -16,16 +18,9 @@ const execution = (id: number): Execution => ({
     child_order_acceptance_id: "JRF20250322-095740-000001",
 });
 
-function setup(t: TestContext, credentials = true) {
-    const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-    Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: credentials ? { "api-key": "test-key", "api-secret": "test-secret" } : {},
-    });
-    t.after(() => {
-        if (previous) { Object.defineProperty(globalThis, "localStorage", previous); }
-        else { Reflect.deleteProperty(globalThis, "localStorage"); }
-    });
+async function setup(t: TestContext, credentials = true) {
+    await saveCredentials(credentials ? { key: "test-key", secret: "test-secret" } : null);
+    t.after(() => saveCredentials(null));
 
     const refresh$ = Stream.create();
     const older$ = Stream.create();
@@ -60,6 +55,7 @@ function setup(t: TestContext, credentials = true) {
     );
     return {
         requests,
+        failSigning: () => unsignedRequests$.shamefullySendNext(requests.at(-1)!),
         refresh: () => refresh$.shamefullySendNext(null),
         older: () => older$.shamefullySendNext(null),
         page: (rows: Execution[]) => respond(Stream.of({ text: JSON.stringify(rows) })),
@@ -69,27 +65,24 @@ function setup(t: TestContext, credentials = true) {
     };
 }
 
-test("signs the newest and older private FX execution requests", (t) => {
-    setup(t);
-    [undefined, 41].forEach((before) => {
-        const request = getExecutions(before)!;
+test("signs the newest and older private FX execution requests", async (t) => {
+    await setup(t);
+    for (const before of [undefined, 41]) {
+        const request = await authorizeRequest(getExecutions(before)) as RequestOptions;
         const path = "/v1/me/getexecutions";
         const query = `?product_code=FX_BTC_JPY&count=${executionPageSize}` +
             (before === undefined ? "" : "&before=41");
         const headers = request.headers as Record<string, string>;
-        assert.equal(request.url, "https://api.bitflyer.jp" + path);
+        assert.equal(request.url, "https://api.bitflyer.jp" + path + query);
         assert.equal(request.method, "GET");
-        assert.deepEqual(request.query, {
-            product_code: "FX_BTC_JPY", count: executionPageSize, ...(before === undefined ? {} : { before }),
-        });
         assert.equal(headers["ACCESS-KEY"], "test-key");
         assert.equal(headers["ACCESS-SIGN"], createHmac("sha256", "test-secret")
             .update(headers["ACCESS-TIMESTAMP"] + "GET" + path + query).digest("hex"));
-    });
+    }
 });
 
-test("loads on demand, appends older fills and replaces the list on refresh", (t) => {
-    const panel = setup(t);
+test("loads on demand, appends older fills and replaces the list on refresh", async (t) => {
+    const panel = await setup(t);
     panel.older();
     assert.equal(panel.requests.length, 0);
     panel.refresh();
@@ -107,21 +100,21 @@ test("loads on demand, appends older fills and replaces the list on refresh", (t
     assert.match(panel.dom, /JRF20250322-095740-000001/);
 
     panel.older();
-    assert.equal((panel.requests[1].query as {before: number}).before, 10);
+    assert.equal(new URL(panel.requests[1].url).searchParams.get("before"), "10");
     panel.page([execution(10), execution(8), execution(9)]);
     assert.deepEqual(panel.state.rows.slice(-3).map((row) => row.id), [10, 9, 8]);
     panel.older();
     assert.equal(panel.requests.length, 2);
 
     panel.refresh();
-    assert.equal(Object.prototype.hasOwnProperty.call(panel.requests[2].query, "before"), false);
+    assert.equal(new URL(panel.requests[2].url).searchParams.has("before"), false);
     panel.page([]);
     assert.deepEqual(panel.state.rows, []);
     assert.match(panel.dom, /No executions found/);
 });
 
-test("reports permission failures and lets users retry without losing loaded fills", (t) => {
-    const panel = setup(t);
+test("reports permission failures and lets users retry without losing loaded fills", async (t) => {
+    const panel = await setup(t);
     panel.refresh();
     panel.page([execution(1)]);
     panel.refresh();
@@ -133,13 +126,17 @@ test("reports permission failures and lets users retry without losing loaded fil
     panel.fail(new Error("Network error"));
     assert.match(panel.dom, /Could not load executions/);
     panel.refresh();
+    panel.failSigning();
+    assert.match(panel.dom, /Could not sign the executions request/);
+    assert.equal(panel.state.loading, false);
+    panel.refresh();
     panel.page([execution(2)]);
     assert.equal(panel.state.error, undefined);
     assert.deepEqual(panel.state.rows, [execution(2)]);
 });
 
-test("explains missing credentials without sending a request", (t) => {
-    const panel = setup(t, false);
+test("explains missing credentials without sending a request", async (t) => {
+    const panel = await setup(t, false);
     panel.refresh();
     assert.equal(panel.requests.length, 0);
     assert.match(panel.dom, /Set an API key and secret/);

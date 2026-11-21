@@ -44,13 +44,14 @@ export interface Sinks {
 }
 
 export interface State {
-    credentialVersion?: symbol;
     canceledParentOrderIds?: ReadonlyMap<string, number>;
     currentPrice: number | null;
-    histories: OrderHistory[];
+    histories: readonly OrderHistory[];
     orders: Order[];
+    orderSigningError?: string;
     parentStopOrders: ParentStopOrders;
     position: Position;
+    positionCredentialVersion?: number;
     positionClose?: { id: symbol; size: number; settled: boolean; rejected?: boolean };
     price: number;
     lastExecutionPrice: number;
@@ -63,7 +64,6 @@ export interface State {
 export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
     orderRequests: Stream<OrderRequestBatch>;
 } => {
-    sources.socket.refreshCredentials?.();
     const executionsComponent = isolate(ExecutionsComponent, { state: "executionsComponentState" })({
         ...sources,
         DOM: sources.DOM as MainDOMSource,
@@ -78,7 +78,6 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
             },
             set: (state: State, summaryComponentState: SummaryComponentState) => ({
                 ...state,
-                position: summaryComponentState.position,
                 summaryComponentState,
             }),
         },
@@ -106,10 +105,11 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
         state: {
             get: (state: State) => state.orderComponentState && {
                 ...state.orderComponentState,
-                credentialVersion: state.credentialVersion,
                 currentPrice: state.currentPrice ?? 0,
                 histories: state.histories,
                 orders: state.orders,
+                orderSigningError: state.orderSigningError,
+                positionCredentialVersion: state.positionCredentialVersion,
                 parentStopOrders: state.parentStopOrders,
                 position: state.position,
                 price: state.price,

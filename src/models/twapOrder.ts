@@ -1,12 +1,13 @@
+import {isValidMarketOrderSize} from "./order";
+
 export interface TwapOrder {
+    error?: string;
     interval: number;
     remaining: number;
     scheduleId?: symbol;
     slices: number;
     totalSlices: number;
 }
-
-export const minimumOrderSize = 0.01;
 
 const maximumTimerDelay = 2 ** 31 - 1;
 export const maximumTwapInterval = maximumTimerDelay / 1000;
@@ -31,7 +32,7 @@ export const canStart = (twap: TwapOrder, size: number): boolean =>
     && Number.isInteger(twap.slices)
     && twap.slices > 0
     && isValidTwapInterval(twap.interval)
-    && sliceSize(size, twap.slices) >= minimumOrderSize;
+    && isValidMarketOrderSize(sliceSize(size, twap.slices));
 
 const orderPrecision = 8;
 

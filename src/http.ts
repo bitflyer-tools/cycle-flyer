@@ -1,21 +1,11 @@
 import {RequestInput, RequestOptions} from "@cycle/http";
-import * as hash from "hash.js";
-import {apiCredentials} from "./credentials";
-
-export interface PrivateRequest extends RequestOptions {
-    credentialVersion?: symbol;
-}
+import {hasApiCredentials} from "./credentials";
 
 export const getBoard = (): RequestInput =>
     ({ ...requestInput("board", "/v1/getboard", "GET"), lazy: true });
 
 export const getState = (): RequestInput =>
     requestInput("status", "/v1/getboardstate", "GET");
-
-export const hasApiCredentials = (): boolean => {
-    const { key, secret } = apiCredentials();
-    return !!key && !!secret;
-};
 
 export const getCollateral = (): RequestInput =>
     requestInput("collateral", "/v1/me/getcollateral", "GET");
@@ -62,6 +52,8 @@ export const marketOrder = (size: number, side: string): RequestInput => {
 };
 
 export interface TwapSliceRequest extends RequestOptions {
+    isTwapActive?: () => boolean;
+    onSigningFailure?: () => void;
     scheduleId: symbol;
 }
 
@@ -138,34 +130,12 @@ export const cancelParentOrder = (parentOrderId: string): RequestInput =>
     });
 
 const requestInput = (category: string, path: string, method: string, json?: object, q?: object) => {
-    const { key, secret, version } = apiCredentials();
-
-    const url = `https://api.bitflyer.jp${path}`;
-    const query: any = { product_code: "FX_BTC_JPY", ...q };
-    const queryString = "?" + Object.keys(query).reduce((acc, k) => acc + `&${k}=${query[k]}`, "").slice(1);
-
+    const query = { product_code: "FX_BTC_JPY", ...q } as Record<string, string | number>;
+    const queryString = Object.keys(query)
+        .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(query[key])}`)
+        .join("&");
+    const url = `https://api.bitflyer.jp${path}?${queryString}`;
     const send = json ? JSON.stringify(json) : "";
-    const timestamp = Date.now().toString();
-
-    const headers = {
-        "ACCESS-KEY": key,
-        "ACCESS-SIGN": signature(method, path, queryString, secret, send, timestamp),
-        "ACCESS-TIMESTAMP": timestamp,
-        "Content-Type": "application/json",
-    };
-
-    return { category, url, method, headers, send, query,
-        credentialVersion: path.startsWith("/v1/me/") ? version : undefined };
-};
-
-const signature = (
-    method: string,
-    path: string,
-    query: string,
-    secret: string | undefined,
-    send: string,
-    timestamp: string,
-): string => {
-    const text = timestamp + method + path + query + send;
-    return hash.hmac((hash as any).sha256, secret).update(text).digest("hex");
+    const headers = { "Content-Type": "application/json" };
+    return { category, url, method, headers, send };
 };

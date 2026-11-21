@@ -3,8 +3,9 @@ import {HTTPSource, Response} from "@cycle/http";
 import {Reducer, StateSource} from "@cycle/state";
 import Stream from "xstream";
 import sampleCombine from "xstream/extra/sampleCombine";
+import {currentCredentialVersion} from "../../../credentials";
+import {AccountRequest, isCurrentAccountRequest, unsignedRequests$} from "../../../drivers/httpDriver";
 import {executionPageSize, getExecutions} from "../../../http";
-import {privateResponses} from "../privateResponses";
 import {view} from "./view";
 
 export interface Execution {
@@ -30,22 +31,48 @@ interface Sources {
     state: StateSource<State>;
 }
 
-const initialState: State = { rows: [], loaded: false, loading: false };
+type ExecutionRequest = AccountRequest & { executionRequestId: symbol };
+
+export const initialState: State = { rows: [], loaded: false, loading: false };
 
 export const ExecutionsComponent = ({DOM, HTTP, state}: Sources) => {
+    let requestId: symbol | undefined;
     const requests$ = Stream.merge(
         DOM.select(".refresh-executions").events("click").mapTo(false),
         DOM.select(".load-older-executions").events("click").mapTo(true),
     ).compose(sampleCombine(state.stream))
         .filter(([older, current]) => !current.loading && (!older || current.before !== undefined))
-        .map(([older, current]) => getExecutions(older ? current.before : undefined));
+        .map(([older, current]): ExecutionRequest | null => {
+            const request = getExecutions(older ? current.before : undefined);
+            const credentialVersion = currentCredentialVersion();
+            if (!request || credentialVersion === null) { return null; }
+            requestId = Symbol("executions");
+            return { ...request, executionRequestId: requestId, credentialVersion };
+        });
 
-    const responses$ = privateResponses(HTTP, "executions")
+    const isPending = (input: unknown): boolean => {
+        const request = input as ExecutionRequest | undefined;
+        return requestId !== undefined && request?.executionRequestId === requestId && isCurrentAccountRequest(request);
+    };
+    const responses$ = HTTP.select("executions")
+        .filter(({ request }) => isPending(request))
         .map((response$) => {
-            const {before} = response$.request.query as {before?: number};
-            return response$.map((response): Reducer<State> => pageLoaded(readPage(response), before))
-                .replaceError((error) => Stream.of(loadFailed(errorMessage(error))));
+            const request = response$.request as ExecutionRequest;
+            const cursor = new URL(request.url).searchParams.get("before");
+            return response$.map((response): Reducer<State> =>
+                pageLoaded(readPage(response), cursor === null ? undefined : Number(cursor)))
+                .replaceError((error) => Stream.of(loadFailed(errorMessage(error))))
+                .filter(() => isPending(request));
         }).flatten();
+    const signingFailures$ = unsignedRequests$
+        .filter(isPending)
+        .mapTo(loadFailed("Could not sign the executions request. Check your bitFlyer credentials in Setting."));
+
+    const settled$ = Stream.merge(responses$, signingFailures$)
+        .map((reducer) => {
+            requestId = undefined;
+            return reducer;
+        });
 
     return {
         DOM: state.stream.map(view),
@@ -55,7 +82,7 @@ export const ExecutionsComponent = ({DOM, HTTP, state}: Sources) => {
             requests$.map<Reducer<State>>((request) => request
                 ? (current = initialState) => ({ ...current, loading: true, error: undefined })
                 : loadFailed("Set an API key and secret in Setting to read executions.")),
-            responses$,
+            settled$,
         ),
     };
 };

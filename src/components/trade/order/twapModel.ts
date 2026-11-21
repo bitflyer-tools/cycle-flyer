@@ -1,5 +1,6 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
+import {prependOrderHistories} from "../../../models/orderHistory";
 import {TwapOrder} from "../../../models/twapOrder";
 import {State} from "./index";
 import {TwapActions} from "./twapIntent";
@@ -12,12 +13,12 @@ export const twapModel = (actions: TwapActions): Stream<Reducer<State>> => {
         .map((slices) => updateTwap((twap) => ({ ...twap, slices })));
 
     const startReducer$ = actions.onTwapStarted$
-        .map(({id}) => updateTwap((twap) => ({ ...twap, remaining: twap.slices, totalSlices: twap.slices, scheduleId: id })));
+        .map(({id}) => updateTwap((twap) => ({ ...twap, error: undefined, remaining: twap.slices, totalSlices: twap.slices, scheduleId: id })));
 
     const sliceReducer$ = actions.onTwapSliceOutcome$
         .map<Reducer<State>>(({histories, scheduleId, status}) => (state) => state && ({
             ...state,
-            histories: status === "unconfirmed" ? state.histories : histories.concat(state.histories),
+            histories: status === "unconfirmed" ? state.histories : prependOrderHistories(state.histories, histories),
             twap: state.twap.scheduleId === scheduleId
                 ? { ...state.twap, remaining: Math.max(state.twap.remaining - 1, 0) }
                 : state.twap,
