@@ -1,11 +1,12 @@
 const assert = require('node:assert/strict');
-const { test } = require('node:test');
+const { before, test } = require('node:test');
 const { buildSync } = require('esbuild');
 const Stream = require('xstream').default;
 
 const { outputFiles } = buildSync({
   stdin: {
     contents: [
+      'export { saveCredentials } from "./src/credentials";',
       'export { canStart, defaultTwapOrder, sliceSize } from "./src/models/twapOrder";',
       'export { twapIntent } from "./src/components/trade/order/twapIntent";',
       'export { twapModel } from "./src/components/trade/order/twapModel";',
@@ -22,21 +23,23 @@ const { outputFiles } = buildSync({
 });
 const testModule = { exports: {} };
 new Function('require', 'module', 'localStorage', outputFiles[0].text)(
-  require, testModule, { 'api-key': 'test-key', 'api-secret': 'test-secret' },
+  require, testModule, { getItem: () => null, removeItem() {} },
 );
 const {
   canStart, defaultTwapOrder, sliceSize, twapIntent, twapModel, twapRequest, twapSection,
 } = testModule.exports;
+before(() => testModule.exports.saveCredentials({ key: 'test-key', secret: 'test-secret' }));
+
 const twap = { interval: 1, remaining: 0, slices: 29 };
 
 test('previews TWAP slices and enables both sides at the exact minimum', () => {
-  const { children: [, , , , status, buttons] } = twapSection({ size: 0.29, twap });
+  const { children: [, , , , status, buttons] } = twapSection({ size: 0.29, twap }, true);
   assert.equal(status.text, '0.01 x 29 every 1 sec');
   assert.deepEqual(buttons.children.map((button) => button.data.attrs.disabled), [false, false]);
 });
 
 test('keeps both sides disabled one unit below the required total', () => {
-  const { children: [, , , , status, buttons] } = twapSection({ size: 0.28999999, twap });
+  const { children: [, , , , status, buttons] } = twapSection({ size: 0.28999999, twap }, true);
   assert.equal(status.text, '0.00999999 x 29 every 1 sec');
   assert.deepEqual(buttons.children.map((button) => button.data.attrs.disabled), [true, true]);
 });
@@ -160,7 +163,7 @@ test('shows the timer limit and disables both sides for an overflowing interval'
   const { children: [, , , intervalHelp, , buttons] } = twapSection({
     size: 0.29,
     twap: { ...twap, interval: 2147483.648 },
-  });
+  }, true);
   assert.match(intervalHelp.text, /2147483\.647 seconds/);
   assert.deepEqual(buttons.children.map((button) => button.data.attrs.disabled), [true, true]);
 });
