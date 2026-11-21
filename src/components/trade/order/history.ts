@@ -5,6 +5,7 @@ import {isWriteDeadlineError} from "../../../drivers/httpDriver";
 import {TwapSliceRequest} from "../../../http";
 import {createOrderHistory, OrderHistory} from "../../../models/orderHistory";
 import {isCurrentResponse, privateResponses} from "../privateResponses";
+import {isOrderRejection} from "./rejection";
 
 type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 
@@ -70,7 +71,7 @@ const createOutcome = (
 ): Stream<OrderOutcome> =>
     stream$
         .last()
-        .mapTo<OrderStatus>("success")
+        .map<OrderStatus>((response) => isOrderRejection(response) ? "failed" : "success")
         .replaceError((error) => Stream.of<OrderStatus>(isWriteDeadlineError(error) ? "unconfirmed" : "failed"))
         .filter(() => isCurrentResponse(stream$))
         .map((status) => ({ status, histories: createHistories(stream$.request.send as string, status) }));
