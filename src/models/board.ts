@@ -11,6 +11,11 @@ export interface BoardLevels {
     bids: BoardOrder[];
 }
 
+export const isBoardLevels = (levels: unknown): levels is BoardLevels =>
+    typeof levels === "object" && levels !== null
+    && "asks" in levels && "bids" in levels
+    && isBoardSide(levels.asks) && isBoardSide(levels.bids);
+
 export class Board {
     public asks: BoardOrder[];
     public bids: BoardOrder[];
@@ -104,3 +109,7 @@ export class Board {
             new BoardOrder({ price: best + index * step, size: sizes[index] || 0 }));
     }
 }
+
+const isBoardSide = (orders: unknown): boolean =>
+    Array.isArray(orders) && orders.every((order) =>
+        Number.isFinite(order?.price) && Number.isFinite(order?.size));

@@ -160,13 +160,38 @@ test('reconciles the board immediately after reconnect and preserves in-flight u
     assert.equal(requests[1].url, requests[0].url);
     assert.equal(state.board.asks[1].price, 103);
 
+    const asks = [{ price: 102, size: 0 }, { price: 101, size: 9 }];
+    const malformedDeltas = [
+      { asks },
+      { asks, bids: null },
+      { asks, bids: {} },
+      { asks, bids: [null] },
+      { asks, bids: [{ price: '100', size: 1 }] },
+      { asks, bids: [{ price: 100, size: Infinity }] },
+      { asks: null, bids: [{ price: 100, size: 0 }] },
+      null,
+    ];
+    malformedDeltas.forEach((delta) => {
+      socket.receive(boardChannel, delta);
+      assert.equal(state.board.asks.length, 2);
+      assert.equal(state.board.asks[0].price, 102);
+      assert.equal(state.board.asks[0].size, 3);
+      assert.equal(state.board.bids.length, 1);
+      assert.equal(state.board.bids[0].size, 2);
+    });
+
     socket.receive(executionChannel, [{ side: 'SELL', price: 99 }]);
-    socket.receive(boardChannel, { asks: [{ price: 102, size: 4 }], bids: [] });
-    refresh.shamefullySendNext({ text: JSON.stringify({ ...snapshot, asks: [snapshot.asks[0]] }) });
-    refresh.shamefullySendComplete();
+    socket.receive(boardChannel, { asks: [{ price: 102, size: 4 }, { price: 103, size: 0 }], bids: [] });
     assert.equal(state.board.asks.length, 1);
+    assert.equal(state.board.asks[0].size, 4);
+    refresh.shamefullySendNext({ text: JSON.stringify({
+      ...snapshot, asks: [...snapshot.asks, { price: 105, size: 1 }],
+    }) });
+    refresh.shamefullySendComplete();
+    assert.equal(state.board.asks.length, 2);
     assert.equal(state.board.asks[0].price, 102);
     assert.equal(state.board.asks[0].size, 4);
+    assert.equal(state.board.asks[1].price, 105);
     assert.equal(state.board.bids.length, 0);
   } finally {
     http.unsubscribe();
