@@ -1,5 +1,6 @@
 import { io, Socket } from "socket.io-client";
 import Stream from "xstream";
+import {apiCredentials} from "../credentials";
 import {BoardLevels} from "../models/board";
 import {Execution} from "../models/execution";
 import {ChildOrderEvent, ParentOrderEvent} from "../models/orderEvent";
@@ -22,6 +23,13 @@ export class SocketIOSource {
     public reconnect$: Stream<null> = Stream.create();
     public parentOrderEvent$: Stream<ParentOrderEvent> = Stream.create();
 
+    public refreshCredentials(): void {
+        if (this.client.connected && this.connectionVersion !== apiCredentials().version) {
+            this.client.disconnect().connect();
+        }
+    }
+
+    private connectionVersion?: symbol;
     private channels: { [channelName: string]: (message: any) => void } = {
         [`lightning_board_${productCode}`]: (message) => this.board$.shamefullySendNext(message),
         [`lightning_executions_${productCode}`]: (messages: Execution[]) => {
@@ -32,18 +40,30 @@ export class SocketIOSource {
         parent_order_events: (events) => sendEach(this.parentOrderEvent$, events.filter(isTargetProduct)),
     };
 
-    constructor(client: Socket) {
+    constructor(private client: Socket) {
         const publicChannelNames = Object.keys(this.channels).filter((name) => privateChannelNames.indexOf(name) < 0);
 
+        let authenticatedVersion: symbol | undefined;
         let connectedOnce = false;
         client.on("connect", () => {
             publicChannelNames.forEach((channelName) => client.emit("subscribe", channelName));
-            authenticate(client, () => privateChannelNames.forEach((channelName) => client.emit("subscribe", channelName)));
+            const { version } = apiCredentials();
+            this.connectionVersion = version;
+            authenticatedVersion = undefined;
+            authenticate(client, () => {
+                if (version !== apiCredentials().version || version !== this.connectionVersion) { return; }
+                authenticatedVersion = version;
+                privateChannelNames.forEach((channelName) => client.emit("subscribe", channelName));
+            });
             if (connectedOnce) { this.reconnect$.shamefullySendNext(null); }
             connectedOnce = true;
         });
 
-        Object.keys(this.channels).forEach((channelName) => client.on(channelName, this.channels[channelName]));
+        Object.keys(this.channels).forEach((channelName) => client.on(channelName, (message) => {
+            if (!privateChannelNames.includes(channelName) || authenticatedVersion === apiCredentials().version) {
+                this.channels[channelName](message);
+            }
+        }));
     }
 }
 
