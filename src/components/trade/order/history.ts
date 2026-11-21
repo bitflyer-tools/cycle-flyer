@@ -76,7 +76,9 @@ const createOutcome = (
         }))
         .replaceError((error) => {
             const timedOut = isWriteDeadlineError(error);
-            const status: OrderStatus = timedOut || !error?.response ? "unconfirmed" : "failed";
+            const statusCode = error?.statusCode;
+            const hasHTTPError = !!error?.response || (statusCode >= 400 && statusCode < 600);
+            const status: OrderStatus = !timedOut && hasHTTPError ? "failed" : "unconfirmed";
             return Stream.of({ status, timedOut });
         })
         .filter(() => isCurrentAccountRequest(stream$.request))

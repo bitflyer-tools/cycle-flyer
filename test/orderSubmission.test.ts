@@ -353,6 +353,31 @@ for (const [category, entries] of disconnectedOrders) {
     });
 }
 
+for (const [statusCode, expectedStatus] of [[400, "failed"], [200, "unconfirmed"]] as const) {
+    test(`records a malformed HTTP ${statusCode} order response as ${expectedStatus}`, { timeout: 5_000 }, async (t) => {
+        const server = createServer((request, response) => {
+            request.resume();
+            response.writeHead(statusCode, { "Content-Type": "application/json" });
+            response.end("{");
+        });
+        t.after(() => {
+            server.closeAllConnections();
+            server.close();
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const { port } = server.address() as { port: number };
+        const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${port}`, writeDeadline: 2_000, apis: [] });
+
+        order.buy("market");
+        await order.waitForHistoryCount(1);
+
+        equal(order.state.isOrdering, false);
+        deepEqual(order.sounds, ["failure"]);
+        deepEqual(order.histories.map(({ name, status }) => [name, status]), [["Market", expectedStatus]]);
+    });
+}
+
 test("records a rejected limit order and permits a retry", (t) => {
     const order = setup(t, "0.01", { apis: ["Date", "setInterval", "setTimeout"] });
     order.enterPrice("900");
