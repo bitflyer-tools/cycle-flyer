@@ -104,3 +104,12 @@ export class Board {
             new BoardOrder({ price: best + index * step, size: sizes[index] || 0 }));
     }
 }
+
+export const isBoardLevels = (value: unknown): value is BoardLevels =>
+    typeof value === "object" && value !== null
+    && "asks" in value && isBoardSide(value.asks)
+    && "bids" in value && isBoardSide(value.bids);
+
+const isBoardSide = (orders: unknown): boolean =>
+    Array.isArray(orders) && orders.every((order) =>
+        Number.isFinite(order?.price) && Number.isFinite(order?.size));
