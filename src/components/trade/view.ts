@@ -11,5 +11,5 @@ export const view = (
     Stream.combine(summaryComponentDOM$, boardComponentDOM$, orderComponentDOM$, executionsComponentDOM$,
         recentTradesDOM$)
         .map(([summary, board, order, executions, recentTrades]) => div(".trade", [
-            div(".trade-sidebar", [executions, summary]), board, order, recentTrades,
+            div(".trade-sidebar", [summary, executions]), board, order, recentTrades,
         ]));

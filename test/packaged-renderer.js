@@ -41,6 +41,32 @@ const checkRenderer = async () => {
   assert.equal(await contents.executeJavaScript(
     "getComputedStyle(document.querySelector('.content .trade')).display"
   ), 'grid', 'Trade uses the bundled stylesheet');
+  assert.deepEqual(window.getSize(), [800, 600]);
+  await contents.executeJavaScript(`(() => {
+    const element = (selector) => document.querySelector(selector);
+    const bounds = (selector) => element(selector).getBoundingClientRect();
+    const check = (condition, message) => {
+      if (!condition) throw new Error(message);
+    };
+    const board = bounds('.board');
+    const trades = bounds('.recent-trades');
+    const account = bounds('.trade-sidebar');
+    const order = bounds('.order');
+    check(board.top === trades.top && board.right <= trades.left,
+      'The board and recent trades are side by side');
+    check(account.top >= board.bottom && order.top === account.top,
+      'Account information and the order form share the lower row');
+    check(document.scrollingElement.scrollHeight === innerHeight &&
+      document.scrollingElement.scrollWidth === innerWidth,
+      'The default Trade view fits in the window');
+    check(bounds('.collateral').bottom <= account.bottom &&
+      bounds('.market-order-buttons').bottom <= order.bottom,
+      'Collateral and market order controls are visible on startup');
+    element('.order').scrollTop = element('.order').scrollHeight;
+    check(element('.order').scrollTop > 0 && window.scrollY === 0,
+      'Additional order types are reachable within the order panel');
+    element('.order').scrollTop = 0;
+  })()`);
   assert.deepEqual(await contents.executeJavaScript(
     '[typeof require, typeof process, typeof module, typeof Buffer]'
   ), ['undefined', 'undefined', 'undefined', 'undefined']);
