@@ -10,6 +10,7 @@ import {ActiveParentOrder} from "../src/components/trade/parentOrderDetails";
 import {request} from "../src/components/trade/request";
 import {credentialsChanging$, currentCredentialVersion, initializeCredentials, saveCredentials} from "../src/credentials";
 import {unsignedRequests$} from "../src/drivers/httpDriver";
+import {parentOrdersPageSize} from "../src/http";
 import {ParentOrderEvent} from "../src/models/orderEvent";
 import {flattenStopOrders} from "../src/models/parentStopOrders";
 
@@ -319,6 +320,35 @@ test("coalesces periodic and order-event refreshes until all parent order pages 
     trade.fail(trade.listRequests[2]);
     t.mock.timers.tick(10000);
     strictEqual(trade.listRequests.length, 4);
+});
+
+[
+    { name: "an invalid order", page: [{ id: 1 }] },
+    { name: "a repeated cursor", page: Array.from({ length: parentOrdersPageSize }, (_, index) => ({
+        id: index + 2, parent_order_id: `repeated-${index}`,
+    })) },
+].forEach(({ name, page }) => {
+    test(`keeps the last complete parent order list when a later page contains ${name}`, (t) => {
+        t.mock.timers.enable({ apis: ["setInterval"] });
+        const trade = setup(t);
+        const state = observeState(t, trade.actions);
+        trade.list(["old"]);
+        t.mock.timers.tick(10000);
+        const firstPage = Array.from({ length: parentOrdersPageSize }, (_, index) => ({
+            id: index + 2, parent_order_id: `partial-${index}`,
+        }));
+        trade.respond(trade.listRequests[1], firstPage);
+        strictEqual(trade.pageRequests.length, 1);
+
+        trade.respond(trade.pageRequests[0], page);
+        strictEqual(trade.pageRequests.length, 1);
+        deepStrictEqual(Object.keys(state().parentStopOrders), ["old"]);
+
+        t.mock.timers.tick(10000);
+        strictEqual(trade.listRequests.length, 3);
+        trade.respond(trade.listRequests[2], [{ id: 1, parent_order_id: "new" }]);
+        deepStrictEqual(Object.keys(state().parentStopOrders), ["new"]);
+    });
 });
 
 ["first", "later"].forEach((stalledPage) => {
