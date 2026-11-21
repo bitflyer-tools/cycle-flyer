@@ -5,14 +5,11 @@ import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {Actions as TradeActions} from "../src/components/trade/intent";
 import {model as tradeModel} from "../src/components/trade/model";
-import {TwapSliceOutcome} from "../src/components/trade/order/history";
-import {Actions as OrderActions} from "../src/components/trade/order/intent";
-import {model as orderModel} from "../src/components/trade/order/model";
 import {State as SummaryState} from "../src/components/trade/summary";
 import {view} from "../src/components/trade/summary/view";
 import {Execution} from "../src/models/execution";
 import {ChildOrderEvent} from "../src/models/orderEvent";
-import {createOrderHistory, HISTORY_LIMIT} from "../src/models/orderHistory";
+import {createOrderHistory, HISTORY_LIMIT, prependOrderHistories} from "../src/models/orderHistory";
 
 const withIdleActions = <Actions>(actions: Partial<Actions>): Actions =>
     new Proxy(actions, { get: (target, key) => Reflect.get(target, key) ?? Stream.never() }) as Actions;
@@ -29,25 +26,16 @@ const child = (node: VNode, selector: string): VNode => {
     return match;
 };
 
-test("TWAP slice results retain only the newest history entries", () => {
-    const slices$ = Stream.create<TwapSliceOutcome>();
-    const state = collectState(orderModel(withIdleActions<OrderActions>({
-        onTwapSliceOutcome$: slices$,
-    }), Stream.of(false)));
-
+test("Prepending a batch retains only the newest history entries", () => {
     const entries = Array.from({ length: HISTORY_LIMIT * 2 + 2 }, (_, index) =>
         createOrderHistory("Order", "BUY", index, 0, "success"),
     );
-    const scheduleId = Symbol();
-    const sliceEntries = entries.slice(1, -1);
-    slices$.shamefullySendNext({ status: "success", scheduleId, histories: entries.slice(0, 1) });
-    slices$.shamefullySendNext({ status: "success", scheduleId, histories: sliceEntries });
+    const batch = entries.slice(1, -1);
+    const histories = prependOrderHistories(entries.slice(0, 1), batch);
 
-    assert.deepEqual(state().histories, entries.slice(-HISTORY_LIMIT - 1, -1).reverse());
-    assert.deepEqual(sliceEntries, entries.slice(1, -1));
-
-    slices$.shamefullySendNext({ status: "success", scheduleId, histories: entries.slice(-1) });
-    assert.deepEqual(state().histories, entries.slice(-HISTORY_LIMIT).reverse());
+    assert.deepEqual(histories, entries.slice(-HISTORY_LIMIT - 1, -1).reverse());
+    assert.deepEqual(batch, entries.slice(1, -1));
+    assert.deepEqual(prependOrderHistories(histories, entries.slice(-1)), entries.slice(-HISTORY_LIMIT).reverse());
 });
 
 test("Private executions cap rendered rows and public executions reuse the history list", () => {

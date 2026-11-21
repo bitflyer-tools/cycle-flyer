@@ -13,6 +13,7 @@ import Stream, {MemoryStream} from "xstream";
 import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
+import {twapStorageKeys} from "../src/components/trade/order/twapIntent";
 import {stopSection} from "../src/components/trade/order/stopView";
 import {storageKeys} from "../src/components/trade/order/intent";
 import {Execution} from "../src/models/execution";
@@ -846,6 +847,57 @@ for (const category of ["limit-order", "cancel-orders", "market-order"] as const
 }
 
 for (const route of ["/", "/setting"]) {
+    for (const status of ["success", "failed", "unconfirmed"] as const) {
+        test(`records and notifies a TWAP slice once when it settles on ${route} (${status})`, async (t) => {
+            const order = setup(t, "0.01", { twapSlices: 2 });
+            await saveCredentials({ key: "test-key", secret: "test-secret" });
+            t.after(() => saveCredentials(null));
+            order.enterSize("0.02");
+            order.buyTWAP();
+            equal(order.state.twap.remaining, 2);
+            deepEqual(order.requests.map(({ category }) => category), ["twap-order"]);
+            const response = order.respondTo(order.requests[0]);
+
+            if (route === "/setting") {
+                order.navigate(route);
+                equal(order.state.twap.remaining, 0);
+                equal(order.state.twap.scheduleId, undefined);
+                t.mock.timers.tick(1000);
+                equal(order.requests.length, 1);
+            }
+
+            response.progress();
+            deepEqual(order.histories, []);
+            deepEqual(order.sounds, []);
+            if (status === "success") response.succeed({ child_order_acceptance_id: "JRF-TWAP" });
+            else if (status === "failed") response.reject();
+            else response.fail(Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }));
+
+            const sounds = [status === "success" ? "success" : "failure"];
+            deepEqual(order.sounds, sounds);
+            if (route === "/setting") {
+                order.navigate("/");
+                t.mock.timers.tick(1000);
+                equal(order.requests.length, 1);
+            }
+            equal(order.state.twap.remaining, route === "/setting" ? 0 : 1);
+            deepEqual(order.histories.map(({ name, description, status }) => ({ name, description, status })), [
+                { name: "TWAP", description: "BUY / 0.01 / MARKET", status },
+            ]);
+            deepEqual(order.sounds, sounds);
+            if (status === "unconfirmed") {
+                summaryView(Stream.of<SummaryState>({
+                    ...order.tradeState,
+                    priceAlert: order.tradeState.summaryComponentState!.priceAlert,
+                    collateral: 0,
+                    marketState: { health: "", state: "" },
+                })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /Unconfirmed \(timed out\)/) });
+            }
+        });
+    }
+}
+
+for (const route of ["/", "/setting"]) {
     test(`records a TWAP slice deadline once when it expires on ${route}`, (t) => {
         const order = setup(t);
         Array.from({ length: HISTORY_LIMIT }, (_, index) => {
@@ -918,10 +970,11 @@ test("ignores write deadlines from the previous account", async (t) => {
 
 function setup(t: TestContext, width = "0.01", options: {
     initialPrice?: number | null;
+    twapSlices?: number;
     writeOrigin?: string;
     apis?: Array<"Date" | "setInterval">;
 } = {}) {
-    const { initialPrice = 10000000, writeOrigin, apis = ["setInterval"] } = options;
+    const { initialPrice = 10000000, twapSlices = 3, writeOrigin, apis = ["setInterval"] } = options;
     if (apis.length > 0) t.mock.timers.enable({ apis, now: 1000 });
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-key": "test", "api-secret": "test" } });
@@ -939,6 +992,7 @@ function setup(t: TestContext, width = "0.01", options: {
         market: Stream.create<null>(),
         stop: Stream.create<null>(),
     };
+    const sizeInput$ = Stream.create<{ target: { value: string } }>();
     const priceInput$ = Stream.createWithMemory<{ target: { value: string } }>();
     priceInput$.shamefullySendNext({ target: { value: "100000" } });
     const triggerInput$ = Stream.createWithMemory<{ target: { value: string } }>();
@@ -959,16 +1013,26 @@ function setup(t: TestContext, width = "0.01", options: {
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
         "#price-input": { input: priceInput$ },
+        "#size-input": { input: sizeInput$ },
         "#trigger-price-input": { input: triggerInput$ },
         ".order-buttons": { ".clear-order-button": { click: clearOrders$ }, ".clear-button": { click: clearPosition$ } },
-        ".twap-order-buttons": { ".buy-button": { click: buyTWAP$ } },
         ".limit-order-buttons": { ".buy-button": { click: buy$.limit } },
         ".market-order-buttons": { ".buy-button": { click: buy$.market } },
         ".stop-order-buttons": { ".buy-button": { click: buy$.stop }, ".sell-button": { click: sellStop$ } },
+        ".twap-order-buttons": {
+            ".buy-button": { click: buyTWAP$ },
+            ".cancel-button": { click: Stream.never() },
+        },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buy$.ifdoco },
             ".sell-button": { click: sellIFDOCO$ },
         },
+    };
+    const storedValues: Record<string, string> = {
+        [storageKeys.priceWidth]: width,
+        [twapStorageKeys.interval]: "1",
+        [twapStorageKeys.slices]: String(twapSlices),
+        [storageKeys.size]: "0.03",
     };
     const main: Sinks = routerify(Root, switchPath)({
         DOM: mockDOMSource({ ".___trade": new Proxy({}, { get: (_, selector) =>
@@ -985,9 +1049,7 @@ function setup(t: TestContext, width = "0.01", options: {
             reconnect$: Stream.never(),
         },
         state: new StateSource(state$, "state"),
-        storage: { local: { getItem: (key: string) =>
-            Stream.of(key === storageKeys.priceWidth ? width : { "twap-slices": "3", "twap-interval": "1", "order-size": "0.03" }[key] || "0.01"),
-        } },
+        storage: { local: { getItem: (key: string) => Stream.of(storedValues[key] ?? "0.01") } },
     } as unknown as Omit<Sources, "router"> & { history: typeof history$ });
 
     let state: { trade?: TradeState } | undefined;
@@ -1041,6 +1103,7 @@ function setup(t: TestContext, width = "0.01", options: {
         get clearPositionDisabled() { return findNode(vNode, "button.clear-button")?.data?.attrs?.disabled; },
         get positionRequests() { return polls.filter(({ category }) => category === "positions"); },
         clearOrders: () => clearOrders$.shamefullySendNext(null),
+        enterSize: (value: string) => sizeInput$.shamefullySendNext({ target: { value } }),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         enterTriggerPrice: (value: string) => triggerInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
