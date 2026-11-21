@@ -98,3 +98,38 @@ test("size 50 includes every level in the last visible bucket and skips gaps", (
     assert.deepEqual(rows(board.groupedAsks(50)), [...rows(asks.slice(0, 199)), [49_900, 10]]);
     assert.deepEqual(rows(board.groupedBids(50)), [...rows(bids.slice(0, 199)), [5_100, 10]]);
 });
+
+test("size 100 examines at most 201 distinct levels per side on a 5,000-level book", () => {
+    const asks = Array.from({length: 5_000}, (_, index) => level(1_000_000 + index * 100, index + 1));
+    const bids = Array.from({length: 5_000}, (_, index) => level(999_900 - index * 100, index + 1));
+    const board = new Board({asks, bids});
+
+    for (const [orders, group, expected] of [
+        [board.asks, () => board.groupedAsks(100), asks],
+        [board.bids, () => board.groupedBids(100), bids],
+    ]) {
+        const examined = new Set();
+        orders.forEach((order) => {
+            const price = order.price;
+            Object.defineProperty(order, "price", {get: () => {
+                examined.add(order);
+                return price;
+            }});
+        });
+
+        assert.deepEqual(rows(group()), rows(expected.slice(0, 200)));
+        assert.ok(examined.size <= 201, `Examined ${examined.size} levels`);
+    }
+});
+
+test("size 100 fills gaps and sums every level in the last visible bucket", () => {
+    const board = new Board({
+        asks: [level(30_050, 1), level(49_901, 2), level(49_950, 3), level(50_000, 4), level(50_001, 8)],
+        bids: [level(29_950, 1), level(10_099, 2), level(10_050, 3), level(10_000, 4), level(9_999, 8)],
+    });
+
+    assert.deepEqual(rows(board.groupedAsks(100)), Array.from({length: 200}, (_, index) =>
+        [30_100 + index * 100, index === 0 ? 1 : index === 199 ? 9 : 0]));
+    assert.deepEqual(rows(board.groupedBids(100)), Array.from({length: 200}, (_, index) =>
+        [29_900 - index * 100, index === 0 ? 1 : index === 199 ? 9 : 0]));
+});
