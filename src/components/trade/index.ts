@@ -17,6 +17,7 @@ import "./index.styl";
 import {intent} from "./intent";
 import {model} from "./model";
 import {OrderComponent, State as OrderComponentState} from "./order";
+import {CancellationOutcome} from "./order/history";
 import {OrderRequestBatch} from "./order/request";
 import {request} from "./request";
 import {State as SummaryComponentState} from "./summary";
@@ -59,7 +60,9 @@ export interface State {
     summaryComponentState?: SummaryComponentState;
 }
 
-export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
+export const Trade = (
+    sources: Sources, isOrdering$: Stream<boolean>, cancellationOutcome$?: Stream<CancellationOutcome>,
+): Sinks & {
     orderRequests: Stream<OrderRequestBatch>;
 } => {
     const summaryComponent = isolate(SummaryComponent, {
@@ -119,7 +122,7 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
         },
     })(sources, isOrdering$);
 
-    const actions = intent(sources);
+    const actions = intent(sources, cancellationOutcome$);
     const reducer$ = model(actions);
     const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM);
     const settledCloseId$ = sources.state.stream

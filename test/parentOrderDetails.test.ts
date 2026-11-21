@@ -4,6 +4,8 @@ import {deepStrictEqual, strictEqual} from "node:assert";
 import {before, test} from "node:test";
 import Stream from "xstream";
 import type {State} from "../src/components/trade";
+import {cancellationReducer} from "../src/components/trade/cancellation";
+import {CancellationOutcome} from "../src/components/trade/order/history";
 import {intent} from "../src/components/trade/intent";
 import {model} from "../src/components/trade/model";
 import {ActiveParentOrder} from "../src/components/trade/parentOrderDetails";
@@ -29,7 +31,7 @@ before(async () => {
 
 test("retires a canceled parent only after a fresh list omits it", (t) => {
     const trade = setup(t);
-    const state = observeState(t, trade.actions);
+    const state = observeState(t, trade.actions, trade.cancellations$);
     trade.list(["a"]);
     const detail$ = Stream.create<Response>();
     trade.send(trade.requests[0], detail$);
@@ -53,7 +55,7 @@ test("retires a canceled parent only after a fresh list omits it", (t) => {
 
 test("confirming refreshes retire each of 1,000 distinct cancellation IDs", (t) => {
     const trade = setup(t);
-    const state = observeState(t, trade.actions);
+    const state = observeState(t, trade.actions, trade.cancellations$);
     Array.from({ length: 1000 }, (_, index) => `parent-${index}`).forEach((id) => {
         trade.cancel(id);
         deepStrictEqual(Array.from(state().canceledParentOrderIds!.keys()), [id]);
@@ -65,7 +67,7 @@ test("confirming refreshes retire each of 1,000 distinct cancellation IDs", (t) 
 
 test("a list started between two cancellations confirms only the earlier cancellation", (t) => {
     const trade = setup(t);
-    const state = observeState(t, trade.actions);
+    const state = observeState(t, trade.actions, trade.cancellations$);
     trade.cancel("a");
     const list$ = trade.startList();
     trade.cancel("b");
@@ -105,7 +107,7 @@ test("retries only failed and new details after a list refresh", (t) => {
 test("retries a stalled parent detail on the next poll and ignores its late response", (t) => {
     t.mock.timers.enable({apis: ["setInterval"]});
     const trade = setup(t);
-    const state = observeState(t, trade.actions);
+    const state = observeState(t, trade.actions, trade.cancellations$);
     const detail = (trigger_price: number) => ({
         parent_order_id: "a",
         parameters: [{condition_type: "STOP", side: "SELL", size: 0.1, trigger_price}],
@@ -167,7 +169,7 @@ test("retries a parent detail whose request could not be signed", (t) => {
 test("preserves a stop marker after malformed details and installs the retried detail", (t) => {
     t.mock.timers.enable({apis: ["setInterval"]});
     const trade = setup(t);
-    const state = observeState(t, trade.actions);
+    const state = observeState(t, trade.actions, trade.cancellations$);
     const stop = (trigger_price: number) => ({condition_type: "STOP", side: "SELL", size: 0.1, trigger_price});
     trade.list(["a"]);
     trade.respond(trade.requests[0], {parent_order_id: "a", parameters: [stop(100)]});
@@ -272,7 +274,7 @@ test("reconciles on reconnect and ignores responses for removed parents", async 
 test("coalesces periodic and order-event refreshes until all parent order pages arrive", (t) => {
     t.mock.timers.enable({apis: ["setInterval"]});
     const trade = setup(t);
-    const state = observeState(t, trade.actions);
+    const state = observeState(t, trade.actions, trade.cancellations$);
     const firstPage$ = trade.startList();
     const orders = Array.from({length: 100}, (_, index) => ({
         id: index + 2, parent_order_id: `parent-${index + 2}`,
@@ -310,7 +312,7 @@ test("coalesces periodic and order-event refreshes until all parent order pages 
     test(`recovers when the ${stalledPage} parent order page times out`, (t) => {
         t.mock.timers.enable({apis: ["setInterval"]});
         const trade = setup(t);
-        const state = observeState(t, trade.actions);
+        const state = observeState(t, trade.actions, trade.cancellations$);
         trade.list(["old"]);
         t.mock.timers.tick(10000);
         const firstPage$ = trade.startList();
@@ -339,7 +341,7 @@ test("coalesces periodic and order-event refreshes until all parent order pages 
 
 test("does not apply parent order pages from the previous account after credentials change", async (t) => {
     const trade = setup(t);
-    const state = observeState(t, trade.actions);
+    const state = observeState(t, trade.actions, trade.cancellations$);
     const firstPage$ = trade.startList();
     const orders = Array.from({length: 100}, (_, index) => ({
         id: index + 2, parent_order_id: `previous-${index}`,
@@ -359,14 +361,16 @@ test("does not apply parent order pages from the previous account after credenti
     deepStrictEqual(Object.keys(state().parentStopOrders), ["current"]);
 });
 
-const observeState = (t: { after: (cleanup: () => void) => void }, actions: ReturnType<typeof intent>) => {
+const observeState = (t: { after: (cleanup: () => void) => void }, actions: ReturnType<typeof intent>,
+                      cancellations$: Stream<CancellationOutcome>) => {
     let state: State | undefined;
-    const subscription = model(actions).subscribe({ next: (reducer) => { state = reducer(state); } });
+    const subscription = Stream.merge(model(actions), cancellations$.map(cancellationReducer)).subscribe({ next: (reducer) => { state = reducer(state); } });
     t.after(() => subscription.unsubscribe());
     return () => state!;
 };
 
 const setup = (t: { after: (cleanup: () => void) => void }) => {
+    const cancellations$ = Stream.create<CancellationOutcome>();
     const events = Stream.create<ParentOrderEvent>();
     const reconnect = Stream.create<null>();
     const channels = new Map<string, Stream<Stream<Response>>>();
@@ -411,10 +415,9 @@ const setup = (t: { after: (cleanup: () => void) => void }) => {
 
     return {
         actions,
-        cancel: (id: string) => {
-            const input = { category: "cancel-parent-order", url: "", send: JSON.stringify({ parent_order_id: id }) };
-            send(input, Stream.of({ request: input } as Response));
-        },
+        cancellations$,
+        cancel: (parentOrderId: string) =>
+            cancellations$.shamefullySendNext({ parentOrderId, status: "success", histories: [] }),
         complete: (input: RequestOptions, credentialVersion?: number) =>
             respond(input, { parent_order_id: requestedId(input), parameters: [] }, credentialVersion),
         events,

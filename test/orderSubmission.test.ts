@@ -334,6 +334,47 @@ test("reports mixed Clear Orders results and stays locked until every request se
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
 
+for (const outcome of ["succeed", "fail"] as const) {
+    test(`reconciles Clear Orders after it settles in Settings (${outcome})`, async (t) => {
+        const order = setup(t, "0.01", { apis: [] });
+        await saveCredentials({ key: "test-key", secret: "test-secret" });
+        t.after(() => saveCredentials(null));
+        const childOrders = [{ price: 100, side: "BUY", outstanding_size: 0.01 }];
+        const parentOrders = [{ parent_order_id: "JCO-stop" }];
+        order.respondTo(order.polls.find(({ category }) => category === "orders")!).succeed(childOrders);
+        order.respondTo(order.polls.find(({ category }) => category === "parent-orders")!).succeed(parentOrders);
+        order.respondTo(order.parentDetails.get("JCO-stop")!).succeed({
+            parent_order_id: "JCO-stop",
+            parameters: [{ condition_type: "STOP", trigger_price: 200 }],
+        });
+        equal(order.clearOrdersDisabled, false);
+
+        order.clearOrders();
+        deepEqual(order.requests.map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
+        const pending = order.requests.map((request) => order.respondTo(request));
+        order.navigate("/setting");
+        await flush();
+        pending.forEach((response) => response[outcome]());
+
+        const pollsBeforeReturn = order.polls.length;
+        order.navigate("/");
+        await flush();
+        equal(order.polls.slice(pollsBeforeReturn).some(({ category }) => category === "orders"), true);
+        const succeeded = outcome === "succeed";
+        equal(order.state.isOrdering, false);
+        equal(order.clearOrdersDisabled, succeeded);
+        deepEqual(order.tradeState.orders.map(({ price }) => price), succeeded ? [] : [100]);
+        deepEqual(flattenStopOrders(order.tradeState.parentStopOrders).map(({ price }) => price),
+            succeeded ? [] : [200]);
+        const status = succeeded ? "success" : "failed";
+        deepEqual(order.histories.map(({ description, status }) => [description, status]), [
+            ["Parent order JCO-stop", status], ["All child orders", status],
+        ]);
+        const sound = succeeded ? "success" : "failure";
+        deepEqual(order.sounds, [sound, sound]);
+    });
+}
+
 test("reports a failed bulk cancellation and keeps the child orders visible", (t) => {
     const order = setup(t);
     order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getorders", category: "orders", _namespace: ["trade"] }).succeed([
@@ -1103,6 +1144,7 @@ function setup(t: TestContext, width = "0.01", options: {
         get clearPositionDisabled() { return findNode(vNode, "button.clear-button")?.data?.attrs?.disabled; },
         get positionRequests() { return polls.filter(({ category }) => category === "positions"); },
         clearOrders: () => clearOrders$.shamefullySendNext(null),
+        get clearOrdersDisabled() { return findNode(vNode, "button.clear-order-button")?.data?.attrs?.disabled; },
         enterSize: (value: string) => sizeInput$.shamefullySendNext({ target: { value } }),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         enterTriggerPrice: (value: string) => triggerInput$.shamefullySendNext({ target: { value } }),
