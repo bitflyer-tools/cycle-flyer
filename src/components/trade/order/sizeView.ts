@@ -1,8 +1,9 @@
 import {button, div, h4, VNode} from "@cycle/dom";
+import {minimumMarketOrderSize} from "../../../models/order";
 import {State} from "./index";
 import {numberInput} from "./numberInput";
 
-export const sizePresets: number[] = [0.01, 0.05, 0.1, 0.5, 1];
+export const sizePresets: number[] = [minimumMarketOrderSize, 0.05, 0.1, 0.5, 1];
 
 export const sizeSection = (state: State): VNode =>
     div([

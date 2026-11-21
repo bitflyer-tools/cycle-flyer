@@ -9,6 +9,7 @@ const Stream = require('xstream').default;
 const { outputFiles } = buildSync({
   stdin: {
     contents: [
+      'export { saveCredentials } from "./src/credentials";',
       'export { SocketIOSource } from "./src/drivers/socketIODriver";',
       'export { BoardComponent } from "./src/components/trade/board";',
     ].join('\n'),
@@ -22,15 +23,14 @@ const { outputFiles } = buildSync({
   write: false,
 });
 const testModule = { exports: {} };
-const credentials = { 'api-secret': 'test-secret' };
 runInNewContext(outputFiles[0].text, {
   module: testModule,
   require,
   setTimeout,
   crypto: webcrypto,
-  localStorage: credentials,
+  localStorage: { getItem: () => null, removeItem: () => {} },
 });
-const { SocketIOSource, BoardComponent } = testModule.exports;
+const { SocketIOSource, BoardComponent, saveCredentials } = testModule.exports;
 
 const snapshotChannel = 'lightning_board_snapshot_FX_BTC_JPY';
 const boardChannel = 'lightning_board_FX_BTC_JPY';
@@ -41,6 +41,8 @@ function makeSocket() {
   const subscriptions = [];
   return {
     handlers,
+    disconnect() { return this; },
+    connect() { return this; },
     subscriptions,
     on: (event, handler) => handlers.set(event, handler),
     emit: (event, channel) => {
@@ -63,9 +65,8 @@ test('subscribes only to board deltas and executions on connect and reconnect', 
   assert.equal(socket.handlers.has(snapshotChannel), false);
 });
 
-test('ignores events from the previous account until the new socket authenticates', (t) => {
-  credentials['api-key'] = 'account-a';
-  t.after(() => { delete credentials['api-key']; });
+test('ignores events from the previous account until the new socket authenticates', async (t) => {
+  await saveCredentials({ key: 'account-a', secret: 'test-secret' });
 
   const socket = makeSocket();
   const authentications = [];
@@ -88,11 +89,13 @@ test('ignores events from the previous account until the new socket authenticate
   const receive = (id) => socket.receive('child_order_events', [{ id }]);
 
   socket.receive('connect');
+  await new Promise(setImmediate);
   authentications[0].done();
   receive('a');
-  credentials['api-key'] = 'account-b';
+  const saving = saveCredentials({ key: 'account-b', secret: 'test-secret' });
   receive('late-a');
-  source.refreshCredentials();
+  await saving;
+  await new Promise(setImmediate);
   authentications[0].done();
   receive('before-b-auth');
   authentications[1].done();
@@ -133,7 +136,9 @@ test('reconciles the board immediately after reconnect and preserves in-flight u
     socket.receive('connect');
     assert.equal(requests.length, 1);
     assert.equal(requests[0].category, 'board');
-    assert.match(requests[0].url, /\/v1\/getboard$/);
+    const url = new URL(requests[0].url);
+    assert.equal(url.pathname, '/v1/getboard');
+    assert.equal(url.searchParams.get('product_code'), 'FX_BTC_JPY');
 
     const snapshot = {
       asks: [{ price: 102, size: 1 }, { price: 103, size: 2 }],
@@ -152,7 +157,7 @@ test('reconciles the board immediately after reconnect and preserves in-flight u
     socket.receive('connect');
     assert.equal(requests.length, 2);
     assert.equal(requests[1].category, 'board');
-    assert.match(requests[1].url, /\/v1\/getboard$/);
+    assert.equal(requests[1].url, requests[0].url);
     assert.equal(state.board.asks[1].price, 103);
 
     socket.receive(executionChannel, [{ side: 'SELL', price: 99 }]);

@@ -1,16 +1,33 @@
+import type {VNode} from "@cycle/dom";
+import type {RequestOptions} from "@cycle/http";
 import {deepStrictEqual, strictEqual} from "node:assert";
-import {test, TestContext} from "node:test";
+import {before, test, TestContext} from "node:test";
 import Stream from "xstream";
 import {State} from "../src/components/trade/order";
 import {intent} from "../src/components/trade/order/intent";
 import {model} from "../src/components/trade/order/model";
+import {orderRequests} from "../src/components/trade/order/request";
+import {view} from "../src/components/trade/order/view";
 import {twapSection} from "../src/components/trade/order/twapView";
 import {twapRequest} from "../src/components/trade/order/twapRequest";
 import {Sources} from "../src/components/trade";
+import {hasApiCredentials, initializeCredentials} from "../src/credentials";
 import {TwapSliceRequest} from "../src/http";
 import {isRunning} from "../src/models/twapOrder";
 
-Object.defineProperty(globalThis, "localStorage", { value: { "api-key": "test", "api-secret": "test" } });
+before(async () => {
+    const storage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: { getItem: () => "test-credential", removeItem() {} },
+    });
+    try {
+        await initializeCredentials();
+    } finally {
+        if (storage) { Object.defineProperty(globalThis, "localStorage", storage); }
+        else { Reflect.deleteProperty(globalThis, "localStorage"); }
+    }
+});
 
 test("records overlapping slices and returns to idle in either response order", async (context) => {
     await Promise.all([[0, 1], [1, 0]].map(([first, second]) =>
@@ -71,7 +88,7 @@ test("ignores a new start while a schedule is waiting for responses", (context) 
 
 test("uses the starting schedule for progress and requests after inputs change", (context) => {
     const twap = createTwap(context, 10, 3);
-    const status = () => (twapSection(twap.state).children ?? [])
+    const status = () => (twapSection(twap.state, hasApiCredentials()).children ?? [])
         .flatMap((node) => typeof node === "object" && node?.sel === "p.twap-status" ? [node.text] : []);
 
     twap.buy.shamefullySendNext(null);
@@ -99,13 +116,49 @@ test("uses the starting schedule for progress and requests after inputs change",
     strictEqual(twap.requests.length, 4);
 });
 
+test("manual market orders and one-slice TWAP share the same minimum", (context) => {
+    const twap = createTwap(context, 1, 1);
+    const manualRequests: RequestOptions[] = [];
+    const submission = orderRequests(twap.actions, twap.state$).subscribe({
+        next: ({ requests }) => manualRequests.push(...requests as RequestOptions[]),
+    });
+    let orderView: VNode;
+    const rendering = view(twap.state$).subscribe({ next: (node) => { orderView = node; } });
+    context.after(() => { submission.unsubscribe(); rendering.unsubscribe(); });
+
+    const disabled = (selector: string) => orderView.children!
+        .flatMap((section) => (section as VNode).children ?? [])
+        .filter((node) => (node as VNode).sel === `div.${selector}.order-buttons`)
+        .flatMap((node) => (node as VNode).children!)
+        .map((button) => (button as VNode).data!.attrs!.disabled);
+
+    twap.setSize("0.009");
+    deepStrictEqual(disabled("market-order-buttons"), [true, true]);
+    deepStrictEqual(disabled("twap-order-buttons"), [true, true]);
+    [twap.marketBuy, twap.marketSell, twap.buy, twap.sell].forEach((click) => click.shamefullySendNext(null));
+    strictEqual(manualRequests.length, 0);
+    strictEqual(twap.requests.length, 0);
+
+    twap.setSize("0.01");
+    deepStrictEqual(disabled("market-order-buttons"), [false, false]);
+    deepStrictEqual(disabled("twap-order-buttons"), [false, false]);
+    [twap.marketBuy, twap.marketSell, twap.buy].forEach((click) => click.shamefullySendNext(null));
+    deepStrictEqual(manualRequests.map(({ send }) => JSON.parse(send as string).size), [0.01, 0.01]);
+    deepStrictEqual(twap.requests.map(({ response$ }) => JSON.parse(response$.request.send as string).size), [0.01]);
+});
+
 const createTwap = (context: TestContext, interval = 1, slices = 2) => {
     context.mock.timers.enable({ apis: ["setInterval"] });
     const buy = Stream.create<null>();
     const cancel = Stream.create<null>();
     const sell = Stream.create<null>();
     const clicks = { ".buy-button": buy, ".cancel-button": cancel, ".sell-button": sell };
+    const marketBuy = Stream.create<null>();
+    const marketSell = Stream.create<null>();
+    const marketClicks: Partial<typeof clicks> = { ".buy-button": marketBuy, ".sell-button": marketSell };
+    const buttonClicks = { ".twap-order-buttons": clicks, ".market-order-buttons": marketClicks };
     const inputs = {
+        "#size-input": Stream.create<{target: {value: string}}>(),
         "#twap-interval-input": Stream.create<{target: {value: string}}>(),
         "#twap-slices-input": Stream.create<{target: {value: string}}>(),
     };
@@ -114,8 +167,8 @@ const createTwap = (context: TestContext, interval = 1, slices = 2) => {
         DOM: {
             select: (container: string) => ({
                 events: () => inputs[container as keyof typeof inputs] ?? Stream.never(),
-                select: (selector: keyof typeof clicks) => ({
-                    events: () => container === ".twap-order-buttons" ? clicks[selector] : Stream.never(),
+                select: (selector: ".buy-button" | ".sell-button" | ".cancel-button") => ({
+                    events: () => buttonClicks[container as keyof typeof buttonClicks]?.[selector] ?? Stream.never(),
                 }),
             }),
         },
@@ -145,14 +198,16 @@ const createTwap = (context: TestContext, interval = 1, slices = 2) => {
     });
     context.after(() => { request.unsubscribe(); reducer.unsubscribe(); });
     return {
-        buy, cancel, sell, requests,
+        actions, state$, buy, cancel, sell, marketBuy, marketSell, requests,
+        setSize: (value: string) => inputs["#size-input"].shamefullySendNext({target: {value}}),
         setInterval: (value: number) => inputs["#twap-interval-input"].shamefullySendNext({target: {value: String(value)}}),
         setSlices: (value: number) => inputs["#twap-slices-input"].shamefullySendNext({target: {value: String(value)}}),
         get state() { return state!; },
     };
 };
 
-const fakeResponse = (request: TwapSliceRequest) => {
+const fakeResponse = (input: TwapSliceRequest) => {
+    const request = { ...input, credentialVersion: 0 };
     const response$ = Object.assign(Stream.createWithMemory<{request: TwapSliceRequest}>(), { request });
     return {
         response$,

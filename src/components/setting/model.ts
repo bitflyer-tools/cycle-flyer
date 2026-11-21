@@ -3,33 +3,24 @@ import Stream from "xstream";
 import {Actions} from "./intent";
 
 export interface State {
-    apiKey: string;
-    apiSecret: string;
+    credentialsMessage: string;
     soundEnabled: boolean;
 }
 
 const defaultState: State = {
-    apiKey: "",
-    apiSecret: "",
+    credentialsMessage: "",
     soundEnabled: true,
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
-    const defaultReducer$ = Stream.of((state: State) => typeof state === "undefined" ? defaultState : state);
+    const defaultReducer$ = Stream.of<Reducer<State>>((state = defaultState) => state);
 
-    const apiKeyReducer$ = Stream.merge(actions.onApiKeyLoaded$, actions.onApiKeyInputChanged$)
-        .map((apiKey) => (state: State) => ({ ...state, apiKey }));
-
-    const apiSecretReducer$ = Stream.merge(actions.onApiSecretLoaded$, actions.onApiSecretInputChanged$)
-        .map((apiSecret) => (state: State) => ({ ...state, apiSecret }));
+    const credentialsMessageReducer$ = actions.credentialsMessage$
+        .startWith("")
+        .map<Reducer<State>>((credentialsMessage) => (state = defaultState) => ({ ...state, credentialsMessage }));
 
     const soundEnabledReducer$ = Stream.merge(actions.onSoundEnabledLoaded$, actions.onSoundToggled$)
-        .map((soundEnabled) => (state: State) => ({ ...state, soundEnabled }));
+        .map<Reducer<State>>((soundEnabled) => (state = defaultState) => ({ ...state, soundEnabled }));
 
-    return Stream.merge(
-        defaultReducer$,
-        apiKeyReducer$,
-        apiSecretReducer$,
-        soundEnabledReducer$,
-    ) as Stream<Reducer<State>>;
+    return Stream.merge(defaultReducer$, credentialsMessageReducer$, soundEnabledReducer$);
 };

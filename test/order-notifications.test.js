@@ -72,7 +72,8 @@ function appHarness(t) {
     childOrderEvent$,
     sounds,
     histories: () => state.trade.histories,
-    submit(request) {
+    submit(input) {
+      const request = { ...input, credentialVersion: 0 };
       const response$ = Stream.createWithMemory();
       response$.request = request;
       select(request.category).shamefullySendNext(response$);
