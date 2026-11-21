@@ -53,7 +53,7 @@ export const intent = (sources: Sources): Actions => {
         .mapTo<typeof ordersCanceled>(ordersCanceled);
 
     const orderLists$ = pollResponse<object[] | typeof ordersCanceled>(
-        privateResponses(sources.HTTP, "orders"), decodeArray, cancelOrders$,
+        privateResponses(sources.HTTP, "orders"), decodeOrders, cancelOrders$,
     );
 
     const pages = parentOrderPages(sources.HTTP, () => ++parentOrderSequence);
@@ -82,7 +82,9 @@ export const intent = (sources: Sources): Actions => {
     };
 };
 
-const decodeArray = <T>(json: unknown): T[] | undefined => Array.isArray(json) ? json : undefined;
+const decodeOrders = (json: unknown): object[] | undefined =>
+    Array.isArray(json) && json.every((order) =>
+        order !== null && typeof order === "object" && !Array.isArray(order)) ? json : undefined;
 
 const isPositionList = (positions: unknown): boolean =>
     Array.isArray(positions) && positions.every((position) =>

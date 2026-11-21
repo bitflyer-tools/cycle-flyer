@@ -74,7 +74,7 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
   });
 }
 
-test('loads active orders with their outstanding size and recovers after a failed poll', () => {
+test('keeps active order markers after a failed or malformed poll and applies the next valid poll', () => {
   const responses = Stream.create();
   const idle = Stream.never();
   const actions = components.trade_intent({
@@ -97,6 +97,14 @@ test('loads active orders with their outstanding size and recovers after a faile
 
     responses.shamefullySendNext(Stream.throw(new Error('Order poll failed')));
     assert.equal(state, lastValidState);
+
+    respond([null]);
+    assert.equal(state, lastValidState);
+
+    respond([{ side: 'SELL', price: 51000, outstanding_size: 0.03 }]);
+    assert.deepEqual(Array.from(state.orders, (order) => ({ ...order })), [
+      { side: 'SELL', price: 51000, size: 0.03 },
+    ]);
 
     respond([]);
     assert.equal(state.orders.length, 0);
