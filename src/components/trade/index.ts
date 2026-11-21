@@ -147,7 +147,6 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
         orderRequests: orderComponent.orderRequests,
         router: Stream.never(),
         sound: Stream.merge(
-            orderComponent.sound,
             actions.onMyExecutionCreated$.mapTo<Sound>("execution"),
             priceAlertSound$,
         ),
