@@ -17,6 +17,7 @@ import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
 import {credentialAwareStorageDriver} from "../src/storage";
+import {twapStorageKeys} from "../src/components/trade/order/twapIntent";
 import {storageKeys} from "../src/components/trade/order/intent";
 import {Execution} from "../src/models/execution";
 import type {State as SummaryState} from "../src/components/trade/summary";
@@ -609,25 +610,52 @@ for (const category of ["limit-order", "cancel-orders", "market-order"] as const
 }
 
 for (const route of ["/", "/setting"]) {
-    test(`records a TWAP slice deadline once when it expires on ${route}`, (t) => {
-        const order = setup(t);
-        const request = twapSliceOrder(0.01, "BUY", Symbol());
-        const response = order.respondTo({ ...request, _namespace: ["trade"] });
+    for (const status of ["success", "failed", "unconfirmed"] as const) {
+        test(`records and notifies a TWAP slice once when it settles on ${route} (${status})`, (t) => {
+            t.mock.timers.enable({ apis: ["setInterval"] });
+            const order = setup(t);
+            order.enterSize("0.02");
+            order.buy("twap");
+            equal(order.state.twap.remaining, 2);
+            deepEqual(order.requests.map(({ category }) => category), ["twap-order"]);
+            const response = order.respondTo(order.requests[0]);
 
-        if (route === "/setting") order.navigate(route);
-        response.fail(Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }));
-        deepEqual(order.histories.map(({ name, status }) => ({ name, status })), [
-            { name: "TWAP", status: "unconfirmed" },
-        ]);
+            if (route === "/setting") {
+                order.navigate(route);
+                equal(order.state.twap.remaining, 0);
+                equal(order.state.twap.scheduleId, undefined);
+                t.mock.timers.tick(1000);
+                equal(order.requests.length, 1);
+            }
 
-        if (route === "/setting") order.navigate("/");
-        equal(order.histories.length, 1);
-        summaryView(Stream.of<SummaryState>({
-            ...order.tradeState,
-            collateral: 0,
-            marketState: { health: "", state: "" },
-        })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /Unconfirmed \(timed out\)/) });
-    });
+            response.progress();
+            deepEqual(order.histories, []);
+            deepEqual(order.sounds, []);
+            if (status === "success") response.succeed({ child_order_acceptance_id: "JRF-TWAP" });
+            else if (status === "failed") response.reject();
+            else response.fail(Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }));
+
+            const sounds = [status === "success" ? "success" : "failure"];
+            deepEqual(order.sounds, sounds);
+            if (route === "/setting") {
+                order.navigate("/");
+                t.mock.timers.tick(1000);
+                equal(order.requests.length, 1);
+            }
+            equal(order.state.twap.remaining, route === "/setting" ? 0 : 1);
+            deepEqual(order.histories.map(({ name, description, status }) => ({ name, description, status })), [
+                { name: "TWAP", description: "BUY / 0.01 / MARKET", status },
+            ]);
+            deepEqual(order.sounds, sounds);
+            if (status === "unconfirmed") {
+                summaryView(Stream.of<SummaryState>({
+                    ...order.tradeState,
+                    collateral: 0,
+                    marketState: { health: "", state: "" },
+                })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /Unconfirmed \(timed out\)/) });
+            }
+        });
+    }
 }
 
 test("ignores write deadlines from the previous account", (t) => {
@@ -679,7 +707,9 @@ function setup(t: TestContext, width = "0.01", options: {
         limit: Stream.create<null>(),
         market: Stream.create<null>(),
         stop: Stream.create<null>(),
+        twap: Stream.create<null>(),
     };
+    const sizeInput$ = Stream.create<{ target: { value: string } }>();
     const priceInput$ = Stream.createWithMemory<{ target: { value: string } }>();
     priceInput$.shamefullySendNext({ target: { value: "100000" } });
     const sellIFDOCO$ = Stream.create<null>();
@@ -696,15 +726,25 @@ function setup(t: TestContext, width = "0.01", options: {
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
         "#price-input": { input: priceInput$ },
+        "#size-input": { input: sizeInput$ },
         "#trigger-price-input": { input: Stream.of({ target: { value: "110000" } }) },
         ".order-buttons": { ".clear-order-button": { click: clearOrders$ }, ".clear-button": { click: clearPosition$ } },
         ".limit-order-buttons": { ".buy-button": { click: buy$.limit } },
         ".market-order-buttons": { ".buy-button": { click: buy$.market } },
         ".stop-order-buttons": { ".buy-button": { click: buy$.stop } },
+        ".twap-order-buttons": {
+            ".buy-button": { click: buy$.twap },
+            ".cancel-button": { click: Stream.never() },
+        },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buy$.ifdoco },
             ".sell-button": { click: sellIFDOCO$ },
         },
+    };
+    const storedValues: Record<string, string> = {
+        [storageKeys.priceWidth]: width,
+        [twapStorageKeys.interval]: "1",
+        [twapStorageKeys.slices]: "2",
     };
     const main: Sinks = routerify(Root, switchPath)({
         DOM: mockDOMSource({ ".___trade": new Proxy({}, { get: (_, selector) =>
@@ -724,7 +764,7 @@ function setup(t: TestContext, width = "0.01", options: {
             reconnect$: Stream.never(),
         },
         state: new StateSource(state$, "state"),
-        storage: { local: { getItem: (key: string) => Stream.of(key in credentials ? credentials[key] : key === storageKeys.priceWidth ? width : "0.01") } },
+        storage: { local: { getItem: (key: string) => Stream.of(key in credentials ? credentials[key] : storedValues[key] ?? "0.01") } },
     } as unknown as Omit<Sources, "router"> & { history: typeof history$ });
 
     let state: { trade?: TradeState } | undefined;
@@ -745,7 +785,7 @@ function setup(t: TestContext, width = "0.01", options: {
         if (options.category === "parent-order") {
             parentDetails.set((options.query as { parent_order_id: string }).parent_order_id, options);
         }
-        if (["ifdoco-order", "market-order", "limit-order", "stop-order", "cancel-orders", "cancel-parent-order"]
+        if (["ifdoco-order", "market-order", "limit-order", "stop-order", "cancel-orders", "cancel-parent-order", "twap-order"]
             .includes(options.category as string)) {
             requests.push(options);
             if (writeOrigin) {
@@ -769,6 +809,7 @@ function setup(t: TestContext, width = "0.01", options: {
         clearPosition: () => clearPosition$.shamefullySendNext(null),
         get positionRequests() { return polls.filter(({ category }) => category === "positions"); },
         clearOrders: () => clearOrders$.shamefullySendNext(null),
+        enterSize: (value: string) => sizeInput$.shamefullySendNext({ target: { value } }),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),

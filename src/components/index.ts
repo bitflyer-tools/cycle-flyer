@@ -83,19 +83,16 @@ export const Root = (sources: Sources): Sinks => {
     const isOrdering$ = pending$.map((pending) => pending !== null);
     const orderOutcome$ = Stream.merge(
         submittedOrderOutcomes(sources.HTTP),
+        twapOutcomes(sources.HTTP),
         Stream.merge(
             privateResponses(sources.HTTP, "cancel-orders"),
             privateResponses(sources.HTTP, "cancel-parent-order"),
         ).map(createCancellationOutcome).compose(flattenConcurrently),
     );
-    const orderHistoryReducer$ = Stream.merge(
-        orderOutcome$.map(({ histories }) => histories.slice().reverse()),
-        // Keep timeout notices when the trade screen is inactive.
-        twapOutcomes(sources.HTTP)
-            .filter(({ status }) => status === "unconfirmed")
-            .map(({ histories }) => histories.slice().reverse()),
-    ).map<Reducer<TradeState>>((histories) => (state) =>
-        state && { ...state, histories: histories.concat(state.histories) });
+    const orderHistoryReducer$ = orderOutcome$
+        .map(({ histories }) => histories.slice().reverse())
+        .map<Reducer<TradeState>>((histories) => (state) =>
+            state && { ...state, histories: histories.concat(state.histories) });
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>
