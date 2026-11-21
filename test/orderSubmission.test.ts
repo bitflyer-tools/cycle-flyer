@@ -610,9 +610,11 @@ test("keeps Clear Position disabled until a full fill is confirmed", async (t) =
     const { side, size, child_order_type } = JSON.parse(order.requests[0].send as string);
     deepEqual({ side, size, child_order_type }, { side: "SELL", size: 0.08, child_order_type: "MARKET" });
 
-    order.respondTo(order.requests[0]).succeed();
+    order.respondTo(order.requests[0]).succeed({ child_order_acceptance_id: "JRF-accepted" });
     equal(order.state.isOrdering, false);
-    equal(!!order.tradeState.positionClose, true);
+    equal(order.tradeState.positionClose?.rejected, false);
+    deepEqual(order.histories.map(({ status }) => status), ["success"]);
+    deepEqual(order.sounds, ["success"]);
     order.clearPosition();
     equal(order.requests.length, 1);
 
@@ -649,6 +651,21 @@ test("uses only the confirmed short remainder after a partial close", async (t) 
     equal(order.requests.length, 2);
     const { side, size } = JSON.parse(order.requests[1].send as string);
     deepEqual({ side, size }, { side: "BUY", size: 0.03 });
+});
+
+test("records an HTTP 200 close rejection as a failed order and plays the failure sound", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    order.respondTo(order.positionRequests[0]).succeed([{ side: "BUY", size: 0.08, price: 40000 }]);
+    order.clearPosition();
+
+    order.respondTo(order.requests[0]).succeed({ status: -1, error_message: "Order rejected" });
+
+    equal(order.tradeState.positionClose?.settled, true);
+    equal(order.tradeState.positionClose?.rejected, true);
+    deepEqual(order.histories.map(({ status }) => status), ["failed"]);
+    deepEqual(order.sounds, ["failure"]);
 });
 
 test("unlocks an unsigned Clear Position after refreshing the current position", async (t) => {
@@ -791,6 +808,7 @@ for (const category of ["limit-order", "cancel-orders", "market-order"] as const
             submit();
             equal(order.requests.length, 1);
             equal(order.tradeState.positionClose?.settled, true);
+            equal(order.tradeState.positionClose?.rejected, false);
             return;
         }
 
@@ -1019,7 +1037,7 @@ function setup(t: TestContext, width = "0.01", options: {
                 }),
                 progress: () => response$.shamefullySendNext({ request } as Response),
                 succeed: (body?: unknown) => {
-                    response$.shamefullySendNext({ request, text: JSON.stringify(body) } as unknown as Response);
+                    response$.shamefullySendNext({ request, status: 200, text: JSON.stringify(body) } as Response);
                     response$.shamefullySendComplete();
                 },
             };
