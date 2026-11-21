@@ -3,7 +3,7 @@ import Stream from "xstream";
 import sampleCombine from "xstream/extra/sampleCombine";
 import {credentialsChanging$} from "../../../credentials";
 import {TwapSliceRequest, twapSliceOrder} from "../../../http";
-import {sliceSize} from "../../../models/twapOrder";
+import {allocateSlices} from "../../../models/twapOrder";
 import {State} from "./index";
 import {TwapActions, TwapSchedule} from "./twapIntent";
 
@@ -31,14 +31,16 @@ export const twapRequest = (actions: TwapActions, state$: Stream<State>): Stream
         .flatten();
 };
 
-const slices = (state: State, schedule: TwapSchedule, isTwapActive: () => boolean): Stream<RequestInput> =>
-    Stream.periodic(state.twap.interval * 1000)
+const slices = (state: State, schedule: TwapSchedule, isTwapActive: () => boolean): Stream<RequestInput> => {
+    const { baseSize, largerSize, largerCount } = allocateSlices(state.size, state.twap.slices);
+    return Stream.periodic(state.twap.interval * 1000)
         .startWith(-1)
         .take(state.twap.slices)
-        .map<RequestInput>(() => ({
-            ...twapSliceOrder(sliceSize(state.size, state.twap.slices), schedule.side, schedule.id),
+        .map<RequestInput>((tick) => ({
+            ...twapSliceOrder(tick + 1 < largerCount ? largerSize : baseSize, schedule.side, schedule.id),
             isTwapActive,
             onSigningFailure: () => {
                 if (isTwapActive()) { twapSigningFailed$.shamefullySendNext(undefined); }
             },
         } satisfies TwapSliceRequest));
+};
