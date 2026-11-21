@@ -102,6 +102,37 @@ test("retries only failed and new details after a list refresh", (t) => {
     deepStrictEqual(trade.loaded.map((detail) => detail.parent_order_id), ["b", "a"]);
 });
 
+test("retries a stalled parent detail on the next poll and ignores its late response", (t) => {
+    t.mock.timers.enable({apis: ["setInterval"]});
+    const trade = setup(t);
+    const state = observeState(t, trade.actions);
+    const detail = (trigger_price: number) => ({
+        parent_order_id: "a",
+        parameters: [{condition_type: "STOP", side: "SELL", size: 0.1, trigger_price}],
+    });
+    const orders = [{parent_order_id: "a"}];
+    trade.respond(trade.listRequests[0], orders);
+    const stalled$ = Stream.create<Response>();
+    trade.send(trade.requests[0], stalled$);
+
+    t.mock.timers.tick(10000);
+    trade.respond(trade.listRequests[1], orders);
+    deepStrictEqual(trade.requestedIds(), ["a"]);
+    deepStrictEqual(flattenStopOrders(state().parentStopOrders), []);
+
+    t.mock.timers.tick(5000);
+    deepStrictEqual(trade.requestedIds(), ["a"]);
+    t.mock.timers.tick(5000);
+    trade.respond(trade.listRequests[2], orders);
+    deepStrictEqual(trade.requestedIds(), ["a", "a"]);
+    trade.respond(trade.requests[1], detail(200));
+    deepStrictEqual(flattenStopOrders(state().parentStopOrders).map(({price}) => price), [200]);
+
+    stalled$.shamefullySendNext({text: JSON.stringify(detail(100))} as Response);
+    deepStrictEqual(flattenStopOrders(state().parentStopOrders).map(({price}) => price), [200]);
+    strictEqual(trade.loaded.length, 1);
+});
+
 test("ignores stale account responses and resets the detail cache when credentials change", (t) => {
     const trade = setup(t);
     trade.list(["stale"], [], -1);

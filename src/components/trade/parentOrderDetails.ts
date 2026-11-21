@@ -1,5 +1,6 @@
 import {HTTPSource, RequestOptions} from "@cycle/http";
 import Stream from "xstream";
+import concat from "xstream/extra/concat";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {credentialsChanging$, currentCredentialVersion, hasApiCredentials} from "../../credentials";
 import {AccountRequest, isCurrentAccountRequest, unsignedRequests$} from "../../drivers/httpDriver";
@@ -28,6 +29,10 @@ interface DetailUpdate {
     detail?: ActiveParentOrder;
 }
 
+const detailTimeoutMs = 15000;
+const detailExpired = Symbol();
+type DetailResult = ActiveParentOrder | typeof detailExpired | undefined;
+
 export const parentOrderDetails = (
     http: HTTPSource,
     activeOrders$: Stream<ActiveParentOrder[]>,
@@ -42,7 +47,9 @@ export const parentOrderDetails = (
         const credentialVersion = currentCredentialVersion();
         if (credentialVersion === null) { return []; }
         const requestId = Symbol();
-        const request: DetailRequest = { ...getParentOrder(id), credentialVersion, parentOrderDetailRequestId: requestId };
+        const request: DetailRequest = {
+            ...getParentOrder(id), lazy: true, credentialVersion, parentOrderDetailRequestId: requestId,
+        };
         pending.set(id, { entry, requestId });
         return [request];
     };
@@ -70,13 +77,13 @@ export const parentOrderDetails = (
         return {};
     };
 
-    const settle = (request: DetailRequest, detail?: ActiveParentOrder): DetailUpdate => {
+    const settle = (request: DetailRequest, detail?: DetailResult): DetailUpdate => {
         const id = new URL(request.url).searchParams.get("parent_order_id");
         if (!id) { return {}; }
         const previous = pending.get(id);
         if (!previous || previous.requestId !== request.parentOrderDetailRequestId) { return {}; }
         pending.delete(id);
-        if (!isCurrentAccountRequest(request)) { return {}; }
+        if (detail === detailExpired || !isCurrentAccountRequest(request)) { return {}; }
         const entry = active.get(id);
         if (!entry) { return {}; }
         if (entry !== previous.entry) { return { requests: load(id, entry) }; }
@@ -86,10 +93,14 @@ export const parentOrderDetails = (
     };
 
     const responses$ = http.select("parent-order")
-        .map((response$) => response$
-            .map((response) => decodeDetail(response.text))
-            .replaceError(() => Stream.of<ActiveParentOrder | undefined>(undefined))
-            .map((detail) => settle(response$.request, detail)))
+        .map((response$) => Stream.merge(
+            Stream.periodic(detailTimeoutMs).mapTo<DetailResult>(detailExpired),
+            concat(
+                response$.map<DetailResult>((response) => decodeDetail(response.text))
+                    .replaceError(() => Stream.empty<DetailResult>()),
+                Stream.of<DetailResult>(undefined),
+            ),
+        ).take(1).map((detail) => settle(response$.request, detail)))
         .compose(flattenConcurrently);
 
     const updates$ = Stream.merge<DetailUpdate>(
