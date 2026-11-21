@@ -73,9 +73,8 @@ export class Board {
     ): BoardOrder[] {
         if (orders.length === 0) { return []; }
         if (groupPrice >= 100) {
-            const best = orders.reduce((price, order) =>
-                direction * order.price < direction * price ? order.price : price, orders[0].price);
-            return this.groupWindow(orders, roundPrice(best, groupPrice), direction * groupPrice, roundPrice);
+            const best = roundPrice(orders[0].price, groupPrice);
+            return this.groupWindow(orders, best, direction * groupPrice, roundPrice);
         }
 
         const sizes = new Map<number, number>();
@@ -95,11 +94,12 @@ export class Board {
     ): BoardOrder[] {
         const sizes: number[] = [];
         let rows = 0;
-        orders.forEach((order) => {
+        for (const order of orders) {
             const index = Math.round((roundPrice(order.price, Math.abs(step)) - best) / step);
             rows = Math.max(rows, Math.min(index + 1, visibleRows));
-            if (index < visibleRows) { sizes[index] = (sizes[index] || 0) + order.size; }
-        });
+            if (index >= visibleRows) { break; }
+            sizes[index] = (sizes[index] || 0) + order.size;
+        }
         return Array.from({ length: rows }, (_, index) =>
             new BoardOrder({ price: best + index * step, size: sizes[index] || 0 }));
     }
