@@ -9,6 +9,7 @@ const bundle = buildSync({
       export { SocketIOSource } from './drivers/socketIODriver';
       export { intent } from './components/trade/intent';
       export { model } from './components/trade/model';
+      export { synchronizeBoard } from './components/trade/board/synchronizeBoard';
       export { Board } from './models/board';
     `,
     resolveDir: require('node:path').join(__dirname, '../src'),
@@ -21,7 +22,7 @@ const bundle = buildSync({
 }).outputFiles[0].text;
 const bundledExports = { exports: {} };
 new Function('require', 'module', bundle)(require, bundledExports);
-const { SocketIOSource, intent, model, Board } = bundledExports.exports;
+const { SocketIOSource, intent, model, synchronizeBoard, Board } = bundledExports.exports;
 
 function tradeWithBoard(board) {
   const handlers = new Map();
@@ -54,6 +55,51 @@ test('scans at most 1,000 asks for 50 buys at the best ask and leaves bids untou
   assert.equal(board.bids, bids);
   assert.equal(trade.state.currentPrice, 100);
 });
+
+const snapshotLevels = {
+  asks: [{ price: 101, size: 1 }, { price: 102, size: 2 }],
+  bids: [{ price: 99, size: 1 }, { price: 98, size: 2 }],
+};
+const invalidExecutions = [
+  { side: 'SELL', price: 0 },
+  { side: 'SELL', price: -1 },
+  { side: 'BUY', price: Infinity },
+  { side: 'SELL', price: -Infinity },
+  { side: 'BUY', price: NaN },
+];
+
+test('keeps both sides unchanged for invalid executions during a delayed snapshot', () => {
+  assertLiveAndReplayedBoard(invalidExecutions, snapshotLevels);
+});
+
+test('prunes both sides using only valid prices in a mixed batch during a delayed snapshot', () => {
+  assertLiveAndReplayedBoard([
+    { side: 'BUY', price: 102 },
+    ...invalidExecutions,
+    { side: 'SELL', price: 98 },
+  ], {
+    asks: [snapshotLevels.asks[1]],
+    bids: [snapshotLevels.bids[1]],
+  });
+});
+
+function assertLiveAndReplayedBoard(executions, expectedLevels) {
+  const trade = tradeWithBoard(new Board(snapshotLevels));
+  const responses = Stream.create();
+  const response = Stream.create();
+  synchronizeBoard(Stream.never(), responses, trade.socket.executionBatch$).addListener({
+    next: (reduce) => { trade.state.boardComponentState = reduce(trade.state.boardComponentState); },
+  });
+  responses.shamefullySendNext(response);
+
+  const expected = new Board(expectedLevels);
+  trade.receive(executions);
+  const liveBoard = trade.state.boardComponentState.board;
+  assert.deepEqual(liveBoard, expected);
+  response.shamefullySendNext({ text: JSON.stringify(snapshotLevels) });
+  assert.notEqual(trade.state.boardComponentState.board, liveBoard);
+  assert.deepEqual(trade.state.boardComponentState.board, expected);
+}
 
 test('matches sequential pruning and delivers every execution in order', () => {
   const levels = {
