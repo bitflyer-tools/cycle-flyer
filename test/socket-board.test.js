@@ -65,6 +65,27 @@ test('subscribes only to board deltas and executions on connect and reconnect', 
   assert.equal(socket.handlers.has(snapshotChannel), false);
 });
 
+test('publishes only board deltas with finite prices and sizes on both sides', (t) => {
+  const socket = makeSocket();
+  const source = new SocketIOSource(socket);
+  const received = [];
+  const listener = source.board$.subscribe({ next: (delta) => received.push(delta) });
+  t.after(() => listener.unsubscribe());
+
+  [
+    null,
+    { bids: [] },
+    { asks: {}, bids: [] },
+    { asks: [null], bids: [] },
+    { asks: [{ price: '102', size: 1 }], bids: [] },
+    { asks: [], bids: [{ price: 100, size: Infinity }] },
+  ].forEach((delta) => socket.receive(boardChannel, delta));
+
+  const deletion = { asks: [], bids: [{ price: 100, size: 0 }] };
+  socket.receive(boardChannel, deletion);
+  assert.deepEqual(received, [deletion]);
+});
+
 test('ignores events from the previous account until the new socket authenticates', async (t) => {
   await saveCredentials({ key: 'account-a', secret: 'test-secret' });
 
@@ -160,8 +181,22 @@ test('reconciles the board immediately after reconnect and preserves in-flight u
     assert.equal(requests[1].url, requests[0].url);
     assert.equal(state.board.asks[1].price, 103);
 
+    const beforeMalformed = state;
+    const asks = state.board.asks;
+    const bids = state.board.bids;
+    const rejectedAsks = [{ price: 101, size: 9 }];
+    [{ asks: rejectedAsks }, { asks: rejectedAsks, bids: null }].forEach((delta) => {
+      socket.receive(boardChannel, delta);
+      assert.equal(state, beforeMalformed);
+      assert.equal(state.board.asks, asks);
+      assert.equal(state.board.bids, bids);
+      assert.equal(state.board.asks[0].price, 102);
+      assert.equal(state.board.bids[0].price, 100);
+    });
+
     socket.receive(executionChannel, [{ side: 'SELL', price: 99 }]);
     socket.receive(boardChannel, { asks: [{ price: 102, size: 4 }], bids: [] });
+    assert.equal(state.board.asks[0].size, 4);
     refresh.shamefullySendNext({ text: JSON.stringify({ ...snapshot, asks: [snapshot.asks[0]] }) });
     refresh.shamefullySendComplete();
     assert.equal(state.board.asks.length, 1);

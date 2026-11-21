@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "module": "es2015",
-    "moduleResolution": "node",
-    "target": "es5",
+    "moduleResolution": "bundler",
+    "target": "es2015",
     "lib": ["es6", "es2020.bigint", "dom"],
     "types": ["node"],
     "strict": true,

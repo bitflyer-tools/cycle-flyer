@@ -1,4 +1,4 @@
-import {DOMSource, VNode} from "@cycle/dom";
+import {DOMSource, MainDOMSource, VNode} from "@cycle/dom";
 import {HTTPSource, RequestInput} from "@cycle/http";
 import isolate from "@cycle/isolate";
 import {Reducer, StateSource} from "@cycle/state";
@@ -13,6 +13,7 @@ import {OrderHistory} from "../../models/orderHistory";
 import {flattenStopOrders, ParentStopOrders} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
 import {BoardComponent, State as BoardComponentState} from "./board/index";
+import {ExecutionsComponent, State as ExecutionsComponentState} from "./executions";
 import "./index.styl";
 import {intent} from "./intent";
 import {model} from "./model";
@@ -56,6 +57,7 @@ export interface State {
     price: number;
     lastExecutionPrice: number;
     boardComponentState?: BoardComponentState;
+    executionsComponentState?: ExecutionsComponentState;
     orderComponentState?: OrderComponentState;
     summaryComponentState?: SummaryComponentState;
 }
@@ -65,6 +67,10 @@ export const Trade = (
 ): Sinks & {
     orderRequests: Stream<OrderRequestBatch>;
 } => {
+    const executionsComponent = isolate(ExecutionsComponent, { state: "executionsComponentState" })({
+        ...sources,
+        DOM: sources.DOM as MainDOMSource,
+    });
     const summaryComponent = isolate(SummaryComponent, {
         state: {
             get: (state: State) => state.summaryComponentState && {
@@ -124,7 +130,7 @@ export const Trade = (
 
     const actions = intent(sources, cancellationOutcome$);
     const reducer$ = model(actions);
-    const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM);
+    const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM, executionsComponent.DOM);
     const settledCloseId$ = sources.state.stream
         .map((state) => state?.positionClose?.settled ? state.positionClose.id : undefined)
         .startWith(undefined)
@@ -141,7 +147,8 @@ export const Trade = (
 
     return {
         DOM: view$,
-        HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP),
+        HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP,
+            executionsComponent.HTTP),
         orderRequests: orderComponent.orderRequests,
         router: Stream.never(),
         sound: Stream.merge(
@@ -151,6 +158,7 @@ export const Trade = (
         state: Stream.merge(
             reducer$,
             boardComponent.state,
+            executionsComponent.state,
             summaryComponent.state,
             orderComponent.state,
         ) as Stream<Reducer<State>>,

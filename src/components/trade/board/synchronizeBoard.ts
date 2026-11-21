@@ -2,7 +2,7 @@ import {Response} from "@cycle/http";
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
-import {Board, BoardLevels} from "../../../models/board";
+import {Board, BoardLevels, isBoardLevels} from "../../../models/board";
 import {BoardSnapshot} from "../../../models/boardSnapshot";
 import {Execution} from "../../../models/execution";
 import {State} from "./index";
@@ -70,12 +70,8 @@ const mergeDelta = (board: Board, delta: BoardLevels): Board => board.merge(delt
 
 const decodeSnapshot = (text: string): BoardSnapshot => {
     const snapshot = JSON.parse(text);
-    if (!isBoardSide(snapshot?.asks) || !isBoardSide(snapshot?.bids)) {
+    if (!isBoardLevels(snapshot)) {
         throw new Error("Invalid board snapshot");
     }
     return new BoardSnapshot(snapshot);
 };
-
-const isBoardSide = (orders: unknown): boolean =>
-    Array.isArray(orders) && orders.every((order) =>
-        Number.isFinite(order?.price) && Number.isFinite(order?.size));

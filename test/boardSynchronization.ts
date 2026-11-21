@@ -41,6 +41,8 @@ test("installs snapshots that consistently arrive after the next poll", (t) => {
     t.mock.timers.tick(1_000);
     assert.deepEqual(asks(), [[100, 1], [101, 3]]);
     t.mock.timers.tick(14_000);
+    assert.equal(poll, 3);
+    assert.deepEqual(asks(), [[100, 1], [101, 3]]);
     t.mock.timers.tick(1_000);
     assert.deepEqual(asks(), [[100, 2], [101, 3]]);
 });

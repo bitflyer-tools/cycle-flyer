@@ -66,3 +66,17 @@ test("an inactive parent stays absent after a delayed detail and another refresh
 
     assert.deepEqual(snapshots.slice(beforeRefresh - 1).map(({ stops }) => stops), [[110], [], [], []]);
 });
+
+test("active stop and stop-limit legs provide board markers at their trigger prices", (t) => {
+    const { parentOrder$, snapshots } = setup(t);
+    parentOrder$.shamefullySendNext({
+        ...parentOrder,
+        parameters: [
+            ...parentOrder.parameters,
+            { condition_type: "STOP_LIMIT", side: "SELL", size: 0.1, price: 28800, trigger_price: 29000 },
+            { condition_type: "LIMIT", side: "SELL", size: 0.1, price: 32000 },
+        ],
+    });
+
+    assert.deepEqual(snapshots.at(-1).stops, [110, 29000]);
+});

@@ -14,6 +14,7 @@ import {Position} from "../models/position";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
 import {cancellationReducer} from "./trade/cancellation";
+import {initialState as initialExecutionsState} from "./trade/executions";
 import {cancellationOutcomes, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
 import {closePositionOutcomes, OrderRequestBatch, submissions, unsignedSubmissions$} from "./trade/order/request";
 import {stopTwap, twapSigningFailed$} from "./trade/order/twapRequest";
@@ -155,6 +156,7 @@ const resetAccount: Reducer<RootState> = (state) => {
         trade: {
             ...trade,
             canceledParentOrderIds: undefined,
+            executionsComponentState: initialExecutionsState,
             histories: [],
             orders: [],
             orderSigningError: undefined,
