@@ -66,7 +66,7 @@ const createHistoryListView = () => {
             li(".history", [
                 span(
                     "." + history.status,
-                    historyStatus(history.status),
+                    historyStatus(history.status, history.timedOut),
                 ),
                 span(".name", history.name),
                 span(".description", history.description),
@@ -77,8 +77,8 @@ const createHistoryListView = () => {
     };
 };
 
-const historyStatus = (status: string): string => {
-    if (status === "unconfirmed") return "Unconfirmed (timed out)";
+const historyStatus = (status: string, timedOut?: boolean): string => {
+    if (status === "unconfirmed") return timedOut ? "Unconfirmed (timed out)" : "Unconfirmed";
     return status === "success" ? "○" : "✗";
 };
 

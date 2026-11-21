@@ -107,6 +107,9 @@ test('renders once across 100 board-only deltas and updates for each summary inp
     [{ histories: [{ name: 'Market order', status: 'success', description: 'BUY', createdAt: new Date(0) }] },
       (node) => node.children.find((row) => row.sel === 'ul.histories').children[0].children[1].text,
       'Market order'],
+    [{ histories: [{ name: 'Market order', status: 'unconfirmed', description: 'BUY', createdAt: new Date(0) }] },
+      (node) => node.children.find((row) => row.sel === 'ul.histories').children[0].children[0].text,
+      'Unconfirmed'],
   ];
   updates.forEach(([update, readValue, expected], index) => {
     state = { ...state, ...update };
