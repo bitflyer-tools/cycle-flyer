@@ -42,7 +42,7 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
     });
     const categories = [];
     const subscription = Stream.merge(
-      components.trade_request(actions), components.summary_request(), components.board_request(),
+      components.trade_request(actions), components.summary_request(), components.board_request(reconnect$),
     ).subscribe({ next: (request) => categories.push(request.category) });
     t.after(() => subscription.unsubscribe());
     const takeCategories = () => categories.splice(0).sort();
@@ -54,6 +54,7 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
       parentOrders$.shamefullySendNext(parentResponse$);
     }
     reconnect$.shamefullySendNext(null);
+    assert.deepEqual(takeCategories(), ['board']);
     t.mock.timers.tick(500);
     assert.deepEqual(takeCategories(), authenticated ? otherAccountCategories : []);
 
