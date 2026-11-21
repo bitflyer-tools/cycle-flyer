@@ -11,6 +11,7 @@ const bundle = buildSync({
       export { model } from './components/trade/model';
       export { synchronizeBoard } from './components/trade/board/synchronizeBoard';
       export { Board } from './models/board';
+      export { BoardSnapshot } from './models/boardSnapshot';
     `,
     resolveDir: require('node:path').join(__dirname, '../src'),
     loader: 'ts',
@@ -22,7 +23,7 @@ const bundle = buildSync({
 }).outputFiles[0].text;
 const bundledExports = { exports: {} };
 new Function('require', 'module', bundle)(require, bundledExports);
-const { SocketIOSource, intent, model, synchronizeBoard, Board } = bundledExports.exports;
+const { SocketIOSource, intent, model, synchronizeBoard, Board, BoardSnapshot } = bundledExports.exports;
 
 function tradeWithBoard(board) {
   const handlers = new Map();
@@ -38,28 +39,68 @@ function tradeWithBoard(board) {
   };
 }
 
-test('scans at most 1,000 asks for 50 buys at the best ask and leaves bids untouched', () => {
-  const asks = Array.from({ length: 1000 }, (_, index) => ({ price: 100 + index, size: 1 }));
-  const board = new Board({ asks, bids: [{ price: 99, size: 1 }] });
+test('keeps both live side arrays and reads only the best quotes for executions at those prices', () => {
+  const levels = {
+    asks: Array.from({ length: 1000 }, (_, index) => ({ price: 1001 + index, size: 1 })),
+    bids: Array.from({ length: 1000 }, (_, index) => ({ price: 1000 - index, size: 1 })),
+  };
+  const board = new Board(levels);
+  const asks = board.asks;
   const bids = board.bids;
   let priceReads = 0;
-  board.asks.forEach((ask, index) => {
-    Object.defineProperty(ask, 'price', { get: () => { priceReads++; return asks[index].price; } });
+  [...asks, ...bids].forEach((level) => {
+    const { price } = level;
+    Object.defineProperty(level, 'price', { get: () => { priceReads++; return price; } });
   });
   const trade = tradeWithBoard(board);
 
-  trade.receive(Array.from({ length: 50 }, () => ({ side: 'BUY', price: 100 })));
+  trade.receive(Array.from({ length: 50 }, () => [
+    { side: 'BUY', price: 1001 }, { side: 'SELL', price: 1000 },
+  ]).flat());
 
-  assert.ok(priceReads <= 1000, `Read ${priceReads} ask prices`);
-  assert.equal(board.asks.length, 1000);
+  assert.equal(priceReads, 2);
+  assert.equal(board.asks, asks);
   assert.equal(board.bids, bids);
-  assert.equal(trade.state.currentPrice, 100);
+  assert.equal(trade.state.currentPrice, 1000);
 });
 
 const snapshotLevels = {
   asks: [{ price: 101, size: 1 }, { price: 102, size: 2 }],
   bids: [{ price: 99, size: 1 }, { price: 98, size: 2 }],
 };
+
+test('skips snapshot price traversal at the best quotes after deletions, insertions, and pruning', (t) => {
+  const snapshot = new BoardSnapshot(snapshotLevels);
+  const prune = (buy, sell) => snapshot.removeExecutions([
+    { side: 'BUY', price: buy }, { side: 'SELL', price: sell },
+  ]);
+  const assertNoTraversal = (buy, sell) => {
+    const visitPrices = t.mock.method(Map.prototype, 'forEach');
+    try {
+      prune(buy, sell);
+    } finally {
+      visitPrices.mock.restore();
+    }
+    assert.equal(visitPrices.mock.callCount(), 0);
+  };
+
+  assertNoTraversal(101, 99);
+  snapshot.merge([{ price: 101, size: 0 }], [{ price: 99, size: 0 }]);
+  assertNoTraversal(102, 98);
+
+  snapshot.merge([{ price: 101, size: 3 }], [{ price: 99, size: 3 }]);
+  assertNoTraversal(101, 99);
+  prune(102, 98);
+  assertNoTraversal(102, 98);
+  assert.deepEqual(snapshot.toBoard(), new Board({
+    asks: [snapshotLevels.asks[1]],
+    bids: [snapshotLevels.bids[1]],
+  }));
+
+  prune(103, 97);
+  assertNoTraversal(103, 97);
+  assert.deepEqual(snapshot.toBoard(), new Board({ asks: [], bids: [] }));
+});
 const invalidExecutions = [
   { side: 'SELL', price: 0 },
   { side: 'SELL', price: -1 },

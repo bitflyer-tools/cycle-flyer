@@ -57,13 +57,14 @@ export const parentOrderDetails = (
     const reconcile = (orders: ActiveParentOrder[]): DetailUpdate => {
         const ids = new Set(orders.map((order) => order.parent_order_id));
         active.forEach((_, id) => { if (!ids.has(id)) { active.delete(id); } });
-        const requests = orders.reduce((batch: RequestOptions[], order) => {
+        const requests: RequestOptions[] = [];
+        orders.forEach((order) => {
             const id = order.parent_order_id;
             const entry = active.get(id) || { loaded: false };
             entry.acceptanceId = order.parent_order_acceptance_id ?? entry.acceptanceId;
             active.set(id, entry);
-            return batch.concat(load(id, entry));
-        }, []);
+            requests.push(...load(id, entry));
+        });
         return { requests };
     };
 

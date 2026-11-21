@@ -379,6 +379,47 @@ for (const [statusCode, expectedStatus] of [[400, "failed"], [200, "unconfirmed"
     });
 }
 
+test("routes account executions without changing session history or reviving stale responses", async (t) => {
+    await saveCredentials({ key: "account-a", secret: "secret-a" });
+    t.after(() => saveCredentials(null));
+    const trade = setup(t);
+    const page = [{
+        id: 1, exec_date: "2025-03-22T09:57:40.397", side: "BUY", price: 12000000,
+        size: 0.01, child_order_acceptance_id: "JRF20250322-095740-000001",
+    }];
+    equal(trade.requests.length, 0);
+    trade.refreshExecutions();
+    equal(trade.requests[0].category, "executions");
+    trade.respondTo(trade.requests[0]).succeed(page);
+    equal(trade.executions.rows[0].id, 1);
+    deepEqual(trade.histories, []);
+
+    trade.refreshExecutions();
+    const pending = trade.respondTo(trade.requests[1]);
+    trade.navigate("/setting");
+    trade.navigate("/");
+    pending.succeed(page);
+    deepEqual(trade.executions.rows, []);
+    equal(trade.executions.loading, false);
+
+    trade.refreshExecutions();
+    const accountA = trade.requests.at(-1)!;
+    trade.respondTo(accountA).succeed(page);
+    equal(trade.executions.rows[0].id, 1);
+
+    trade.navigate("/setting");
+    await saveCredentials({ key: "account-b", secret: "secret-b" });
+    deepEqual(trade.executions.rows, []);
+    trade.navigate("/");
+    trade.refreshExecutions();
+    const accountB = trade.requests.at(-1)!;
+    trade.respondTo(accountA).succeed(page);
+    deepEqual(trade.executions.rows, []);
+    equal(trade.executions.loading, true);
+    trade.respondTo(accountB).succeed([{ ...page[0], id: 2 }]);
+    equal(trade.executions.rows[0].id, 2);
+});
+
 test("records a rejected limit order and permits a retry", (t) => {
     const order = setup(t, "0.01", { apis: ["Date", "setInterval", "setTimeout"] });
     order.enterPrice("900");
@@ -709,7 +750,8 @@ function rejectUnsigned(request: RequestOptions) {
     });
 }
 
-function findNode(node: VNode, selector: string): VNode | undefined {
+function findNode(node: VNode | null, selector: string): VNode | undefined {
+    if (!node) { return undefined; }
     if (node.sel === selector) { return node; }
     return node.children?.map((child) => typeof child === "string" ? undefined : findNode(child, selector)).find(Boolean);
 }
@@ -1143,6 +1185,7 @@ function setup(t: TestContext, width = "0.01", options: {
     triggerInput$.shamefullySendNext({ target: { value: "11000000" } });
     const sellStop$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
+    const refreshExecutions$ = Stream.create<null>();
     const buyTWAP$ = Stream.create<null>();
     const clearPosition$ = Stream.create<null>();
     const clearOrders$ = Stream.create<null>();
@@ -1156,6 +1199,7 @@ function setup(t: TestContext, width = "0.01", options: {
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
+        ".refresh-executions": { click: refreshExecutions$ },
         "#price-input": { input: priceInput$ },
         "#size-input": { input: sizeInput$ },
         "#trigger-price-input": { input: triggerInput$ },
@@ -1216,7 +1260,7 @@ function setup(t: TestContext, width = "0.01", options: {
         if (options.category === "parent-order") {
             parentDetails.set(new URL(options.url).searchParams.get("parent_order_id")!, options);
         }
-        if (["ifdoco-order", "market-order", "limit-order", "stop-order", "twap-order", "cancel-orders", "cancel-parent-order"]
+        if (["ifdoco-order", "market-order", "limit-order", "stop-order", "twap-order", "cancel-orders", "cancel-parent-order", "executions"]
             .includes(options.category as string)) {
             requests.push(options);
             if (writeOrigin) {
@@ -1253,6 +1297,7 @@ function setup(t: TestContext, width = "0.01", options: {
         enterSize: (value: string) => sizeInput$.shamefullySendNext({ target: { value } }),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         enterTriggerPrice: (value: string) => triggerInput$.shamefullySendNext({ target: { value } }),
+        get executions() { return state!.trade!.executionsComponentState!; },
         get histories() { return state!.trade!.histories; },
         waitForHistoryCount: (count: number) => new Promise<void>((resolve) => {
             const subscription = state$.filter(({ trade }) => trade?.histories.length === count)
@@ -1264,6 +1309,7 @@ function setup(t: TestContext, width = "0.01", options: {
         parentDetails,
         polls,
         publishExecution,
+        refreshExecutions: () => refreshExecutions$.shamefullySendNext(null),
         requests,
         sounds,
         respondTo(input: AccountRequest) {

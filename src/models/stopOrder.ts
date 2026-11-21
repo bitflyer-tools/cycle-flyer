@@ -4,7 +4,7 @@ export class StopOrder {
     public size: number;
 
     constructor(json: any) {
-        this.price = json.price || json.trigger_price;
+        this.price = json.trigger_price ?? json.price;
         this.side = json.side;
         this.size = json.size;
     }
