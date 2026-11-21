@@ -13,6 +13,7 @@ import {twapRequest} from "../src/components/trade/order/twapRequest";
 import {Sources} from "../src/components/trade";
 import {hasApiCredentials, initializeCredentials} from "../src/credentials";
 import {TwapSliceRequest} from "../src/http";
+import {minimumMarketOrderSize} from "../src/models/order";
 import {isRunning} from "../src/models/twapOrder";
 
 before(async () => {
@@ -106,6 +107,23 @@ test("uses the starting schedule for progress and requests after inputs change",
     twap.requests[3].succeed();
     context.mock.timers.tick(10000);
     strictEqual(twap.requests.length, 4);
+});
+
+test("previews and submits every unit of an uneven TWAP split", (context) => {
+    const twap = createTwap(context, 1, 3);
+    twap.setSize("0.031");
+    const status = twapSection(twap.state, hasApiCredentials()).children!
+        .find((node): node is VNode => typeof node === "object" && node?.sel === "p.twap-status");
+    strictEqual(status?.text, "0.01033334 x 1 + 0.01033333 x 2 every 1 sec");
+
+    twap.buy.shamefullySendNext(null);
+    twap.setSize("0.06");
+    context.mock.timers.tick(1000);
+    context.mock.timers.tick(1000);
+    const sizes = twap.requests.map(({ response$ }) => JSON.parse(response$.request.send as string).size);
+    deepStrictEqual(sizes, [0.01033334, 0.01033333, 0.01033333]);
+    strictEqual(sizes.every((size) => size >= minimumMarketOrderSize), true);
+    strictEqual(sizes.reduce((total, size) => total + Math.round(size * 1e8), 0), 3100000);
 });
 
 test("manual market orders and one-slice TWAP share the same minimum", (context) => {

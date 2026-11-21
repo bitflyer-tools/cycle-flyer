@@ -1,5 +1,5 @@
 import {button, div, h4, label, p, VNode} from "@cycle/dom";
-import {canStart, isRunning, maximumTwapInterval, sliceSize} from "../../../models/twapOrder";
+import {allocateSlices, canStart, isRunning, maximumTwapInterval} from "../../../models/twapOrder";
 import {State} from "./index";
 import {numberInput} from "./numberInput";
 
@@ -24,7 +24,13 @@ const twapStatus = (state: State, canSign: boolean): string =>
     isRunning(state.twap)
         ? `Running: ${state.twap.remaining} / ${state.twap.totalSlices} slices left`
         : state.twap.error || (!canSign ? "Configure bitFlyer credentials in Settings to start TWAP." :
-            `${sliceSize(state.size, state.twap.slices)} x ${state.twap.slices} every ${state.twap.interval} sec`);
+            twapPreview(state));
+
+const twapPreview = ({ size, twap }: State): string => {
+    const { baseSize, largerSize, largerCount } = allocateSlices(size, twap.slices);
+    const largerSlices = largerCount > 0 ? `${largerSize} x ${largerCount} + ` : "";
+    return `${largerSlices}${baseSize} x ${twap.slices - largerCount} every ${twap.interval} sec`;
+};
 
 const twapButtons = (state: State, canSign: boolean): VNode[] =>
     isRunning(state.twap)
