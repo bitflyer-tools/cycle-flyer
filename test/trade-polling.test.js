@@ -11,7 +11,10 @@ const { outputFiles } = buildSync({
       const directory = component === 'trade' ? 'trade' : `trade/${component}`;
       return ['intent', 'model', 'request'].map((name) =>
         `export { ${name} as ${component}_${name} } from "./src/components/${directory}/${name}";`);
-    }).concat('export { request as board_request } from "./src/components/trade/board/request";').join('\n'),
+    }).concat(
+      'export { request as board_request } from "./src/components/trade/board/request";',
+      'export { saveCredentials, currentCredentialVersion } from "./src/credentials";',
+    ).join('\n'),
     resolveDir: path.join(__dirname, '..'),
   },
   bundle: true,
@@ -20,7 +23,7 @@ const { outputFiles } = buildSync({
   write: false,
 });
 const testModule = { exports: {} };
-const localStorage = {};
+const localStorage = { getItem: () => null, removeItem() {} };
 runInNewContext(outputFiles[0].text, { module: testModule, require, localStorage });
 const components = testModule.exports;
 
@@ -29,12 +32,13 @@ const otherAccountCategories = ['orders', 'positions'];
 const initialCategories = [...accountCategories, 'collateral', 'status', 'board'];
 
 for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'secret']]) {
-  test(`Trade polls with API key ${key ? 'present' : 'absent'} and secret ${secret ? 'present' : 'absent'}`, (t) => {
+  test(`Trade polls with API key ${key ? 'present' : 'absent'} and secret ${secret ? 'present' : 'absent'}`, async (t) => {
     t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
-    Object.assign(localStorage, { 'api-key': key, 'api-secret': secret });
+    await components.saveCredentials(key && secret ? { key, secret } : null);
     const reconnect$ = Stream.create();
     const parentOrders$ = Stream.create();
-    const parentResponse$ = Stream.create();
+    const request = { credentialVersion: components.currentCredentialVersion() };
+    const parentResponse$ = Object.assign(Stream.create(), { request });
     const idle = Stream.never();
     const actions = components.trade_intent({
       socket: { reconnect$, childOrderEvent$: idle, executionBatch$: idle, parentOrderEvent$: idle },
@@ -86,7 +90,7 @@ test('keeps active order markers after a failed or malformed poll and applies th
     next: (reduce) => { state = reduce(state); },
     error: (error) => { throw error; },
   });
-  const respond = (orders) => responses.shamefullySendNext(Stream.of({ text: JSON.stringify(orders) }));
+  const respond = (orders) => responses.shamefullySendNext(Stream.of({ text: JSON.stringify(orders), request: { credentialVersion: components.currentCredentialVersion() } }));
 
   try {
     respond([{ side: 'BUY', price: 50000, size: 0.05, outstanding_size: 0.02 }]);
@@ -153,13 +157,18 @@ for (const { component, category, first, invalid, next, read, expected } of test
       next: (reduce) => { state = reduce(state); },
       error: (error) => { throw error; },
     });
-    const respond = (text) => responses.shamefullySendNext(Object.assign(Stream.of({ text }), { request: { category } }));
+    const respond = (text, credentialVersion = components.currentCredentialVersion()) =>
+      responses.shamefullySendNext(Stream.of({ text, request: { credentialVersion } }));
 
     try {
       respond(JSON.stringify(first));
       assert.equal(read(state), expected[0]);
       const lastValidState = state;
 
+      if (category !== 'status') {
+        respond(JSON.stringify(next), -1);
+        assert.equal(state, lastValidState);
+      }
       respond('upstream unavailable');
       assert.equal(state, lastValidState);
       for (const value of invalid) {
@@ -197,11 +206,11 @@ for (const [category, action, payload, read] of accountPolls) {
     const subscription = actions[action].subscribe({ next: (value) => values.push(read(value)) });
     t.after(() => subscription.unsubscribe());
 
-    const announce = (value, delay) => {
-      const response = Object.assign(Stream.create(), { request: { category, positionCloseId } });
+    const announce = (value, delay, credentialVersion = components.currentCredentialVersion()) => {
+      const response = Stream.create();
       responses.shamefullySendNext(response);
       setTimeout(() => {
-        response.shamefullySendNext({ text: JSON.stringify(payload(value)) });
+        response.shamefullySendNext({ text: JSON.stringify(payload(value)), request: { credentialVersion, positionCloseId } });
         response.shamefullySendComplete();
       }, delay);
     };
@@ -222,6 +231,16 @@ for (const [category, action, payload, read] of accountPolls) {
     announce(3, 11000);
     t.mock.timers.tick(1000);
     assert.deepEqual(values, [1, 2]);
+  });
+
+  test(`${category} ignores a newer response from stale credentials`, (t) => {
+    const { values, announce } = observe(t);
+    announce(1, 15000);
+    announce(2, 1000, -1);
+    t.mock.timers.tick(1000);
+    assert.deepEqual(values, []);
+    t.mock.timers.tick(14000);
+    assert.deepEqual(values, [1]);
   });
 
   test(`${category} ignores older responses after applying a newer result`, (t) => {

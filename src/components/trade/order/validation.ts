@@ -1,7 +1,9 @@
+import {currentCredentialVersion} from "../../../credentials";
 import {State} from "./index";
 
 export const canClearPosition = (state: State): boolean =>
-    !state.isOrdering && !state.positionClosePending && state.position.size !== 0;
+    !state.isOrdering && !state.positionClosePending && state.position.size !== 0
+    && state.positionCredentialVersion === currentCredentialVersion();
 
 export const isValidOrderSize = (state: State): boolean =>
     isPositiveFinite(state.size);
