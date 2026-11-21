@@ -6,8 +6,10 @@ export const view = (
     summaryComponentDOM$: Stream<VNode>,
     orderComponentDOM$: Stream<VNode>,
     executionsComponentDOM$: Stream<VNode>,
+    recentTradesDOM$: Stream<VNode>,
 ): Stream<VNode> =>
-    Stream.combine(summaryComponentDOM$, boardComponentDOM$, orderComponentDOM$, executionsComponentDOM$)
-        .map(([summary, board, order, executions]) => div(".trade", [
-            div(".trade-sidebar", [executions, summary]), board, order,
+    Stream.combine(summaryComponentDOM$, boardComponentDOM$, orderComponentDOM$, executionsComponentDOM$,
+        recentTradesDOM$)
+        .map(([summary, board, order, executions, recentTrades]) => div(".trade", [
+            div(".trade-sidebar", [executions, summary]), board, order, recentTrades,
         ]));

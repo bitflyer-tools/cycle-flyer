@@ -1,9 +1,10 @@
 import {button, div, span, VNode} from "@cycle/dom";
-import Stream, {Listener} from "xstream";
+import Stream from "xstream";
 import {BoardOrder} from "../../../models/boardOrder";
 import {Order} from "../../../models/order";
 import {StopOrder} from "../../../models/stopOrder";
 import {ceilBy, floorBy} from "../../../util";
+import {throttleLatest} from "../throttleLatest";
 import {State} from "./";
 
 export const view = (state$: Stream<State>) => {
@@ -11,7 +12,7 @@ export const view = (state$: Stream<State>) => {
     const stopTotals = memoizeMarkerTotals(true);
 
     return state$
-        .compose(throttleBoardState)
+        .compose((updates$) => throttleLatest(updates$, 100))
         .map((state) => {
             const orders = orderTotals(state.orders, state.groupedSize);
             const stops = stopTotals(state.stopOrders, state.groupedSize);
@@ -47,45 +48,6 @@ export const view = (state$: Stream<State>) => {
                 )),
             ]);
         });
-};
-
-const throttleBoardState = (state$: Stream<State>): Stream<State> => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let pending: State | undefined;
-    let listener: Listener<State>;
-
-    return Stream.create<State>({
-        start(output) {
-            const emit = (state: State) => {
-                timer = setTimeout(() => {
-                    timer = undefined;
-                    const latest = pending;
-                    pending = undefined;
-                    if (latest) { emit(latest); }
-                }, 100);
-                output.next(state);
-            };
-
-            listener = {
-                next(state) {
-                    if (timer === undefined) { emit(state); }
-                    else { pending = state; }
-                },
-                error: (error) => output.error(error),
-                complete() {
-                    if (pending) { output.next(pending); }
-                    output.complete();
-                },
-            };
-            state$.addListener(listener);
-        },
-        stop() {
-            clearTimeout(timer);
-            timer = undefined;
-            pending = undefined;
-            state$.removeListener(listener);
-        },
-    });
 };
 
 const padWithZero = (n: number): string => n.toFixed(8).toString();

@@ -1,7 +1,7 @@
 .trade
   margin: 0 auto
   display: grid
-  grid-template-columns: 380px 1fr 380px
+  grid-template-columns: 380px minmax(0, 1fr) 260px 380px
   grid-template-rows: 1fr
 
   .trade-sidebar
@@ -10,5 +10,58 @@
     min-width: 0
     max-height: calc(100vh - 60px)
     overflow-y: auto
+
+  .order
+    grid-column: 4
+
+  .recent-trades
+    grid-column: 3
+    grid-row: 1
+    min-width: 0
+    padding: 0 8px
+    font-size: 12px
+    letter-spacing: normal
+
+    h2
+      margin: 0
+      font-size: 14px
+      font-weight: 400
+      line-height: 30px
+
+    .recent-trades-scroll
+      max-height: calc(100vh - 90px)
+      overflow: auto
+
+    table
+      width: 100%
+      border-collapse: collapse
+      font-variant-numeric: tabular-nums
+      white-space: nowrap
+      text-align: right
+
+    th, td
+      padding: 4px
+
+    th
+      position: sticky
+      top: 0
+      background: rgb(44, 57, 64)
+
+@media (max-width: 1399px)
+  .trade
+    grid-template-columns: minmax(350px, 1fr) minmax(0, 120px) 260px
+    grid-template-rows: auto auto
+
+    .board
+      grid-column: 1 / 3
+
+    .recent-trades
+      grid-column: 3
+
+    .trade-sidebar, .order
+      grid-row: 2
+
+    .order
+      grid-column: 2 / 4
 
 @import './executions/index.styl'
