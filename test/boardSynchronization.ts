@@ -3,6 +3,7 @@ import {strict as assert} from "node:assert";
 import {test} from "node:test";
 import Stream from "xstream";
 import {State} from "../src/components/trade/board";
+import {request as pollBoard} from "../src/components/trade/board/request";
 import {synchronizeBoard} from "../src/components/trade/board/synchronizeBoard";
 import {Board, BoardLevels} from "../src/models/board";
 import {BoardOrder} from "../src/models/boardOrder";
@@ -18,6 +19,45 @@ test("replays realtime changes over a delayed snapshot", () => {
     respond([{ price: 100, size: 1 }, { price: 101, size: 4 }, { price: 102, size: 1 }]);
 
     assert.deepEqual(asks(), [[101, 4], [102, 3]]);
+});
+
+test("installs snapshots that consistently arrive after the next poll", (t) => {
+    t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
+    const {request, update, asks} = setup();
+    let poll = 0;
+    const subscription = pollBoard().subscribe({
+        next: () => {
+            const respond = request();
+            const size = ++poll;
+            setTimeout(() => respond([{ price: 100, size }]), 16_000);
+        },
+    });
+    t.after(() => subscription.unsubscribe());
+
+    t.mock.timers.tick(15_000);
+    assert.equal(poll, 2);
+    assert.deepEqual(asks(), []);
+    update(101, 3);
+    t.mock.timers.tick(1_000);
+    assert.deepEqual(asks(), [[100, 1], [101, 3]]);
+    t.mock.timers.tick(14_000);
+    t.mock.timers.tick(1_000);
+    assert.deepEqual(asks(), [[100, 2], [101, 3]]);
+});
+
+test("expires a stalled snapshot while a later refresh is pending", (t) => {
+    t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
+    const {request, asks} = setup();
+    const respondStalled = request();
+
+    t.mock.timers.tick(15_000);
+    const respondLater = request();
+    t.mock.timers.tick(15_001);
+    respondStalled([{ price: 100, size: 1 }]);
+    assert.deepEqual(asks(), []);
+
+    respondLater([{ price: 101, size: 2 }]);
+    assert.deepEqual(asks(), [[101, 2]]);
 });
 
 test("installs a 100-delta snapshot with one sort per side", () => {
