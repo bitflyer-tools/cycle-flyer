@@ -15,6 +15,7 @@ interface PendingSnapshot {
     updates: BoardUpdate[];
     board?: Board;
     synchronized?: boolean;
+    expired?: boolean;
 }
 
 export const synchronizeBoard = <T extends Stream<Response>>(
@@ -68,7 +69,8 @@ const reconcileSnapshot = (
 ): Stream<PendingSnapshot & {board: Board}> => {
     const connectionUpdates$ = connection$.map((connected) => (pending: PendingSnapshot) => ({
         updates: [],
-        synchronized: pending.synchronized === undefined && connected,
+        synchronized: connected,
+        expired: pending.synchronized !== undefined,
     }));
     const updates$ = boardUpdates$.map((update) => (pending: PendingSnapshot) => {
         if (pending.synchronized) { pending.updates.push(update); }
@@ -82,8 +84,9 @@ const reconcileSnapshot = (
 
     return Stream.merge(connectionUpdates$, updates$, snapshot$)
         .fold((pending, update) => update(pending), { updates: [] } as PendingSnapshot)
-        .filter((pending): pending is PendingSnapshot & {board: Board} => !!pending.board)
+        .filter((pending) => pending.expired === true || !!pending.board)
         .take(1)
+        .filter((pending): pending is PendingSnapshot & {board: Board} => !!pending.board)
         .endWhen(Stream.periodic(snapshotDeadlineMs).take(1))
         .replaceError(() => Stream.empty());
 };

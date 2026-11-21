@@ -196,9 +196,10 @@ test('polls REST offline and synchronizes previews only from a fresh connected s
     socket.receive(executionChannel, [{ side: 'BUY', price: 103 }]);
     socket.receive('disconnect');
     assert.equal(state.hasBoardSnapshot, false);
+    const displayedBoard = state.board;
 
     stale.shamefullySendNext({ text: JSON.stringify(snapshot) });
-    assert.equal(state.board.asks[0].size, 1);
+    assert.equal(state.board, displayedBoard);
     assert.equal(state.hasBoardSnapshot, false);
 
     await Promise.resolve();
@@ -209,6 +210,7 @@ test('polls REST offline and synchronizes previews only from a fresh connected s
 
     socket.receive('connect');
     offlineResponse.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    assert.equal(state.board, displayedBoard);
     assert.equal(state.hasBoardSnapshot, false);
     await Promise.resolve();
     assert.equal(requests.length, 6);
