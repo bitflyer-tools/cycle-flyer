@@ -626,6 +626,31 @@ test("keeps Clear Position disabled until a full fill is confirmed", async (t) =
     equal(order.requests.length, 1);
 });
 
+test("closes the new short position after a matching refresh confirms a reversal", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    const initialPoll = order.positionRequests[0];
+    order.respondTo(initialPoll).succeed([{ side: "BUY", size: 0.10, price: 40000 }]);
+    order.clearPosition();
+    order.respondTo(order.requests[0]).succeed({ child_order_acceptance_id: "JRF-accepted" });
+
+    const short = [{ side: "SELL", size: 0.02, price: 40000 }];
+    const refresh = order.positionRequests[1];
+    order.respondTo(initialPoll).succeed(short);
+    equal(order.clearPositionDisabled, true);
+    order.clearPosition();
+    equal(order.requests.length, 1);
+
+    order.respondTo(refresh).succeed(short);
+    equal(order.tradeState.position.size, -0.02);
+    equal(order.clearPositionDisabled, false);
+    order.clearPosition();
+    equal(order.requests.length, 2);
+    const { side, size, child_order_type } = JSON.parse(order.requests[1].send as string);
+    deepEqual({ side, size, child_order_type }, { side: "BUY", size: 0.02, child_order_type: "MARKET" });
+});
+
 test("uses only the confirmed short remainder after a partial close", async (t) => {
     const order = setup(t);
     await saveCredentials({ key: "test-key", secret: "test-secret" });
