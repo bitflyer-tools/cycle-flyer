@@ -3,7 +3,7 @@ import {RequestInput, RequestOptions, Response, ResponseStream} from "@cycle/htt
 import {MainHTTPSource} from "@cycle/http/lib/cjs/MainHTTPSource";
 import {StateSource} from "@cycle/state";
 import {routerify} from "cyclic-router";
-import {deepEqual, equal, match} from "node:assert/strict";
+import {deepEqual, doesNotMatch, equal, match} from "node:assert/strict";
 import {once} from "node:events";
 import {createServer} from "node:http";
 import {test, TestContext} from "node:test";
@@ -13,9 +13,11 @@ import Stream, {MemoryStream} from "xstream";
 import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
+import {groupSizeStorageKey} from "../src/components/trade/board/intent";
 import {twapStorageKeys} from "../src/components/trade/order/twapIntent";
 import {stopSection} from "../src/components/trade/order/stopView";
 import {storageKeys} from "../src/components/trade/order/intent";
+import {BoardLevels} from "../src/models/board";
 import {Execution} from "../src/models/execution";
 import {HISTORY_LIMIT} from "../src/models/orderHistory";
 import type {State as SummaryState} from "../src/components/trade/summary";
@@ -332,6 +334,39 @@ test("reports mixed Clear Orders results and stays locked until every request se
     order.clearOrders();
     deepEqual(order.requests.slice(3).map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
+});
+
+test("previews both market sides from synchronized public depth without credentials", async (t) => {
+    await saveCredentials(null);
+    const order = setup(t);
+    order.enterSize("0.01");
+    await Promise.resolve();
+    equal(order.tradeState.boardComponentState?.groupedSize, 100);
+    const boardResponse = order.respondTo(order.boardRequest!);
+
+    order.updateBoard({ asks: [{ price: 110, size: 0.02 }], bids: [] });
+    match(order.rendered(), /Order book unavailable/);
+    doesNotMatch(order.rendered(), /110 JPY/);
+
+    boardResponse.succeed({
+        asks: [{ price: 100, size: 0.01 }],
+        bids: [{ price: 90, size: 0.01 }, { price: 72, size: 0.02 }],
+    });
+    match(order.rendered(), /Live average fill estimates \(before fees\)/);
+    match(order.rendered(), /100 JPY \(0.0000%\)/);
+    match(order.rendered(), /90 JPY \(0.0000%\)/);
+
+    order.enterSize("0.02");
+    match(order.rendered(), /105 JPY \(\+5.0000%\)/);
+    match(order.rendered(), /81 JPY \(-10.0000%\)/);
+
+    order.updateBoard({ asks: [{ price: 110, size: 0 }], bids: [] });
+    match(order.rendered(), /Insufficient depth/);
+    match(order.rendered(), /81 JPY \(-10.0000%\)/);
+
+    order.enterSize("0");
+    doesNotMatch(order.rendered(), /market-fill-preview/);
+    deepEqual(order.requests, []);
 });
 
 test("reports a failed bulk cancellation and keeps the child orders visible", (t) => {
@@ -999,6 +1034,7 @@ function setup(t: TestContext, width = "0.01", options: {
     triggerInput$.shamefullySendNext({ target: { value: "11000000" } });
     const sellStop$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
+    const board$ = Stream.create<BoardLevels>();
     const buyTWAP$ = Stream.create<null>();
     const clearPosition$ = Stream.create<null>();
     const clearOrders$ = Stream.create<null>();
@@ -1029,6 +1065,7 @@ function setup(t: TestContext, width = "0.01", options: {
         },
     };
     const storedValues: Record<string, string> = {
+        [groupSizeStorageKey]: "100",
         [storageKeys.priceWidth]: width,
         [twapStorageKeys.interval]: "1",
         [twapStorageKeys.slices]: String(twapSlices),
@@ -1041,7 +1078,8 @@ function setup(t: TestContext, width = "0.01", options: {
         HTTP: source,
         history: history$,
         socket: {
-            board$: Stream.never(),
+            connected$: Stream.of(true),
+            board$,
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
             executionBatch$,
@@ -1062,12 +1100,14 @@ function setup(t: TestContext, width = "0.01", options: {
         },
     });
     const requests: RequestOptions[] = [];
+    let boardRequest: AccountRequest | undefined;
     const polls: AccountRequest[] = [];
     const pages: AccountRequest[] = [];
     const parentDetails = new Map<string, RequestOptions>();
     const http = main.HTTP.subscribe({ next: (request) => {
         const options = request as AccountRequest;
         if (options.category === "parent-orders-page") { pages.push(options); }
+        if (options.category === "board") { boardRequest = options; }
         if (options.method === "GET") { polls.push(options); }
         if (options.category === "parent-order") {
             parentDetails.set(new URL(options.url).searchParams.get("parent_order_id")!, options);
@@ -1097,6 +1137,7 @@ function setup(t: TestContext, width = "0.01", options: {
     });
 
     return {
+        get boardRequest() { return boardRequest; },
         buy: (category: keyof typeof buy$) => buy$[category].shamefullySendNext(null),
         buyTWAP: () => buyTWAP$.shamefullySendNext(null),
         clearPosition: () => clearPosition$.shamefullySendNext(null),
@@ -1105,6 +1146,8 @@ function setup(t: TestContext, width = "0.01", options: {
         clearOrders: () => clearOrders$.shamefullySendNext(null),
         enterSize: (value: string) => sizeInput$.shamefullySendNext({ target: { value } }),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
+        rendered: () => JSON.stringify(vNode),
+        updateBoard: (delta: BoardLevels) => board$.shamefullySendNext(delta),
         enterTriggerPrice: (value: string) => triggerInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),

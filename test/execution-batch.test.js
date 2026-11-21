@@ -26,7 +26,7 @@ const { SocketIOSource, intent, model, synchronizeBoard, Board } = bundledExport
 
 function tradeWithBoard(board) {
   const handlers = new Map();
-  const socket = new SocketIOSource({ on: (name, handler) => handlers.set(name, handler) });
+  const socket = new SocketIOSource({ connected: true, on: (name, handler) => handlers.set(name, handler) });
   const actions = intent({ socket, HTTP: { select: () => Stream.never() } });
   let state;
   model(actions).addListener({ next: (reducer) => { state = reducer(state); } });
@@ -87,7 +87,7 @@ function assertLiveAndReplayedBoard(executions, expectedLevels) {
   const trade = tradeWithBoard(new Board(snapshotLevels));
   const responses = Stream.create();
   const response = Stream.create();
-  synchronizeBoard(Stream.never(), responses, trade.socket.executionBatch$).addListener({
+  synchronizeBoard(Stream.never(), responses, trade.socket.executionBatch$, trade.socket.connected$).addListener({
     next: (reduce) => { trade.state.boardComponentState = reduce(trade.state.boardComponentState); },
   });
   responses.shamefullySendNext(response);

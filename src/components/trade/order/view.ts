@@ -5,6 +5,7 @@ import {credentialAvailability} from "../../../credentials";
 import {sideButtons} from "./buttons";
 import {ifdocoSection} from "./ifdocoView";
 import {State} from "./index";
+import {marketFillPreview, sameMarketFills} from "./marketFillView";
 import {numberInput} from "./numberInput";
 import {sizeSection} from "./sizeView";
 import {stopSection} from "./stopView";
@@ -36,6 +37,7 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
 const sameViewInputs = (previous: State, next: State): boolean =>
     Object.is(previous.currentPrice, next.currentPrice)
     && previous.isOrdering === next.isOrdering
+    && sameMarketFills(previous.marketFills, next.marketFills)
     && previous.orderSigningError === next.orderSigningError
     && previous.positionCredentialVersion === next.positionCredentialVersion
     && canClearPosition(previous) === canClearPosition(next)
@@ -54,6 +56,7 @@ const sameViewInputs = (previous: State, next: State): boolean =>
 const marketSection = (state: State): VNode =>
     div([
         h4(".sub-title", "Market"),
+        ...(state.marketFills ? [marketFillPreview(state.marketFills)] : []),
         div(".market-order-buttons.order-buttons", sideButtons(state.isOrdering || !isValidMarketOrder(state))),
     ]);
 

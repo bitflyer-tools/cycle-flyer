@@ -43,6 +43,7 @@ function appHarness(t) {
     HTTP: { select },
     history: Stream.of({ pathname: '/' }),
     socket: {
+      connected$: Stream.of(true),
       board$: Stream.never(),
       execution$: Stream.never(),
       executionBatch$,

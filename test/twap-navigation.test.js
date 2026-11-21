@@ -64,6 +64,7 @@ test("leaving Trade stops a partially completed TWAP and restores idle controls"
         HTTP: { select: (category) => category === "twap-order" ? twapResponses : Stream.never() },
         history,
         socket: {
+            connected$: Stream.of(true),
             board$: Stream.never(),
             childOrderEvent$: Stream.never(),
             executionBatch$: Stream.never(),

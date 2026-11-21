@@ -20,6 +20,7 @@ export class SocketIOSource {
     public execution$: Stream<Execution> = Stream.create();
     public executionBatch$: Stream<Execution[]> = Stream.create();
     public childOrderEvent$: Stream<ChildOrderEvent> = Stream.create();
+    public connected$: Stream<boolean>;
     public reconnect$: Stream<null> = Stream.create();
     public parentOrderEvent$: Stream<ParentOrderEvent> = Stream.create();
 
@@ -36,6 +37,12 @@ export class SocketIOSource {
     constructor(client: Socket) {
         const publicChannelNames = Object.keys(this.channels).filter((name) => privateChannelNames.indexOf(name) < 0);
 
+        this.connected$ = Stream.createWithMemory<boolean>({
+            start: (listener) => listener.next(client.connected),
+            stop: () => undefined,
+        });
+        client.on("disconnect", () => this.connected$.shamefullySendNext(false));
+
         let authenticatedVersion: number | null = null;
         let connectedOnce = false;
         client.on("connect", () => {
@@ -47,6 +54,7 @@ export class SocketIOSource {
                 authenticatedVersion = version;
                 privateChannelNames.forEach((channelName) => client.emit("subscribe", channelName));
             });
+            this.connected$.shamefullySendNext(true);
             if (connectedOnce) { this.reconnect$.shamefullySendNext(null); }
             connectedOnce = true;
         });
