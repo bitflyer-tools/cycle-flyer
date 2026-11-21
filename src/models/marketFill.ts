@@ -19,6 +19,7 @@ export const estimateMarketFills = (board: Board | undefined, size: number): Mar
 const estimateFill = (levels: readonly BoardOrder[] | undefined, size: number): MarketFill => {
     let bestPrice: number | undefined;
     let remaining = size;
+    let subtractionError = 0;
     let weightedDifference = 0;
 
     for (const level of levels ?? []) {
@@ -26,8 +27,11 @@ const estimateFill = (levels: readonly BoardOrder[] | undefined, size: number): 
         bestPrice ??= level.price;
         const filled = Math.min(remaining, level.size);
         weightedDifference += (filled / size) * (level.price - bestPrice);
-        remaining -= filled;
-        // Decimal sizes can leave a tiny remainder after consuming the exact depth.
+        // Carry rounding error forward so it does not accumulate across depth levels.
+        const change = -filled - subtractionError;
+        const nextRemaining = remaining + change;
+        subtractionError = (nextRemaining - remaining) - change;
+        remaining = nextRemaining;
         if (remaining <= size * Number.EPSILON) {
             const difference = weightedDifference / (1 - remaining / size);
             return {

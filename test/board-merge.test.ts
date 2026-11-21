@@ -118,3 +118,20 @@ test("handles exact decimal depth, insufficient depth, and unavailable sides", (
     });
     [0, -1, NaN, Infinity].forEach((size) => strictEqual(estimateMarketFills(board, size), undefined));
 });
+
+test("estimates an order matching the total depth across 100 decimal levels", () => {
+    const board = new Board({
+        asks: Array.from({ length: 100 }, (_, index) => ({ price: 100 + index, size: 0.03 })),
+        bids: Array.from({ length: 100 }, (_, index) => ({ price: 99 - index / 2, size: 0.03 })),
+    });
+
+    const fills = estimateMarketFills(board, 3)!;
+    strictEqual(fills.buy.status, "estimated");
+    strictEqual(fills.sell.status, "estimated");
+    strictEqual(fills.buy.averagePrice.toFixed(4), "149.5000");
+    strictEqual(fills.sell.averagePrice.toFixed(4), "74.2500");
+    deepStrictEqual(estimateMarketFills(board, 3.00000001), {
+        buy: { status: "insufficient" },
+        sell: { status: "insufficient" },
+    });
+});
