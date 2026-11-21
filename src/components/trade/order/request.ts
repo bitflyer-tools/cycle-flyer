@@ -93,8 +93,10 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
             (state) => isValidStopOrder(state, "BUY")),
         withState(actions.onClickStopSellButton$, (state) => stopOrder(state.triggerPrice, state.size, "SELL"),
             (state) => isValidStopOrder(state, "SELL")),
-        withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder, isValidIFDOCOOrder),
-        withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder, isValidIFDOCOOrder),
+        withState(actions.onClickIFDOCOBuyButton$, ifdocoBuyOrder,
+            (state) => isValidIFDOCOOrder(state, "BUY")),
+        withState(actions.onClickIFDOCOSellButton$, ifdocoSellOrder,
+            (state) => isValidIFDOCOOrder(state, "SELL")),
         actions.onClickClearButton$.compose(sampleCombine(state$))
             .filter(([_, state]) => canClearPosition(state))
             .map(([_, state]) => ({

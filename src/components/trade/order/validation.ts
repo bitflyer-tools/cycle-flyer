@@ -22,9 +22,18 @@ export const isValidStopOrder = (state: State, side: "BUY" | "SELL"): boolean =>
         && (side === "BUY" ? triggerPrice > currentPrice : triggerPrice < currentPrice);
 };
 
-export const isValidIFDOCOOrder = (state: State): boolean =>
-    isValidOrderSize(state) && isPositiveFinite(state.currentPrice)
-    && state.ifdocoOrder.hasValidWidth() && state.ifdocoOrder.hasValidRatio();
+export const isValidIFDOCOOrder = (state: State, side: "BUY" | "SELL"): boolean => {
+    const { currentPrice, ifdocoOrder } = state;
+    if (!isValidOrderSize(state) || !isPositiveFinite(currentPrice)
+        || !ifdocoOrder.hasValidWidth() || !ifdocoOrder.hasValidRatio()) {
+        return false;
+    }
+
+    const exitPrices = side === "BUY"
+        ? [ifdocoOrder.buyProfitLine(currentPrice), ifdocoOrder.buyLossLine(currentPrice)]
+        : [ifdocoOrder.sellProfitLine(currentPrice), ifdocoOrder.sellLossLine(currentPrice)];
+    return exitPrices.every(isPositiveFinite);
+};
 
 const isPositiveFinite = (value: number): boolean =>
     Number.isFinite(value) && value > 0;
