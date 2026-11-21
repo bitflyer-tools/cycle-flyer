@@ -6,7 +6,7 @@ export interface ParentStopOrders {
 
 export const stopOrdersOf = (parentOrder: any): StopOrder[] =>
     (parentOrder.parameters || [])
-        .filter((parameter: any) => parameter.condition_type === "STOP")
+        .filter((parameter: any) => parameter.condition_type === "STOP" || parameter.condition_type === "STOP_LIMIT")
         .map((parameter: any) => new StopOrder(parameter));
 
 export const putParentOrder = (parentStopOrders: ParentStopOrders, parentOrder: any): ParentStopOrders =>
