@@ -7,7 +7,7 @@ const { outputFiles } = buildSync({
   stdin: {
     contents: [
       'export { saveCredentials } from "./src/credentials";',
-      'export { canStart, defaultTwapOrder, sliceSize } from "./src/models/twapOrder";',
+      'export { allocateSlices, canStart, defaultTwapOrder } from "./src/models/twapOrder";',
       'export { twapIntent } from "./src/components/trade/order/twapIntent";',
       'export { twapModel } from "./src/components/trade/order/twapModel";',
       'export { twapSection } from "./src/components/trade/order/twapView";',
@@ -26,7 +26,7 @@ new Function('require', 'module', 'localStorage', outputFiles[0].text)(
   require, testModule, { getItem: () => null, removeItem() {} },
 );
 const {
-  canStart, defaultTwapOrder, sliceSize, twapIntent, twapModel, twapRequest, twapSection,
+  allocateSlices, canStart, defaultTwapOrder, twapIntent, twapModel, twapRequest, twapSection,
 } = testModule.exports;
 before(() => testModule.exports.saveCredentials({ key: 'test-key', secret: 'test-secret' }));
 
@@ -40,14 +40,14 @@ test('previews TWAP slices and enables both sides at the exact minimum', () => {
 
 test('keeps both sides disabled one unit below the required total', () => {
   const { children: [, , , , status, buttons] } = twapSection({ size: 0.28999999, twap }, true);
-  assert.equal(status.text, '0.00999999 x 29 every 1 sec');
+  assert.equal(status.text, '0.01 x 28 + 0.00999999 x 1 every 1 sec');
   assert.deepEqual(buttons.children.map((button) => button.data.attrs.disabled), [true, true]);
 });
 
 test('discards fractional units and supports scientific notation', () => {
-  assert.equal(sliceSize(0.289999999, 29), 0.00999999);
-  assert.equal(sliceSize(2.9e-7, 29), 1e-8);
-  assert.equal(sliceSize(9e-9, 1), 0);
+  assert.deepEqual(allocateSlices(0.289999999, 29), { baseSize: 0.00999999, largerSize: 0.01, largerCount: 28 });
+  assert.equal(allocateSlices(2.9e-7, 29).baseSize, 1e-8);
+  assert.equal(allocateSlices(9e-9, 1).baseSize, 0);
 });
 
 test('schedules all 29 requests at the exact minimum size', (t) => {
