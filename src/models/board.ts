@@ -28,8 +28,10 @@ export class Board {
 
     public remove(side: string, price: number) {
         if (side === "BUY") {
+            if (this.asks.length === 0 || this.asks[0].price >= price) { return; }
             this.asks = this.asks.filter((ask) => ask.price >= price);
         } else {
+            if (this.bids.length === 0 || this.bids[0].price <= price) { return; }
             this.bids = this.bids.filter((bid) => bid.price <= price);
         }
     }
