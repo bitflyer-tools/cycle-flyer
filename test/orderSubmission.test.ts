@@ -1,4 +1,4 @@
-import {mockDOMSource} from "@cycle/dom";
+import {mockDOMSource, VNode} from "@cycle/dom";
 import {RequestInput, RequestOptions, Response, ResponseStream} from "@cycle/http";
 import {MainHTTPSource} from "@cycle/http/lib/cjs/MainHTTPSource";
 import {StorageRequest} from "@cycle/storage";
@@ -17,6 +17,7 @@ import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
 import {credentialAwareStorageDriver} from "../src/storage";
+import {stopSection} from "../src/components/trade/order/stopView";
 import {storageKeys} from "../src/components/trade/order/intent";
 import {Execution} from "../src/models/execution";
 import type {State as SummaryState} from "../src/components/trade/summary";
@@ -37,6 +38,49 @@ test("blocks both IFDOCO sides until the first public execution arrives", (t) =>
     order.respondTo(order.requests[0]).succeed();
     order.sellIFDOCO();
     deepEqual(order.requests.map(({ category }) => category), ["ifdoco-order", "ifdoco-order"]);
+});
+
+test("blocks both stop sides for invalid triggers or a missing market price", (t) => {
+    const order = setup(t, "0.01", { initialPrice: null });
+    const assertBothBlocked = () => {
+        const section = stopSection(order.state);
+        const [, buttons] = section.children as VNode[];
+        const [, sell, buy] = buttons.children as VNode[];
+        equal(sell.data?.attrs?.disabled, true);
+        equal(buy.data?.attrs?.disabled, true);
+        order.buy("stop");
+        order.sellStop();
+        deepEqual(order.requests, []);
+    };
+
+    assertBothBlocked();
+    order.publishExecution(100000);
+    for (const value of ["Infinity", "-Infinity", "invalid", "0", "-1", "100000"]) {
+        order.enterTriggerPrice(value);
+        assertBothBlocked();
+    }
+});
+
+test("submits only the stop side matching the trigger direction and preserves the trigger price", (t) => {
+    const order = setup(t, "0.01", { initialPrice: 100000 });
+    order.enterTriggerPrice("110000.25");
+    order.sellStop();
+    deepEqual(order.requests, []);
+    order.buy("stop");
+    order.respondTo(order.requests[0]).succeed();
+
+    order.enterTriggerPrice("90000.75");
+    order.buy("stop");
+    equal(order.requests.length, 1);
+    order.sellStop();
+
+    deepEqual(order.requests.map(({ category, send }) => {
+        const [{ side, trigger_price }] = JSON.parse(send as string).parameters;
+        return { category, side, trigger_price };
+    }), [
+        { category: "stop-order", side: "BUY", trigger_price: 110000.25 },
+        { category: "stop-order", side: "SELL", trigger_price: 90000.75 },
+    ]);
 });
 
 test("rejects invalid IFDOCO clicks without blocking the next market order", (t) => {
@@ -698,6 +742,9 @@ function setup(t: TestContext, width = "0.01", options: {
     };
     const priceInput$ = Stream.createWithMemory<{ target: { value: string } }>();
     priceInput$.shamefullySendNext({ target: { value: "100000" } });
+    const triggerInput$ = Stream.createWithMemory<{ target: { value: string } }>();
+    triggerInput$.shamefullySendNext({ target: { value: "11000000" } });
+    const sellStop$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
     const clearPosition$ = Stream.create<null>();
     const clearOrders$ = Stream.create<null>();
@@ -712,11 +759,11 @@ function setup(t: TestContext, width = "0.01", options: {
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
         "#price-input": { input: priceInput$ },
-        "#trigger-price-input": { input: Stream.of({ target: { value: "110000" } }) },
+        "#trigger-price-input": { input: triggerInput$ },
         ".order-buttons": { ".clear-order-button": { click: clearOrders$ }, ".clear-button": { click: clearPosition$ } },
         ".limit-order-buttons": { ".buy-button": { click: buy$.limit } },
         ".market-order-buttons": { ".buy-button": { click: buy$.market } },
-        ".stop-order-buttons": { ".buy-button": { click: buy$.stop } },
+        ".stop-order-buttons": { ".buy-button": { click: buy$.stop }, ".sell-button": { click: sellStop$ } },
         ".ranged-ifdoco-order-buttons": {
             ".buy-button": { click: buy$.ifdoco },
             ".sell-button": { click: sellIFDOCO$ },
@@ -786,6 +833,7 @@ function setup(t: TestContext, width = "0.01", options: {
         get positionRequests() { return polls.filter(({ category }) => category === "positions"); },
         clearOrders: () => clearOrders$.shamefullySendNext(null),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
+        enterTriggerPrice: (value: string) => triggerInput$.shamefullySendNext({ target: { value } }),
         get histories() { return state!.trade!.histories; },
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         parentDetails,
@@ -810,6 +858,7 @@ function setup(t: TestContext, width = "0.01", options: {
                 },
             };
         },
+        sellStop: () => sellStop$.shamefullySendNext(null),
         sellIFDOCO: () => sellIFDOCO$.shamefullySendNext(null),
         get state() { return state!.trade!.orderComponentState!; },
         get tradeState() { return state!.trade!; },

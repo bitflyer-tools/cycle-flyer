@@ -52,17 +52,17 @@ const lineNumber = (side: string, profitSign: string, lossSign: string, lines: L
     ]);
 
 const buyLines = (state: State, size: number): Lines => ({
-    loss: state.ifdocoOrder.lossDifference(),
-    lossLine: state.ifdocoOrder.buyLoss(state.currentPrice, size),
-    profit: state.ifdocoOrder.profitDifference(),
-    profitLine: state.ifdocoOrder.buyProfit(state.currentPrice, size),
+    loss: state.ifdocoOrder.buyLoss(state.currentPrice, size),
+    lossLine: state.ifdocoOrder.buyLossLine(state.currentPrice),
+    profit: state.ifdocoOrder.buyProfit(state.currentPrice, size),
+    profitLine: state.ifdocoOrder.buyProfitLine(state.currentPrice),
 });
 
 const sellLines = (state: State, size: number): Lines => ({
-    loss: state.ifdocoOrder.lossDifference(),
-    lossLine: state.ifdocoOrder.sellLoss(state.currentPrice, size),
-    profit: state.ifdocoOrder.profitDifference(),
-    profitLine: state.ifdocoOrder.sellProfit(state.currentPrice, size),
+    loss: state.ifdocoOrder.sellLoss(state.currentPrice, size),
+    lossLine: state.ifdocoOrder.sellLossLine(state.currentPrice),
+    profit: state.ifdocoOrder.sellProfit(state.currentPrice, size),
+    profitLine: state.ifdocoOrder.sellProfitLine(state.currentPrice),
 });
 
 const ifdocoButtonDisabled = (state: State): boolean =>
