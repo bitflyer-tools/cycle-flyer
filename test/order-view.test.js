@@ -181,7 +181,7 @@ test('recent market trades seed and refresh without credentials or extra board r
     DOM: dom,
     HTTP: { select: (category) => category === 'recent-trades' ? history$ : never() },
     orderRequests: { select: never },
-    socket: { board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$ },
+    socket: { connected$: Stream.of(true), board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$ },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
   }, Stream.of(false));
