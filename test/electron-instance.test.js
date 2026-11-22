@@ -2,10 +2,12 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
+const { createRequire } = require('node:module');
 const { test } = require('node:test');
 const { compileFunction } = require('node:vm');
 
 const entry = path.resolve(__dirname, '../srcElectron/index.js');
+const requireFromEntry = createRequire(entry);
 
 const launch = (hasLock) => {
   const calls = [];
@@ -34,12 +36,11 @@ const launch = (hasLock) => {
   };
   const electron = { app, BrowserWindow, ipcMain: { handle() {} } };
   const load = (name) => {
-    if (name === 'electron-squirrel-startup') return false;
     if (name === 'electron') return electron;
     if (name === './credentials') {
       return { createCredentialStore: () => { calls.push('credentials'); return {}; } };
     }
-    return require(name);
+    return requireFromEntry(name);
   };
 
   compileFunction(readFileSync(entry, 'utf8'), ['require', '__dirname'])(load, path.dirname(entry));
