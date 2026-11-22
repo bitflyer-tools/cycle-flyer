@@ -197,7 +197,7 @@ for (const [operation, replacement] of [
     const requests$ = renderer.twapRequest({
       onTwapStarted$: buy$.map(() => ({ id: Symbol(), side: "BUY" })),
       onClickTwapCancelButton$: renderer.Stream.never(),
-    }, state$);
+    }, state$).requests$;
     requests$.addListener(listener);
     t.after(() => requests$.removeListener(listener));
 
@@ -249,13 +249,63 @@ test('a missing Electron signature stops the current TWAP before its next slice'
     onTwapStarted$: buy$.map(() => ({ id: Symbol(), side: "BUY" })),
     onClickTwapCancelButton$: renderer.Stream.never(),
   }, renderer.Stream.of({ size: 0.03, twap: { interval: 1, slices: 3 } }))
-    .subscribe({ next: (request) => requests.push(request) });
+    .requests$.subscribe({ next: (request) => requests.push(request) });
   t.after(() => subscription.unsubscribe());
 
   buy$.shamefullySendNext(null);
   assert.equal(await renderer.authorizeRequest(requests[0]), null);
   t.mock.timers.tick(3000);
   assert.equal(requests.length, 1);
+});
+
+test('starting, canceling, and failing a TWAP leave another scheduler signing independently', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let finishSigning;
+  const headers = { 'ACCESS-KEY': pair.key };
+  const renderer = createRenderer(new Map(), {
+    hasCredentials: async () => true,
+    signRest: () => finishSigning
+      ? Promise.resolve(headers)
+      : new Promise((resolve) => { finishSigning = resolve; }),
+  });
+  await renderer.initializeCredentials();
+
+  const scheduler = () => {
+    const start$ = renderer.Stream.create();
+    const cancel$ = renderer.Stream.create();
+    const requests = [];
+    const { requests$ } = renderer.twapRequest({
+      onTwapStarted$: start$,
+      onClickTwapCancelButton$: cancel$,
+    }, renderer.Stream.of({ size: 0.03, twap: { interval: 1, slices: 3 } }));
+    const subscription = requests$.subscribe({ next: (request) => requests.push(request) });
+    t.after(() => subscription.unsubscribe());
+    return {
+      start: () => start$.shamefullySendNext({ id: Symbol(), side: 'BUY' }),
+      cancel: () => cancel$.shamefullySendNext(null),
+      requests,
+    };
+  };
+
+  const first = scheduler();
+  const second = scheduler();
+  first.start();
+  const signing = renderer.authorizeRequest(first.requests[0]);
+  await Promise.resolve();
+  assert.equal(typeof finishSigning, 'function');
+
+  second.start();
+  second.cancel();
+  assert.equal(await renderer.authorizeRequest(second.requests[0]), null);
+  second.start();
+  assert.equal(await renderer.authorizeRequest({ ...second.requests[1], send: {} }), null);
+
+  finishSigning(headers);
+  assert.equal((await signing).headers['ACCESS-KEY'], pair.key);
+  t.mock.timers.tick(1000);
+  assert.equal(first.requests.length, 2);
+  assert.equal((await renderer.authorizeRequest(first.requests[1])).headers['ACCESS-KEY'], pair.key);
+  assert.equal(second.requests.length, 2);
 });
 
 test('TWAP authorization drops requests that overlap an Electron credential update', async () => {

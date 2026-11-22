@@ -58,7 +58,7 @@ test('schedules all 29 requests at the exact minimum size', (t) => {
   const subscription = twapRequest({
     onTwapStarted$: start$,
     onClickTwapCancelButton$: Stream.never(),
-  }, Stream.of({ size: 0.29, twap })).subscribe({ next: (request) => requests.push(request) });
+  }, Stream.of({ size: 0.29, twap })).requests$.subscribe({ next: (request) => requests.push(request) });
   t.after(() => subscription.unsubscribe());
 
   start$.shamefullySendNext({ id: scheduleId, side: 'BUY' });
@@ -88,14 +88,15 @@ function setup(t, savedInterval, interval = defaultTwapOrder.interval) {
     HTTP: { select: () => Stream.never() },
     storage: { local: { getItem: (key) => Stream.of(key === "twap-interval" ? savedInterval : null) } },
   }, state$);
-  const modelSubscription = twapModel(actions).subscribe({
+  const scheduler = twapRequest(actions, state$);
+  const modelSubscription = twapModel(actions, scheduler.lifecycle$).subscribe({
     next: (reducer) => {
       state = reducer(state);
       state$.shamefullySendNext(state);
     },
   });
   const requests = [];
-  const requestSubscription = twapRequest(actions, state$).subscribe({
+  const requestSubscription = scheduler.requests$.subscribe({
     next: (request) => requests.push(request),
   });
   t.after(() => {

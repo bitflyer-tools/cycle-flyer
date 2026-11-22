@@ -923,6 +923,26 @@ for (const category of ["limit-order", "cancel-orders", "market-order"] as const
     });
 }
 
+test("leaving Trade cancels a TWAP slice that is still signing", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+
+    order.buyTWAP();
+    const signing = authorizeRequest(order.requests[0]);
+    order.navigate("/setting");
+    equal(order.state.twap.remaining, 0);
+    equal(order.state.twap.scheduleId, undefined);
+    equal(await signing, null);
+
+    order.navigate("/");
+    t.mock.timers.tick(1000);
+    equal(order.requests.length, 1);
+    order.buyTWAP();
+    equal(order.state.twap.remaining, 3);
+    equal(order.requests.length, 2);
+});
+
 for (const route of ["/", "/setting"]) {
     for (const status of ["success", "failed", "unconfirmed"] as const) {
         test(`records and notifies a TWAP slice once when it settles on ${route} (${status})`, async (t) => {
