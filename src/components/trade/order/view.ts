@@ -39,6 +39,7 @@ const sameViewInputs = (previous: State, next: State): boolean =>
     && previous.orderSigningError === next.orderSigningError
     && previous.positionCredentialVersion === next.positionCredentialVersion
     && canClearPosition(previous) === canClearPosition(next)
+    && Object.is(Math.abs(previous.position.size), Math.abs(next.position.size))
     && Object.is(previous.price, next.price)
     && Object.is(previous.size, next.size)
     && Object.is(previous.triggerPrice, next.triggerPrice)

@@ -168,3 +168,48 @@ test('the summary waits for a public execution before valuing an open position',
   assert.deepEqual(value('div.profit'), ['span.number.plus', (10_000).toLocaleString()]);
   assert.deepEqual(value('div.collateral'), ['span.number', (2_000_000).toLocaleString()]);
 });
+
+test('the Position preset fills the latest size after a position-only poll', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const positions$ = Stream.create();
+  const presetClick$ = Stream.create();
+  const state$ = Stream.createWithMemory();
+  const never = () => Stream.never();
+  const dom = {
+    select: (selector) => selector === '.size-preset' ? { events: () => presetClick$ } : dom,
+    events: never,
+  };
+  const sinks = Trade({
+    DOM: dom,
+    HTTP: { select: (category) => category === 'positions' ? positions$ : never() },
+    orderRequests: { select: never },
+    socket: { board$: never(), executionBatch$: never(), childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
+    state: new StateSource(state$, 'state'),
+    storage: { local: { getItem: never } },
+  }, Stream.of(false));
+  let state;
+  let order;
+  const stateSubscription = sinks.state.subscribe({
+    next: (reduce) => state$.shamefullySendNext(state = reduce(state)),
+  });
+  const domSubscription = sinks.DOM.subscribe({ next: (node) => { order = node.children[2]; } });
+  t.after(() => {
+    domSubscription.unsubscribe();
+    stateSubscription.unsubscribe();
+  });
+
+  const pollPosition = (size) => positions$.shamefullySendNext(Stream.of({
+    request: { credentialVersion: 0 },
+    text: JSON.stringify([{ side: 'SELL', price: 10_000_000, size }]),
+  }));
+  const sizeGroup = (selector) => order.children[0].children.find(({ sel }) => sel === selector);
+  const positionPreset = () => sizeGroup('div.size-presets').children.find(({ text }) => text === 'Position');
+
+  pollPosition(0.10);
+  assert.equal(positionPreset().data.dataset.size, '0.1');
+
+  pollPosition(0.04);
+  presetClick$.shamefullySendNext({ currentTarget: { dataset: positionPreset().data.dataset } });
+
+  assert.equal(sizeGroup('div.size').children[0].data.attrs.value, 0.04);
+});
