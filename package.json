@@ -42,7 +42,7 @@
     "@electron-forge/maker-squirrel": "^8.0.1",
     "@electron-forge/maker-zip": "^8.0.1",
     "@eslint/js": "^10.0.1",
-    "electron": "^45.3.3",
+    "electron": "^45.4.1",
     "esbuild": "^0.28.2",
     "eslint": "^10.15.0",
     "http-proxy-middleware": "^4.2.1",
