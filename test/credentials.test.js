@@ -466,6 +466,34 @@ const assertMigrationRequiresReentry = async (migrate) => {
   assert.equal(await createRenderer(entries, {}).initializeCredentials(), true);
 };
 
+test('Submitting the Settings credentials form makes credentials available', async () => {
+  const renderer = createRenderer(new Map());
+  const submit$ = renderer.Stream.create();
+  const never = () => renderer.Stream.never();
+  const settings = renderer.settingsIntent({
+    DOM: { select: (selector) => ({
+      events: (type) => selector === '#credentials-form' && type === 'submit' ? submit$ : never(),
+    }) },
+    storage: { local: { getItem: never } },
+  });
+  const message = new Promise((resolve, reject) => {
+    settings.credentialsMessage$.take(1).addListener({ next: resolve, error: reject });
+  });
+  assert.equal(renderer.hasApiCredentials(), false);
+
+  submit$.shamefullySendNext({
+    preventDefault() {},
+    target: {
+      elements: { namedItem: (name) => ({ value: pair[name] }) },
+      reset() {},
+    },
+  });
+
+  assert.equal(await message, 'Credentials saved.');
+  assert.equal(renderer.hasApiCredentials(), true);
+  assert.equal((await renderer.signRest('GET', '/v1/me/getpositions', ''))['ACCESS-KEY'], pair.key);
+});
+
 test('Settings shows empty inputs with password masking even after credentials are saved', async () => {
   const renderer = createRenderer(new Map());
   await renderer.saveCredentials(pair);
