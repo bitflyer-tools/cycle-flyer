@@ -21,9 +21,13 @@ Use the Electron app to verify desktop behavior such as saving API credentials.
 
 ```sh
 npm run lint
+npm run format:check
 npm run test:coverage
 npm run build
 ```
+
+Run `npm run format -- --write` to format GitHub Actions and Dependabot YAML
+and the hand-written JSON configuration files.
 
 For packaging changes, run `npm run make` to build installers or archives for
 your platform under `out/make/`.
