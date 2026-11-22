@@ -7,7 +7,7 @@ const { test } = require('node:test');
 
 const { scripts } = require('../package.json');
 
-function runWithBuild(test, script, build, initialBundle) {
+function runWithBuild(test, script, build, initialBundle, scriptArgs = []) {
   const cwd = mkdtempSync(join(tmpdir(), 'cycle-flyer-'));
   test.after(() => rmSync(cwd, { recursive: true, force: true }));
   const bin = join(cwd, 'node_modules', '.bin');
@@ -26,7 +26,7 @@ function runWithBuild(test, script, build, initialBundle) {
   writeFileSync(join(cwd, 'package.json'), JSON.stringify({
     scripts: { [script]: scripts[script], build: 'node build.js' },
   }));
-  const result = spawnSync('npm', ['run', script], {
+  const result = spawnSync('npm', ['run', script, ...scriptArgs], {
     cwd, encoding: 'utf8', shell: process.platform === 'win32',
   });
   assert.ifError(result.error);
@@ -35,7 +35,7 @@ function runWithBuild(test, script, build, initialBundle) {
 
 const build = "require('node:fs').writeFileSync('renderer.js', 'current')";
 const forgeCommands = {
-  'start:electron': ['start', '--inspect-electron'],
+  'start:electron': ['start'],
   package: ['package'],
   make: ['make'],
 };
@@ -57,5 +57,14 @@ Object.entries(forgeCommands).forEach(([script, args]) => {
     const { result, launch } = runWithBuild(t, script, 'process.exit(1)', 'stale');
     assert.equal(result.status, 1, result.stderr);
     assert.throws(() => readFileSync(launch), { code: 'ENOENT' });
+  });
+});
+
+test('start:electron forwards the inspector flag when explicitly requested', (t) => {
+  const { result, launch } = runWithBuild(t, 'start:electron', build, 'stale', ['--', '--inspect-electron']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(launch, 'utf8')), {
+    bundle: 'current',
+    args: ['start', '--inspect-electron'],
   });
 });
