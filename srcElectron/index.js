@@ -1,7 +1,8 @@
-// The helper quits after handling Squirrel.Windows lifecycle events.
-if (require('electron-squirrel-startup')) return;
-
 const { app, BrowserWindow, ipcMain, safeStorage } = require('electron');
+const handleSquirrelStartup = require('./squirrelStartup');
+
+if (handleSquirrelStartup(app, process)) return;
+
 const path = require('node:path');
 const { createCredentialStore } = require('./credentials');
 
