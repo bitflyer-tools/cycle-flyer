@@ -1,63 +1,49 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version bump type'
-        required: true
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
+  push:
+    tags: ['v*.*.*']
 
 permissions:
   contents: read
 
 jobs:
-  bump-version:
+  validate:
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-
     steps:
-      - name: Require the master branch
-        run: |
-          if [[ "$GITHUB_REF" != "refs/heads/master" ]]; then
-            echo "::error::Dispatch the release workflow from the master branch."
-            exit 1
-          fi
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          persist-credentials: true
+
+      - name: Require the tagged commit on master
+        run: |
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/master; then
+            echo "::error::The tagged commit must be in the history of master."
+            exit 1
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
 
-      - name: Configure git
+      - name: Validate release tag
         run: |
-          git config user.name "Yuji Ueki"
-          git config user.email "unhappychoice@gmail.com"
+          node <<'NODE'
+          const { version } = require('./package.json');
+          const lockfile = require('./package-lock.json');
+          const tag = process.env.GITHUB_REF_NAME;
+          const stableVersion = /^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$/;
 
-      - name: Bump version
-        id: version
-        run: |
-          npm version ${{ inputs.version }} -m "chore: release v%s"
-          echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
-
-      - name: Push changes
-        run: |
-          git push origin master --follow-tags
+          if (!stableVersion.test(version) || tag !== 'v' + version ||
+              lockfile.version !== version || lockfile.packages[''].version !== version) {
+            console.error('::error::The release tag must match the stable version in package.json and package-lock.json.');
+            process.exitCode = 1;
+          }
+          NODE
 
   build:
-    needs: bump-version
+    needs: validate
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -65,8 +51,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: v${{ needs.bump-version.outputs.version }}
 
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -87,7 +71,7 @@ jobs:
           path: out/make/**/*
 
   publish:
-    needs: [bump-version, build]
+    needs: build
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -101,6 +85,6 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
-          tag_name: v${{ needs.bump-version.outputs.version }}
+          tag_name: ${{ github.ref_name }}
           files: artifacts/**/*
           generate_release_notes: true
