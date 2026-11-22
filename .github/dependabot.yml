@@ -1,19 +1,19 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directory: "/"
+    directory: '/'
     schedule:
       interval: daily
-      time: "12:00"
+      time: '12:00'
       timezone: Asia/Tokyo
     open-pull-requests-limit: 20
     ignore:
       # TypeScript 7 (native) has no classic compiler API yet; toolchain is incompatible
       - dependency-name: typescript
-        update-types: ["version-update:semver-major"]
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
-    directory: "/"
+    directory: '/'
     schedule:
       interval: daily
-      time: "12:00"
+      time: '12:00'
       timezone: Asia/Tokyo
