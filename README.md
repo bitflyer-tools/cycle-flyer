@@ -17,6 +17,8 @@ Download the latest release from [GitHub Releases](https://github.com/bitflyer-t
 - Place market, limit, stop, and ranged IFDOCO orders.
 - Use TWAP to split a market order into slices submitted at a set interval.
 
+See the [order form reference](docs/order-entry.md) for fields, validation, and TWAP behavior.
+
 ## Quick start
 
 1. Download the installer or archive for your platform from [GitHub Releases](https://github.com/bitflyer-tools/cycle-flyer/releases/latest).
