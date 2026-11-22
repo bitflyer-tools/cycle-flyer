@@ -1,19 +1,31 @@
 import {RequestInput, RequestOptions} from "@cycle/http";
-import * as hash from "hash.js";
+import {hasApiCredentials} from "./credentials";
 
 export const getBoard = (): RequestInput =>
-    requestInput("board", "/v1/getboard", "GET");
+    ({ ...requestInput("board", "/v1/getboard", "GET"), lazy: true });
 
 export const getState = (): RequestInput =>
     requestInput("status", "/v1/getboardstate", "GET");
-
-export const hasApiCredentials = (): boolean => getApiKeys().every(Boolean);
 
 export const getCollateral = (): RequestInput =>
     requestInput("collateral", "/v1/me/getcollateral", "GET");
 
 export const getPositions = (): RequestInput =>
     requestInput("positions", "/v1/me/getpositions", "GET");
+
+export const recentTradesLimit = 25;
+
+export const getRecentTrades = (): RequestOptions =>
+    requestInput("recent-trades", "/v1/executions", "GET", undefined, { count: recentTradesLimit });
+
+export const executionPageSize = 50;
+
+export const getExecutions = (before?: number): RequestOptions | null => {
+    if (!hasApiCredentials()) { return null; }
+    const page = { count: executionPageSize };
+    return requestInput("executions", "/v1/me/getexecutions", "GET", undefined,
+        before === undefined ? page : { ...page, before });
+};
 
 export const getOrders = (): RequestInput =>
     requestInput("orders", "/v1/me/getchildorders", "GET", undefined, { child_order_state: "ACTIVE" });
@@ -45,6 +57,8 @@ export const marketOrder = (size: number, side: string): RequestInput => {
 };
 
 export interface TwapSliceRequest extends RequestOptions {
+    isTwapActive?: () => boolean;
+    onSigningFailure?: () => void;
     scheduleId: symbol;
 }
 
@@ -121,37 +135,12 @@ export const cancelParentOrder = (parentOrderId: string): RequestInput =>
     });
 
 const requestInput = (category: string, path: string, method: string, json?: object, q?: object) => {
-    const [key, secret] = getApiKeys();
-
-    const url = `https://api.bitflyer.jp${path}`;
-    const query: any = { product_code: "FX_BTC_JPY", ...q };
-    const queryString = "?" + Object.keys(query).reduce((acc, k) => acc + `&${k}=${query[k]}`, "").slice(1);
-
+    const query = { product_code: "FX_BTC_JPY", ...q } as Record<string, string | number>;
+    const queryString = Object.keys(query)
+        .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(query[key])}`)
+        .join("&");
+    const url = `https://api.bitflyer.jp${path}?${queryString}`;
     const send = json ? JSON.stringify(json) : "";
-    const timestamp = Date.now().toString();
-
-    const headers = {
-        "ACCESS-KEY": key,
-        "ACCESS-SIGN": signature(method, path, queryString, secret, send, timestamp),
-        "ACCESS-TIMESTAMP": timestamp,
-        "Content-Type": "application/json",
-    };
-
-    return { category, url, method, headers, send, query };
-};
-
-const getApiKeys = (): string[] => {
-    return [localStorage["api-key"], localStorage["api-secret"]];
-};
-
-const signature = (
-    method: string,
-    path: string,
-    query: string,
-    secret: string,
-    send: string,
-    timestamp: string,
-): string => {
-    const text = timestamp + method + path + query + send;
-    return hash.hmac((hash as any).sha256, secret).update(text).digest("hex");
+    const headers = { "Content-Type": "application/json" };
+    return { category, url, method, headers, send };
 };

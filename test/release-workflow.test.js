@@ -6,10 +6,24 @@ const { test } = require('node:test');
 const { load } = require('js-yaml');
 
 const workflowPath = path.join(__dirname, '../.github/workflows/release.yml');
-const release = load(readFileSync(workflowPath, 'utf8'));
+const workflowSource = readFileSync(workflowPath, 'utf8');
+const release = load(workflowSource);
 const { jobs } = release;
 const { version } = require('../package.json');
 const validation = jobs.validate.steps.find(({ name }) => name === 'Validate release tag');
+
+test('pins external release actions to full commit SHAs with version comments', () => {
+  const actionReferences = Object.values(jobs)
+    .flatMap((job) => [job.uses, ...(job.steps ?? []).map(({ uses }) => uses)])
+    .filter((uses) => uses && !uses.startsWith('./') && !uses.startsWith('docker://'));
+  const documentedReferences = workflowSource.split(/\r?\n/)
+    .map((line) => line.match(/^\s*(?:-\s+)?uses:\s+(\S+)\s+#\s+v\d+\.\d+\.\d+\s*$/)?.[1]);
+
+  actionReferences.forEach((uses) => {
+    assert.match(uses, /@[0-9a-f]{40}$/);
+  });
+  assert.deepEqual(documentedReferences.filter((uses) => actionReferences.includes(uses)), actionReferences);
+});
 
 function validateTag(tag) {
   const result = spawnSync('bash', ['-e', '-c', validation.run], {

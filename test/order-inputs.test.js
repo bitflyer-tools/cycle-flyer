@@ -22,7 +22,7 @@ const loadBundle = new Function('module', 'exports', 'require', 'window', 'local
 loadBundle(compiled, compiled.exports, require, {}, { 'api-key': 'key', 'api-secret': 'secret' });
 const { OrderComponent, Stream, submissions } = compiled.exports;
 
-function orderPanel() {
+function orderPanel(currentPrice = 0) {
   const events = new Map();
   const dom = (path = '') => ({
     select: (selector) => dom(path ? path + ' ' + selector : selector),
@@ -48,7 +48,7 @@ function orderPanel() {
   sinks.DOM.addListener({ next: (value) => { vnode = value; } });
   pending$.addListener({ next: (batch) => { if (batch) requests.push(...batch); } });
   sinks.orderRequests.addListener({ next: (batch) => batches$.shamefullySendNext(batch) });
-  sinks.state.addListener({ next: (reduce) => state$.shamefullySendNext(state = reduce(state)) });
+  sinks.state.addListener({ next: (reduce) => state$.shamefullySendNext(state = { ...reduce(state), currentPrice }) });
   return {
     requests,
     preset: () => events.get('.size-presets .size-preset:click')
@@ -112,6 +112,46 @@ test('preserves the HTTP payloads for valid market and limit orders on both side
         ...(type === 'limit' ? { price: 50000 } : {}),
       });
       assert.deepEqual(panel.disabled(type), [true, true]);
+    });
+  });
+});
+
+test('rejects invalid sizes in both standalone stop controls and submit handlers', () => {
+  const panel = orderPanel(50000);
+  [49000, 51000].forEach((triggerPrice) => {
+    panel.input('trigger-price', String(triggerPrice));
+    ['-0.05', '0', 'NaN', 'Infinity', '-Infinity'].forEach((size) => {
+      panel.input('size', size);
+      assert.deepEqual(panel.disabled('stop'), [true, true]);
+      ['buy', 'sell'].forEach((side) => panel.click('stop', side));
+      assert.deepEqual(panel.requests, []);
+    });
+  });
+});
+
+test('submits each standalone stop side with its exact size and trigger price', () => {
+  ['sell', 'buy'].forEach((side) => {
+    const panel = orderPanel(50000);
+    const triggerPrice = side === 'sell' ? 49000 : 51000;
+    panel.input('size', '0.05');
+    panel.input('trigger-price', String(triggerPrice));
+    assert.deepEqual(panel.disabled('stop'), [side !== 'sell', side !== 'buy']);
+    panel.click('stop', side);
+    assert.equal(panel.requests.length, 1);
+    const [request] = panel.requests;
+    assert.equal(request.category, 'stop-order');
+    assert.equal(request.method, 'POST');
+    assert.equal(new URL(request.url).pathname, '/v1/me/sendparentorder');
+    assert.deepEqual(JSON.parse(request.send), {
+      order_method: 'SIMPLE',
+      parameters: [{
+        condition_type: 'STOP',
+        product_code: 'FX_BTC_JPY',
+        side: side.toUpperCase(),
+        size: 0.05,
+        trigger_price: triggerPrice,
+      }],
+      time_in_force: 'GTC',
     });
   });
 });

@@ -1,11 +1,13 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
+import {Execution, isExecutionPrice} from "../../models/execution";
 import {Order} from "../../models/order";
-import {createOrderHistory} from "../../models/orderHistory";
+import {createOrderHistory, prependOrderHistory} from "../../models/orderHistory";
 import {putParentOrder, retainActive} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
 import {State} from "./index";
 import {Actions} from "./intent";
+import {checkPriceAlert} from "./priceAlert";
 
 const defaultState: State = {
     currentPrice: null,
@@ -14,28 +16,35 @@ const defaultState: State = {
     parentStopOrders: {},
     position: new Position([]),
     price: 0,
+    lastExecutionPrice: 0,
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
-    const defaultReducer$ = Stream.of((state: State) => state || defaultState);
+    const defaultReducer$ = Stream.of(startTradeSession);
 
     const currentPriceReducer$ = actions.onExecutionBatch$
         .filter((executions) => executions.length > 0)
-        .map((executions) => (state: State) => {
-            state.boardComponentState?.board.removeExecutions(executions);
-            return { ...state, currentPrice: executions[executions.length - 1].price };
+        .map((executions) => {
+            const time = new Date();
+            return (state: State) => applyExecutions(state, executions, time);
         });
 
     const myExecutionReducer$ = actions.onMyExecutionCreated$
         .map((event) => createOrderHistory("Executed", event.side || "", event.size || 0, event.price || 0, "success"))
-        .map((history) => (state: State) => ({ ...state, histories: [history].concat(state.histories) }));
+        .map((history) => (state: State) => ({ ...state, histories: prependOrderHistory(state.histories, history) }));
 
     const ordersReducer$ = actions.onOrdersLoaded$
         .map((orders: object[]) => orders.map((order) => new Order(order)))
         .map((orders: Order[]) => (state: State) => ({ ...state, orders }));
 
     const positionReducer$ = actions.onPositionsLoaded$
-        .map((position) => (state: State) => ({ ...state, position }));
+        .map(({ position, positionCloseId, positionCredentialVersion }) => (state: State) => {
+            const close = state.positionClose;
+            const reconciled = close?.settled && close.id === positionCloseId
+                && (close.rejected || position.size === 0 || position.size * close.size < 0
+                    || Math.abs(position.size) < Math.abs(close.size));
+            return { ...state, position, positionCredentialVersion, positionClose: reconciled ? undefined : close };
+        });
 
     const cancelParentOrderReducer$ = actions.onCancelParentOrder$
         .map(({ id, sequence }) => (state: State) => {
@@ -77,4 +86,28 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         parentOrderReducer$,
         parentOrdersReducer$,
     ) as Stream<Reducer<State>>;
+};
+
+const startTradeSession = (state: State = defaultState): State => ({
+    ...state,
+    lastExecutionPrice: 0,
+    summaryComponentState: state.summaryComponentState && { ...state.summaryComponentState, priceAlert: null },
+});
+
+const applyExecutions = (state: State, executions: Execution[], time: Date): State => {
+    state.boardComponentState?.board.removeExecutions(executions);
+    return executions.reduce((next, { price }) => applyExecution(next, price, time), state);
+};
+
+const applyExecution = (state: State, price: number, time: Date): State => {
+    if (!isExecutionPrice(price)) { return { ...state, lastExecutionPrice: 0 }; }
+
+    const summary = state.summaryComponentState;
+    const priceAlert = summary && checkPriceAlert(summary.priceAlert, state.lastExecutionPrice, price, time);
+    return {
+        ...state,
+        currentPrice: price,
+        lastExecutionPrice: price,
+        summaryComponentState: summary && { ...summary, priceAlert: priceAlert ?? null },
+    };
 };

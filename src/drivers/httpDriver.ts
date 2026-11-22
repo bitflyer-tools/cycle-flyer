@@ -1,0 +1,104 @@
+import {HTTPSource, RequestInput, RequestOptions, Response} from "@cycle/http";
+import {MainHTTPSource} from "@cycle/http/lib/cjs/MainHTTPSource";
+import {createResponse$, optionsToSuperagent} from "@cycle/http/lib/cjs/http-driver";
+import type {SuperAgentRequest} from "superagent";
+import Stream from "xstream";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
+import {currentCredentialVersion, signRest} from "../credentials";
+import {TwapSliceRequest} from "../http";
+
+export interface AccountRequest extends RequestOptions {
+    credentialVersion?: number;
+}
+
+export const isCurrentAccountRequest = (request: Pick<AccountRequest, "credentialVersion"> | undefined): boolean =>
+    request?.credentialVersion !== undefined && request.credentialVersion === currentCredentialVersion();
+
+export const unsignedRequests$ = Stream.create<RequestInput>();
+
+export const makeSignedHTTPDriver = () => {
+    const driver = makeHTTPDriver();
+    return (requests$: Stream<RequestInput | null>, name?: string) => driver(
+        requests$
+            .map((request) => Stream.fromPromise(authorizeRequest(request).then((authorized) => {
+                const accountRequest = authorized as AccountRequest | null;
+                const stale = accountRequest?.credentialVersion !== undefined && !isCurrentAccountRequest(accountRequest);
+                if (request && (!authorized || stale)) { unsignedRequests$.shamefullySendNext(request); }
+                return stale ? null : authorized;
+            })))
+            .compose(flattenConcurrently)
+            .filter((request): request is RequestInput => request !== null),
+        name,
+    );
+};
+
+export const authorizeRequest = async (request: RequestInput | null): Promise<RequestInput | null> => {
+    const origin = "https://api.bitflyer.jp";
+    if (!request || typeof request === "string" || !request.url.startsWith(origin + "/v1/me/")) {
+        return request;
+    }
+
+    const {isTwapActive, onSigningFailure} = request as TwapSliceRequest;
+    const version = currentCredentialVersion();
+    const expectedVersion = (request as AccountRequest).credentialVersion;
+    if (version === null) { return null; }
+    const cancelled = () => version !== currentCredentialVersion()
+        || (expectedVersion !== undefined && expectedVersion !== version) || isTwapActive?.() === false;
+    if (cancelled()) { return null; }
+
+    try {
+        const body = request.send || "";
+        const headers = typeof body === "string"
+            ? await signRest(request.method || "GET", request.url.slice(origin.length), body)
+            : null;
+        if (!cancelled() && headers) {
+            const authorized: AccountRequest = {
+                ...request,
+                credentialVersion: version,
+                headers: Object.assign({}, request.headers, headers),
+            };
+            return authorized;
+        }
+    } catch {
+        // eslint-disable-next-line no-console
+        console.error("Unable to sign the bitFlyer request.");
+    }
+    if (!cancelled()) { onSigningFailure?.(); }
+    return null;
+};
+
+const requestDeadlineMs = 10_000;
+
+export const makeHTTPDriver = (deadlineMs = requestDeadlineMs) =>
+    (requests$: Stream<RequestInput | null>, name = "HTTP"): HTTPSource => {
+        const responses$ = requests$
+            .filter((input): input is RequestInput => input !== null)
+            .map((input) => responseStream(typeof input === "string" ? { url: input } : input, deadlineMs));
+        responses$.addListener({});
+        return new MainHTTPSource(responses$, name);
+    };
+
+export const isWriteDeadlineError = (error: any): boolean =>
+    error?.code === "ECONNABORTED" && error.errno === "ETIME";
+
+const responseStream = (options: RequestOptions, deadlineMs: number) => {
+    const isWrite = options.method?.toUpperCase() === "POST";
+    const response$ = isWrite || options.category === "executions"
+        ? responseWithDeadline(options, deadlineMs)
+        : createResponse$(options);
+    const remembered$ = Object.assign(response$.remember(), { request: options });
+    if (!options.lazy || isWrite) remembered$.addListener({});
+    return remembered$;
+};
+
+const responseWithDeadline = (options: RequestOptions, deadlineMs: number): Stream<Response> =>
+    Stream.fromPromise(new Promise<Response>((resolve, reject) => {
+        const request: SuperAgentRequest = optionsToSuperagent(options);
+        request.timeout({ deadline: deadlineMs }).end((error, response) => {
+            if (error) {
+                reject(error);
+                return;
+            }
+            resolve(Object.assign(response, { request: options }));
+        });
+    }));

@@ -5,23 +5,30 @@ import {isValidIFDOCOOrder} from "./validation";
 
 export const ifdocoSection = (state: State): VNode => {
     const size = Math.abs(state.size);
+    const hasValidRatio = state.ifdocoOrder.hasValidRatio();
     return div([
         h4(".sub-title", "Ranged IFDOCO"),
-        div(".line", [
+        div(".line", hasValidRatio ? [
             p(".line-number", [
                 lineNumber("Buy", "+", "-", buyLines(state, size)),
                 lineNumber("Sell", "-", "+", sellLines(state, size)),
             ]),
-        ]),
+        ] : [p("#ratio-error", "Enter a numeric profit / loss ratio.")]),
         div(".price-width", [
             label(".label", "Price width"),
             input("#price-width-input", { attrs: { value: state.ifdocoOrder.width }}),
         ]),
         div(".ratio", [
-            label(".label", "Profit / Loss Ratio"),
-            input("#ratio-input", { attrs: { value: state.ifdocoOrder.ratio }}),
+            label(".label", { attrs: { for: "ratio-input" } }, "Profit / Loss Ratio"),
+            input("#ratio-input", { attrs: hasValidRatio ? { value: state.ifdocoOrder.ratio } : {
+                "aria-invalid": "true",
+                "aria-describedby": "ratio-error",
+            }}),
         ]),
-        div(".ranged-ifdoco-order-buttons.order-buttons", sideButtons(ifdocoButtonDisabled(state))),
+        div(".ranged-ifdoco-order-buttons.order-buttons", sideButtons(
+            ifdocoButtonDisabled(state, "SELL"),
+            ifdocoButtonDisabled(state, "BUY"),
+        )),
     ]);
 };
 
@@ -48,18 +55,18 @@ const lineNumber = (side: string, profitSign: string, lossSign: string, lines: L
     ]);
 
 const buyLines = (state: State, size: number): Lines => ({
-    loss: state.ifdocoOrder.lossDifference(),
-    lossLine: state.ifdocoOrder.buyLoss(state.currentPrice, size),
-    profit: state.ifdocoOrder.profitDifference(),
-    profitLine: state.ifdocoOrder.buyProfit(state.currentPrice, size),
+    loss: state.ifdocoOrder.buyLoss(state.currentPrice, size),
+    lossLine: state.ifdocoOrder.buyLossLine(state.currentPrice),
+    profit: state.ifdocoOrder.buyProfit(state.currentPrice, size),
+    profitLine: state.ifdocoOrder.buyProfitLine(state.currentPrice),
 });
 
 const sellLines = (state: State, size: number): Lines => ({
-    loss: state.ifdocoOrder.lossDifference(),
-    lossLine: state.ifdocoOrder.sellLoss(state.currentPrice, size),
-    profit: state.ifdocoOrder.profitDifference(),
-    profitLine: state.ifdocoOrder.sellProfit(state.currentPrice, size),
+    loss: state.ifdocoOrder.sellLoss(state.currentPrice, size),
+    lossLine: state.ifdocoOrder.sellLossLine(state.currentPrice),
+    profit: state.ifdocoOrder.sellProfit(state.currentPrice, size),
+    profitLine: state.ifdocoOrder.sellProfitLine(state.currentPrice),
 });
 
-const ifdocoButtonDisabled = (state: State): boolean =>
-    state.isOrdering || !isValidIFDOCOOrder(state);
+const ifdocoButtonDisabled = (state: State, side: "BUY" | "SELL"): boolean =>
+    state.isOrdering || !isValidIFDOCOOrder(state, side);

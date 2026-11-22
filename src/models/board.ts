@@ -1,6 +1,6 @@
 import {ceilBy, floorBy} from "../util";
 import {BoardOrder} from "./boardOrder";
-import {Execution} from "./execution";
+import {Execution, executionPriceLimits} from "./execution";
 
 const visibleRows = 200;
 const ascendingPrice = (a: BoardOrder, b: BoardOrder): number => a.price - b.price;
@@ -28,22 +28,16 @@ export class Board {
 
     public remove(side: string, price: number) {
         if (side === "BUY") {
+            if (this.asks.length === 0 || this.asks[0].price >= price) { return; }
             this.asks = this.asks.filter((ask) => ask.price >= price);
         } else {
+            if (this.bids.length === 0 || this.bids[0].price <= price) { return; }
             this.bids = this.bids.filter((bid) => bid.price <= price);
         }
     }
 
     public removeExecutions(executions: Execution[]): void {
-        let highestBuy: number | undefined;
-        let lowestSell: number | undefined;
-        executions.forEach(({ side, price }) => {
-            if (side === "BUY") {
-                highestBuy = Math.max(highestBuy ?? price, price);
-            } else {
-                lowestSell = Math.min(lowestSell ?? price, price);
-            }
-        });
+        const { highestBuy, lowestSell } = executionPriceLimits(executions);
         if (highestBuy !== undefined) { this.remove("BUY", highestBuy); }
         if (lowestSell !== undefined) { this.remove("SELL", lowestSell); }
     }
@@ -69,8 +63,20 @@ export class Board {
     ): BoardOrder[] {
         if (updates.length === 0) { return orders; }
         const pricesToRemove = new Set(updates.map((order) => order.price));
-        const ordersToAppend = updates.filter((order) => order.size !== 0).map((order) => new BoardOrder(order));
-        return orders.filter((order) => !pricesToRemove.has(order.price)).concat(ordersToAppend).sort(compare);
+        const changedOrders = updates.filter((order) => order.size !== 0).map((order) => new BoardOrder(order));
+        if (changedOrders.length > 1) { changedOrders.sort(compare); }
+
+        const merged: BoardOrder[] = [];
+        let next = 0;
+        for (const order of orders) {
+            if (pricesToRemove.has(order.price)) { continue; }
+            while (next < changedOrders.length && compare(changedOrders[next], order) < 0) {
+                merged.push(changedOrders[next++]);
+            }
+            merged.push(order);
+        }
+        while (next < changedOrders.length) { merged.push(changedOrders[next++]); }
+        return merged;
     }
 
     private groupBy(
@@ -81,20 +87,17 @@ export class Board {
     ): BoardOrder[] {
         if (orders.length === 0) { return []; }
         if (groupPrice >= 100) {
-            const best = orders.reduce((price, order) =>
-                direction * order.price < direction * price ? order.price : price, orders[0].price);
-            return this.groupWindow(orders, roundPrice(best, groupPrice), direction * groupPrice, roundPrice);
+            const best = roundPrice(orders[0].price, groupPrice);
+            return this.groupWindow(orders, best, direction * groupPrice, roundPrice);
         }
 
         const sizes = new Map<number, number>();
-        orders.forEach((order) => {
+        for (const order of orders) {
             const price = roundPrice(order.price, groupPrice);
+            if (sizes.size === visibleRows && !sizes.has(price)) { break; }
             sizes.set(price, (sizes.get(price) || 0) + order.size);
-        });
-        return Array.from(sizes.keys())
-            .sort((a, b) => direction * (a - b))
-            .slice(0, visibleRows)
-            .map((price) => new BoardOrder({ price, size: sizes.get(price) }));
+        }
+        return Array.from(sizes, ([price, size]) => new BoardOrder({ price, size }));
     }
 
     private groupWindow(
@@ -105,12 +108,22 @@ export class Board {
     ): BoardOrder[] {
         const sizes: number[] = [];
         let rows = 0;
-        orders.forEach((order) => {
+        for (const order of orders) {
             const index = Math.round((roundPrice(order.price, Math.abs(step)) - best) / step);
             rows = Math.max(rows, Math.min(index + 1, visibleRows));
-            if (index < visibleRows) { sizes[index] = (sizes[index] || 0) + order.size; }
-        });
+            if (index >= visibleRows) { break; }
+            sizes[index] = (sizes[index] || 0) + order.size;
+        }
         return Array.from({ length: rows }, (_, index) =>
             new BoardOrder({ price: best + index * step, size: sizes[index] || 0 }));
     }
 }
+
+export const isBoardLevels = (value: unknown): value is BoardLevels =>
+    typeof value === "object" && value !== null
+    && "asks" in value && isBoardSide(value.asks)
+    && "bids" in value && isBoardSide(value.bids);
+
+const isBoardSide = (orders: unknown): boolean =>
+    Array.isArray(orders) && orders.every((order) =>
+        Number.isFinite(order?.price) && Number.isFinite(order?.size));

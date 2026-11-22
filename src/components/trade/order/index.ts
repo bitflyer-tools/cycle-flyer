@@ -1,7 +1,7 @@
 import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
-import {Sound} from "../../../drivers/soundDriver";
 import {IFDOCOrder} from "../../../models/ifdocoOrder";
+import {MarketFills} from "../../../models/marketFill";
 import {Order} from "../../../models/order";
 import {OrderHistory} from "../../../models/orderHistory";
 import {ParentStopOrders} from "../../../models/parentStopOrders";
@@ -18,34 +18,36 @@ import {view} from "./view";
 
 export interface State {
     currentPrice: number;
-    histories: OrderHistory[];
+    histories: readonly OrderHistory[];
     ifdocoOrder: IFDOCOrder;
     isOrdering: boolean;
+    marketFills?: MarketFills;
     orders: Order[];
+    orderSigningError?: string;
     parentStopOrders: ParentStopOrders;
     position: Position;
+    positionCredentialVersion?: number;
+    positionClosePending?: boolean;
     price: number;
     size: number;
     triggerPrice: number;
     twap: TwapOrder;
 }
 
-export const OrderComponent = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
+export const OrderComponent = (sources: Sources, isOrdering$: Stream<boolean>, leaveTrade$?: Stream<void>): Sinks & {
     orderRequests: Stream<OrderRequestBatch>;
-    sound: Stream<Sound>;
 } => {
     const state$ = sources.state.stream as any as Stream<State>;
     const actions = intent(sources, state$);
-    const reducer$ = model(actions, isOrdering$);
+    const twap = twapRequest(actions, state$, leaveTrade$);
+    const reducer$ = model(actions, isOrdering$, twap.lifecycle$);
     const view$ = view(state$);
 
     return {
         DOM: view$,
-        HTTP: twapRequest(actions, state$).map<RequestInput | null>((input) => input),
+        HTTP: twap.requests$.map<RequestInput | null>((input) => input),
         orderRequests: orderRequests(actions, state$),
         router: Stream.never(),
-        sound: Stream.merge(actions.onOrderOutcome$, actions.onTwapSliceOutcome$)
-            .map(({ status }): Sound => status === "success" ? "success" : "failure"),
         state: reducer$ as any,
         storage: storage(state$),
     };

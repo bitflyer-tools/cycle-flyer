@@ -1,12 +1,12 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {IFDOCOrder} from "../../../models/ifdocoOrder";
-import {Order} from "../../../models/order";
 import {Position} from "../../../models/position";
 import {defaultTwapOrder} from "../../../models/twapOrder";
 import {State} from "./index";
 import {Actions} from "./intent";
 import {twapModel} from "./twapModel";
+import {TwapLifecycle} from "./twapRequest";
 
 const defaultState: State = {
     currentPrice: 0,
@@ -22,17 +22,10 @@ const defaultState: State = {
     twap: defaultTwapOrder,
 };
 
-export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Reducer<State>> => {
+export const model = (
+    actions: Actions, isOrdering$: Stream<boolean>, twapLifecycle$ = Stream.never<TwapLifecycle>(),
+): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
-
-    const cancelOrdersReducer$ = actions.onCancelOrders$
-        .map((_) => (state: State) => ({ ...state, orders: [] as Order[] }));
-
-    const historyReducer$ = actions.onOrderOutcome$
-        .map(({ histories }) => (state: State) => ({
-            ...state,
-            histories: histories.slice().reverse().concat(state.histories),
-        }));
 
     const isOrderingReducer$ = isOrdering$
         .map((isOrdering) => (state: State) => ({ ...state, isOrdering }));
@@ -54,14 +47,12 @@ export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Re
 
     return Stream.merge(
         defaultReducer$,
-        cancelOrdersReducer$,
-        historyReducer$,
         isOrderingReducer$,
         priceReducer$,
         priceWidthReducer$,
         ratioReducer$,
         sizeReducer$,
         triggerPriceReducer$,
-        twapModel(actions),
+        twapModel(actions, twapLifecycle$),
     ) as Stream<Reducer<State>>;
 };

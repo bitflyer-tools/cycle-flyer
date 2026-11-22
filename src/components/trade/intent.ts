@@ -2,6 +2,7 @@ import {RequestOptions} from "@cycle/http";
 import {Stream} from "xstream";
 import debounce from "xstream/extra/debounce";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
+import {AccountRequest, isCurrentAccountRequest} from "../../drivers/httpDriver";
 import {Execution} from "../../models/execution";
 import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
@@ -9,8 +10,10 @@ import {Sources} from "./index";
 import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
 import {parentOrderPages} from "./parentOrderPages";
 import {pollResponse} from "./pollResponse";
+import {PositionRequest} from "./request";
 
 export interface Actions {
+    onCancelOrders$: Stream<null>;
     onCancelParentOrder$: Stream<{ id: string; sequence: number }>;
     onExecutionBatch$: Stream<Execution[]>;
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
@@ -20,16 +23,19 @@ export interface Actions {
     onParentOrdersLoaded$: Stream<{ orders: ActiveParentOrder[]; sequence: number }>;
     onParentOrderListSettled$: Stream<null>;
     parentOrderRequests$: Stream<RequestOptions>;
-    onPositionsLoaded$: Stream<Position>;
+    onPositionsLoaded$: Stream<{ position: Position; positionCredentialVersion: number; positionCloseId: symbol | undefined }>;
 }
 
 // Trade state survives navigation, so request and cancellation ordering must survive it too.
 let parentOrderSequence = 0;
 
 export const intent = (sources: Sources): Actions => {
+    const isCurrent = (response: { request: AccountRequest }) => isCurrentAccountRequest(response.request);
+
     const onCancelParentOrder$ = sources.HTTP.select("cancel-parent-order")
         .map((response$) => response$.replaceError(() => Stream.empty()))
         .compose(flattenConcurrently)
+        .filter(isCurrent)
         .map((response) => ({
             id: JSON.parse(response.request.send as string).parent_order_id as string,
             sequence: ++parentOrderSequence,
@@ -43,10 +49,18 @@ export const intent = (sources: Sources): Actions => {
         sources.socket.reconnect$,
     ).compose(debounce(500));
 
-    const onOrdersLoaded$ = sources.HTTP.select("orders")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .map((response) => JSON.parse(response.text));
+    const ordersCanceled = Symbol("ordersCanceled");
+    const cancelOrders$ = sources.HTTP.select("cancel-orders")
+        .map((response$) => response$.replaceError(() => Stream.empty()))
+        .compose(flattenConcurrently)
+        .filter(isCurrent)
+        .mapTo<typeof ordersCanceled>(ordersCanceled);
+
+    const orderLists$ = pollResponse<object[] | typeof ordersCanceled>(
+        sources.HTTP.select("orders"),
+        (json, response) => isCurrent(response) ? decodeOrders(json) : undefined,
+        cancelOrders$,
+    );
 
     const pages = parentOrderPages(sources.HTTP, () => ++parentOrderSequence);
     const onParentOrdersLoaded$ = pages.loaded$;
@@ -56,15 +70,20 @@ export const intent = (sources: Sources): Actions => {
         sources.socket.parentOrderEvent$, sources.socket.reconnect$,
     );
 
-    const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json) =>
-        isPositionList(json) ? new Position(json) : undefined);
+    const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json, response) =>
+        isCurrent(response) && isPositionList(json) ? {
+            position: new Position(json),
+            positionCredentialVersion: (response.request as AccountRequest).credentialVersion!,
+            positionCloseId: (response.request as PositionRequest).positionCloseId,
+        } : undefined);
 
     return {
+        onCancelOrders$: orderLists$.filter((orders) => orders === ordersCanceled).mapTo(null),
         onCancelParentOrder$,
         onExecutionBatch$: sources.socket.executionBatch$,
         onMyExecutionCreated$,
         onMyOrderChanged$,
-        onOrdersLoaded$,
+        onOrdersLoaded$: orderLists$.map<object[]>((orders) => orders === ordersCanceled ? [] : orders),
         onParentOrderLoaded$: details.loaded$,
         onParentOrdersLoaded$,
         onParentOrderListSettled$: pages.settled$,
@@ -72,6 +91,10 @@ export const intent = (sources: Sources): Actions => {
         parentOrderRequests$: Stream.merge(pages.requests$, details.requests$),
     };
 };
+
+const decodeOrders = (json: unknown): object[] | undefined =>
+    Array.isArray(json) && json.every((order) =>
+        order !== null && typeof order === "object" && !Array.isArray(order)) ? json : undefined;
 
 const isPositionList = (positions: unknown): boolean =>
     Array.isArray(positions) && positions.every((position) =>

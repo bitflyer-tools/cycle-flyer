@@ -1,9 +1,9 @@
 import {button, div, h4, label, p, VNode} from "@cycle/dom";
-import {canStart, isRunning, maximumTwapInterval, sliceSize} from "../../../models/twapOrder";
+import {allocateSlices, canStart, isRunning, maximumTwapInterval} from "../../../models/twapOrder";
 import {State} from "./index";
 import {numberInput} from "./numberInput";
 
-export const twapSection = (state: State): VNode =>
+export const twapSection = (state: State, canSign: boolean): VNode =>
     div([
         h4(".sub-title", "TWAP"),
         div(".twap-slices", [
@@ -15,19 +15,27 @@ export const twapSection = (state: State): VNode =>
             numberInput("#twap-interval-input", state.twap.interval),
         ]),
         p(".twap-interval-hint", `Enter an interval greater than 0 and up to ${maximumTwapInterval} seconds.`),
-        p(".twap-status", twapStatus(state)),
-        div(".twap-order-buttons.order-buttons", twapButtons(state)),
+        p(".twap-status", { attrs: { role: "status" } }, twapStatus(state, canSign)),
+        ...(isRunning(state.twap) ? [p(".twap-status", "Schedule edits apply to the next TWAP.")] : []),
+        div(".twap-order-buttons.order-buttons", twapButtons(state, canSign)),
     ]);
 
-const twapStatus = (state: State): string =>
+const twapStatus = (state: State, canSign: boolean): string =>
     isRunning(state.twap)
-        ? `Running: ${state.twap.remaining} / ${state.twap.slices} slices left`
-        : `${sliceSize(state.size, state.twap.slices)} x ${state.twap.slices} every ${state.twap.interval} sec`;
+        ? `Running: ${state.twap.remaining} / ${state.twap.totalSlices} slices left`
+        : state.twap.error || (!canSign ? "Configure bitFlyer credentials in Settings to start TWAP." :
+            twapPreview(state));
 
-const twapButtons = (state: State): VNode[] =>
+const twapPreview = ({ size, twap }: State): string => {
+    const { baseSize, largerSize, largerCount } = allocateSlices(size, twap.slices);
+    const largerSlices = largerCount > 0 ? `${largerSize} x ${largerCount} + ` : "";
+    return `${largerSlices}${baseSize} x ${twap.slices - largerCount} every ${twap.interval} sec`;
+};
+
+const twapButtons = (state: State, canSign: boolean): VNode[] =>
     isRunning(state.twap)
         ? [button(".cancel-button", "Cancel TWAP")]
         : [
-            button(".sell-button", { attrs: { disabled: !canStart(state.twap, state.size) } }, "Sell"),
-            button(".buy-button", { attrs: { disabled: !canStart(state.twap, state.size) } }, "Buy"),
+            button(".sell-button", { attrs: { disabled: !canSign || !canStart(state.twap, state.size) } }, "Sell"),
+            button(".buy-button", { attrs: { disabled: !canSign || !canStart(state.twap, state.size) } }, "Buy"),
         ];

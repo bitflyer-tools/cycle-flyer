@@ -1,18 +1,23 @@
 import {button, div, h4, hr, VNode} from "@cycle/dom";
 import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
+import {credentialAvailability} from "../../../credentials";
 import {sideButtons} from "./buttons";
 import {ifdocoSection} from "./ifdocoView";
 import {State} from "./index";
+import {marketFillPreview, sameMarketFills} from "./marketFillView";
 import {numberInput} from "./numberInput";
 import {sizeSection} from "./sizeView";
 import {stopSection} from "./stopView";
 import {twapSection} from "./twapView";
-import {isValidLimitOrder, isValidMarketOrder} from "./validation";
+import {canClearPosition, isValidLimitOrder, isValidMarketOrder} from "./validation";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
-    state$.compose(dropRepeats(sameViewInputs)).map((state) =>
+    Stream.combine(state$.compose(dropRepeats(sameViewInputs)), credentialAvailability()).map(([state, canSign]) =>
         div(".order", [
+            ...(state.orderSigningError
+                ? [div(".order-signing-error", { attrs: { role: "alert" } }, state.orderSigningError)]
+                : []),
             sizeSection(state),
             hr(),
             marketSection(state),
@@ -21,7 +26,7 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
             hr(),
             stopSection(state),
             hr(),
-            twapSection(state),
+            twapSection(state, canSign),
             hr(),
             clearSection(state),
             hr(),
@@ -32,7 +37,10 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
 const sameViewInputs = (previous: State, next: State): boolean =>
     Object.is(previous.currentPrice, next.currentPrice)
     && previous.isOrdering === next.isOrdering
-    && Object.is(previous.position.size, next.position.size)
+    && sameMarketFills(previous.marketFills, next.marketFills)
+    && previous.orderSigningError === next.orderSigningError
+    && previous.positionCredentialVersion === next.positionCredentialVersion
+    && canClearPosition(previous) === canClearPosition(next)
     && Object.is(previous.price, next.price)
     && Object.is(previous.size, next.size)
     && Object.is(previous.triggerPrice, next.triggerPrice)
@@ -41,11 +49,14 @@ const sameViewInputs = (previous: State, next: State): boolean =>
     && Object.is(previous.twap.slices, next.twap.slices)
     && Object.is(previous.twap.interval, next.twap.interval)
     && Object.is(previous.twap.remaining, next.twap.remaining)
+    && previous.twap.error === next.twap.error
+    && Object.is(previous.twap.totalSlices, next.twap.totalSlices)
     && clearOrderButtonDisabled(previous) === clearOrderButtonDisabled(next);
 
 const marketSection = (state: State): VNode =>
     div([
         h4(".sub-title", "Market"),
+        ...(state.marketFills ? [marketFillPreview(state.marketFills)] : []),
         div(".market-order-buttons.order-buttons", sideButtons(state.isOrdering || !isValidMarketOrder(state))),
     ]);
 
@@ -64,7 +75,7 @@ const clearSection = (state: State): VNode =>
         div(".order-buttons", [
             button(
                 ".clear-button",
-                { attrs: { disabled: state.isOrdering || state.position.size === 0 } },
+                { attrs: { disabled: !canClearPosition(state) } },
                 "Clear Position",
             ),
             button(".clear-order-button", { attrs: { disabled: clearOrderButtonDisabled(state) } }, "Clear Orders"),

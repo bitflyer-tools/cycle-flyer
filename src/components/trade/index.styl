@@ -1,5 +1,103 @@
 .trade
   margin: 0 auto
   display: grid
-  grid-template-columns: 380px 1fr 380px
-  grid-template-rows: 1fr
+  height: calc(100vh - 60px)
+  grid-template-columns: 380px minmax(0, 1fr) 260px 380px
+  grid-template-rows: minmax(0, 1fr)
+
+  .trade-sidebar, .order
+    min-width: 0
+    overflow: auto
+
+  .trade-sidebar, .order, .asks, .bids, .recent-trades-scroll
+    &::-webkit-scrollbar
+      display: block
+      width: 8px
+      height: 8px
+
+    &::-webkit-scrollbar-thumb
+      display: block
+      background: #777
+
+  .trade-sidebar
+    grid-column: 1
+    grid-row: 1
+
+  .order
+    grid-column: 4
+    grid-row: 1
+
+  .recent-trades
+    grid-column: 3
+    grid-row: 1
+    display: grid
+    grid-template-rows: 30px minmax(0, 1fr)
+    min-width: 0
+    padding: 0 8px
+    font-size: 12px
+    letter-spacing: normal
+
+    h2
+      margin: 0
+      font-size: 14px
+      font-weight: 400
+      line-height: 30px
+
+    .recent-trades-scroll
+      overflow: auto
+
+    table
+      width: 100%
+      border-collapse: collapse
+      font-variant-numeric: tabular-nums
+      white-space: nowrap
+      text-align: right
+
+    th, td
+      padding: 4px
+
+    th
+      position: sticky
+      top: 0
+      background: rgb(44, 57, 64)
+
+@media (max-width: 1399px)
+  .trade
+    grid-template-columns: repeat(2, minmax(0, 1fr))
+    grid-template-rows: minmax(0, 2fr) minmax(0, 3fr)
+
+    .board
+      grid-column: 1
+
+    .recent-trades
+      grid-column: 2
+
+    .trade-sidebar, .order
+      grid-row: 2
+
+    .order
+      grid-column: 2
+      padding: 16px
+
+    .summary
+      padding: 16px
+
+@media (max-width: 719px)
+  .trade
+    height: auto
+    grid-template-columns: minmax(0, 1fr)
+    grid-template-rows: repeat(4, 240px)
+
+    .recent-trades, .trade-sidebar, .order
+      grid-column: 1
+
+    .recent-trades
+      grid-row: 2
+
+    .trade-sidebar
+      grid-row: 3
+
+    .order
+      grid-row: 4
+
+@import './executions/index.styl'

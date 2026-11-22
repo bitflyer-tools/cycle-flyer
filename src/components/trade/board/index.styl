@@ -2,8 +2,8 @@
   grid-column: 2
   grid-row: 1
   display: grid
-  grid-template-columns: 1fr 1fr
-  grid-template-rows: 30px auto
+  grid-template-columns: repeat(2, minmax(0, 1fr))
+  grid-template-rows: auto minmax(0, 1fr)
 
   span
     display: inline-block
@@ -46,9 +46,8 @@
 
   .asks, .bids
     font-family: 'Fira Code', 'Courier New', Courier, monospace, sans-serif
-    height: calc(100vh - 90px)
     padding: 0 12px
-    overflow: scroll
+    overflow: auto
     will-change: transform
 
   .asks

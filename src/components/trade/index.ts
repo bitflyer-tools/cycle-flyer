@@ -1,22 +1,26 @@
-import {DOMSource, VNode} from "@cycle/dom";
+import {DOMSource, MainDOMSource, VNode} from "@cycle/dom";
 import {HTTPSource, RequestInput} from "@cycle/http";
 import isolate from "@cycle/isolate";
 import {Reducer, StateSource} from "@cycle/state";
 import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
+import dropRepeats from "xstream/extra/dropRepeats";
 import {SocketIOSource} from "../../drivers/socketIODriver";
 import {Sound} from "../../drivers/soundDriver";
+import {estimateMarketFills} from "../../models/marketFill";
 import {Order} from "../../models/order";
 import {OrderHistory} from "../../models/orderHistory";
 import {flattenStopOrders, ParentStopOrders} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
 import {BoardComponent, State as BoardComponentState} from "./board/index";
+import {ExecutionsComponent, State as ExecutionsComponentState} from "./executions";
 import "./index.styl";
 import {intent} from "./intent";
 import {model} from "./model";
 import {OrderComponent, State as OrderComponentState} from "./order";
 import {OrderRequestBatch} from "./order/request";
+import {recentTrades} from "./recentTrades";
 import {request} from "./request";
 import {State as SummaryComponentState} from "./summary";
 import {SummaryComponent} from "./summary";
@@ -44,19 +48,28 @@ export interface Sinks {
 export interface State {
     canceledParentOrderIds?: ReadonlyMap<string, number>;
     currentPrice: number | null;
-    histories: OrderHistory[];
+    histories: readonly OrderHistory[];
     orders: Order[];
+    orderSigningError?: string;
     parentStopOrders: ParentStopOrders;
     position: Position;
+    positionCredentialVersion?: number;
+    positionClose?: { id: symbol; size: number; settled: boolean; rejected?: boolean };
     price: number;
+    lastExecutionPrice: number;
     boardComponentState?: BoardComponentState;
+    executionsComponentState?: ExecutionsComponentState;
     orderComponentState?: OrderComponentState;
     summaryComponentState?: SummaryComponentState;
 }
 
-export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
+export const Trade = (sources: Sources, isOrdering$: Stream<boolean>, leaveTrade$?: Stream<void>): Sinks & {
     orderRequests: Stream<OrderRequestBatch>;
 } => {
+    const executionsComponent = isolate(ExecutionsComponent, { state: "executionsComponentState" })({
+        ...sources,
+        DOM: sources.DOM as MainDOMSource,
+    });
     const summaryComponent = isolate(SummaryComponent, {
         state: {
             get: (state: State) => state.summaryComponentState && {
@@ -67,7 +80,6 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
             },
             set: (state: State, summaryComponentState: SummaryComponentState) => ({
                 ...state,
-                position: summaryComponentState.position,
                 summaryComponentState,
             }),
         },
@@ -95,12 +107,19 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
         state: {
             get: (state: State) => state.orderComponentState && {
                 ...state.orderComponentState,
+                marketFills: estimateMarketFills(
+                    state.boardComponentState?.hasBoardSnapshot ? state.boardComponentState.board : undefined,
+                    state.orderComponentState.size,
+                ),
                 currentPrice: state.currentPrice ?? 0,
                 histories: state.histories,
                 orders: state.orders,
+                orderSigningError: state.orderSigningError,
+                positionCredentialVersion: state.positionCredentialVersion,
                 parentStopOrders: state.parentStopOrders,
                 position: state.position,
                 price: state.price,
+                positionClosePending: !!state.positionClose,
             },
             set: (state: State, orderComponentState: OrderComponentState) => ({
                 ...state,
@@ -110,22 +129,41 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
                 price: orderComponentState.price,
             }),
         },
-    })(sources, isOrdering$);
+    })(sources, isOrdering$, leaveTrade$);
 
     const actions = intent(sources);
     const reducer$ = model(actions);
-    const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM);
-    const request$ = request(actions);
+    const marketTrades = recentTrades(sources);
+    const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM, executionsComponent.DOM,
+        marketTrades.DOM);
+    const settledCloseId$ = sources.state.stream
+        .map((state) => state?.positionClose?.settled ? state.positionClose.id : undefined)
+        .startWith(undefined)
+        .compose(dropRepeats())
+        .remember();
+    const request$ = request(actions, settledCloseId$);
+
+    const priceAlertSound$ = sources.state.stream
+        .map((state) => state?.summaryComponentState?.priceAlert)
+        .compose(dropRepeats())
+        .drop(1)
+        .filter((alert) => alert?.status === "triggered")
+        .mapTo<Sound>("price-alert");
 
     return {
         DOM: view$,
-        HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP),
+        HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP,
+            executionsComponent.HTTP, marketTrades.HTTP),
         orderRequests: orderComponent.orderRequests,
         router: Stream.never(),
-        sound: Stream.merge(orderComponent.sound, actions.onMyExecutionCreated$.mapTo<Sound>("execution")),
+        sound: Stream.merge(
+            actions.onMyExecutionCreated$.mapTo<Sound>("execution"),
+            priceAlertSound$,
+        ),
         state: Stream.merge(
             reducer$,
             boardComponent.state,
+            executionsComponent.state,
             summaryComponent.state,
             orderComponent.state,
         ) as Stream<Reducer<State>>,

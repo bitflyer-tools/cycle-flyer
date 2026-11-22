@@ -6,13 +6,19 @@ const { compileFunction } = require('node:vm');
 const path = require('node:path');
 const { main } = require('../package.json');
 
-const entry = readFileSync(path.resolve(__dirname, '..', main), 'utf8');
+const entryPath = path.resolve(__dirname, '..', main);
+const entry = readFileSync(entryPath, 'utf8');
 const helper = readFileSync(require.resolve('electron-squirrel-startup'), 'utf8');
 
 async function launch(argument) {
   const events = [];
   const update = new EventEmitter();
   const app = {
+    requestSingleInstanceLock: () => {
+      events.push('lock');
+      return true;
+    },
+    getPath: () => '/profile',
     quit: () => events.push('quit'),
     whenReady: () => {
       events.push('whenReady');
@@ -22,7 +28,10 @@ async function launch(argument) {
   };
   const electron = {
     app,
+    ipcMain: { handle() {} },
     BrowserWindow: class {
+      webContents = Object.assign(new EventEmitter(), { setWindowOpenHandler() {} });
+
       loadFile(filename) {
         events.push(filename);
       }
@@ -51,12 +60,13 @@ async function launch(argument) {
   };
   const entryRequire = (name) => {
     if (name === 'electron') return electron;
-    assert.equal(name, 'electron-squirrel-startup');
+    if (name === './credentials') return { createCredentialStore: () => ({}) };
+    if (name !== 'electron-squirrel-startup') return require(name);
     const module = { exports: {} };
     compileFunction(helper, ['require', 'module', 'process'])(startupRequire, module, process);
     return module.exports;
   };
-  compileFunction(entry, ['require', 'process'])(entryRequire, process);
+  compileFunction(entry, ['require', 'process', '__dirname'])(entryRequire, process, path.dirname(entryPath));
   await Promise.resolve();
   return { events, update };
 }
@@ -81,5 +91,6 @@ test('quits immediately for an obsolete version', async () => {
 
 test('opens the trading window on a normal launch', async () => {
   const { events } = await launch();
-  assert.deepEqual(events, ['whenReady', 'window-all-closed', 'activate', './public/index.html']);
+  assert.deepEqual(events, ['lock', 'whenReady', 'second-instance', 'activate', 'window-all-closed',
+    path.resolve(__dirname, '../public/index.html')]);
 });

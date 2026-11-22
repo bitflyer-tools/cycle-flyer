@@ -3,6 +3,7 @@ import {OrderHistory} from "../../../models/orderHistory";
 import {Position} from "../../../models/position";
 import {Sinks} from "../../index";
 import {Sources} from "../index";
+import {PriceAlert} from "../priceAlert";
 import "./index.styl";
 import {intent} from "./intent";
 import {model} from "./model";
@@ -12,9 +13,10 @@ import {view} from "./view";
 export interface State {
     collateral: number;
     currentPrice: number | null;
-    histories: OrderHistory[];
+    histories: readonly OrderHistory[];
     marketState: any;
     position: Position;
+    priceAlert: PriceAlert | null;
 }
 
 export const SummaryComponent = (sources: Sources): Sinks => {

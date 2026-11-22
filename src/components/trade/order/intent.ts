@@ -1,14 +1,11 @@
 import {Stream} from "xstream";
-import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
 import {State} from "./index";
 import {clicks, numberInputs, sizePresetClicks} from "./events";
-import {createChildOrderOutcome, createParentOrderOutcome, OrderOutcome} from "./history";
 import {TwapActions, twapIntent} from "./twapIntent";
 
 export interface Actions extends TwapActions {
-    onCancelOrders$: Stream<null>;
     onClickClearButton$: Stream<null>;
     onClickClearOrderButton$: Stream<null>;
     onClickIFDOCOBuyButton$: Stream<null>;
@@ -20,7 +17,6 @@ export interface Actions extends TwapActions {
     onClickSizePresetButton$: Stream<number>;
     onClickStopBuyButton$: Stream<null>;
     onClickStopSellButton$: Stream<null>;
-    onOrderOutcome$: Stream<OrderOutcome>;
     onPriceChanged$: Stream<number>;
     onPriceWidthChanged$: Stream<number>;
     onPriceWidthLoaded$: Stream<number>;
@@ -38,20 +34,8 @@ export const storageKeys = {
 };
 
 export const intent = (sources: Sources, state$: Stream<State>): Actions => {
-    const onCancelOrders$ = sources.HTTP.select("cancel-orders")
-        .map((response$) => response$.replaceError(() => Stream.never()))
-        .flatten()
-        .mapTo(null);
-
-    const onOrderOutcome$ = Stream.merge(
-        sources.HTTP.select("market-order").map((stream) => createChildOrderOutcome("Market", stream)),
-        sources.HTTP.select("limit-order").map((stream) => createChildOrderOutcome("Limit", stream)),
-        sources.HTTP.select("stop-order").map(createParentOrderOutcome),
-    ).compose(flattenConcurrently);
-
     return {
         ...twapIntent(sources, state$),
-        onCancelOrders$,
         onClickClearButton$: clicks(sources.DOM, ".order-buttons", ".clear-button"),
         onClickClearOrderButton$: clicks(sources.DOM, ".order-buttons", ".clear-order-button"),
         onClickIFDOCOBuyButton$: clicks(sources.DOM, ".ranged-ifdoco-order-buttons", ".buy-button"),
@@ -63,7 +47,6 @@ export const intent = (sources: Sources, state$: Stream<State>): Actions => {
         onClickSizePresetButton$: sizePresetClicks(sources.DOM),
         onClickStopBuyButton$: clicks(sources.DOM, ".stop-order-buttons", ".buy-button"),
         onClickStopSellButton$: clicks(sources.DOM, ".stop-order-buttons", ".sell-button"),
-        onOrderOutcome$,
         onPriceChanged$: numberInputs(sources.DOM, "#price-input"),
         onPriceWidthChanged$: numberInputs(sources.DOM, "#price-width-input"),
         onPriceWidthLoaded$: loadNumber(sources.storage, storageKeys.priceWidth, () => true),

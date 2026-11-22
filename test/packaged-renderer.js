@@ -19,7 +19,7 @@ const checkRenderer = async () => {
 
   // The inspector can accept requests before Electron loads the app entry point.
   const mainModule = await waitFor(() => process.mainModule, 'the app entry point');
-  const { app, BrowserWindow } = mainModule.require('electron');
+  const { app, BrowserWindow, safeStorage } = mainModule.require('electron');
   await app.whenReady();
 
   assert.equal(app.isPackaged, true);
@@ -38,12 +38,75 @@ const checkRenderer = async () => {
     `document.querySelector(${JSON.stringify(selector)}).click()`
   );
   await waitFor(() => visible('.content .trade'), 'Trade on startup');
+  assert.equal(await contents.executeJavaScript(
+    "getComputedStyle(document.querySelector('.content .trade')).display"
+  ), 'grid', 'Trade uses the bundled stylesheet');
+  assert.deepEqual(window.getSize(), [800, 600]);
+  await contents.executeJavaScript(`(() => {
+    const element = (selector) => document.querySelector(selector);
+    const bounds = (selector) => element(selector).getBoundingClientRect();
+    const check = (condition, message) => {
+      if (!condition) throw new Error(message);
+    };
+    const board = bounds('.board');
+    const trades = bounds('.recent-trades');
+    const account = bounds('.trade-sidebar');
+    const order = bounds('.order');
+    check(board.top === trades.top && board.right <= trades.left,
+      'The board and recent trades are side by side');
+    check(account.top >= board.bottom && order.top === account.top,
+      'Account information and the order form share the lower row');
+    check(document.scrollingElement.scrollHeight === innerHeight &&
+      document.scrollingElement.scrollWidth === innerWidth,
+      'The default Trade view fits in the window');
+    check(bounds('.collateral').bottom <= account.bottom &&
+      bounds('.market-order-buttons').bottom <= order.bottom,
+      'Collateral and market order controls are visible on startup');
+    element('.order').scrollTop = element('.order').scrollHeight;
+    check(element('.order').scrollTop > 0 && window.scrollY === 0,
+      'Additional order types are reachable within the order panel');
+    element('.order').scrollTop = 0;
+  })()`);
   assert.deepEqual(await contents.executeJavaScript(
     '[typeof require, typeof process, typeof module, typeof Buffer]'
   ), ['undefined', 'undefined', 'undefined', 'undefined']);
 
   await click('.menu-setting');
   await waitFor(() => visible('.content #api-key-input'), 'Settings');
+  await contents.executeJavaScript(`(() => {
+    for (const key of ['api-key', 'api-secret']) {
+      const field = document.querySelector('#' + key + '-input');
+      field.value = 'pasted-test-' + key;
+      field.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        inputType: 'insertFromPaste',
+      }));
+    }
+  })()`);
+  const credentialFile = process.getBuiltinModule('node:path').join(app.getPath('userData'), 'bitflyer-credentials.enc');
+  const { existsSync, readFileSync } = process.getBuiltinModule('node:fs');
+  assert.equal(existsSync(credentialFile), false, 'Pasting leaves the credentials unsaved');
+  await contents.executeJavaScript("document.querySelector('#credentials-form').requestSubmit()");
+
+  const secureStorage = safeStorage.isEncryptionAvailable() &&
+    (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text');
+  const message = secureStorage ? 'Credentials saved.' : 'Could not update credentials.';
+  await waitFor(() => contents.executeJavaScript(
+    `document.querySelector('#credentials-form [role=status]').textContent.startsWith(${JSON.stringify(message)})`
+  ), message);
+
+  assert.equal(existsSync(credentialFile), secureStorage);
+  if (secureStorage) {
+    assert.deepEqual(JSON.parse(safeStorage.decryptString(readFileSync(credentialFile))), {
+      key: 'pasted-test-api-key', secret: 'pasted-test-api-secret',
+    });
+  }
+  assert.deepEqual(await contents.executeJavaScript(
+    "['api-key', 'api-secret'].map((key) => document.querySelector('#' + key + '-input').value)"
+  ), ['', '']);
+  assert.deepEqual(await contents.executeJavaScript(
+    "['api-key', 'api-secret'].map((key) => localStorage.getItem(key))"
+  ), [null, null]);
   await click('.menu-trade');
   await waitFor(() => visible('.content .trade'), 'Trade after returning from Settings');
 };
@@ -81,7 +144,7 @@ const main = async (executable) => {
     const { error, result } = JSON.parse(message.data);
     assert.ifError(error);
     assert.equal(result.exceptionDetails, undefined, result.result.description);
-    console.log('Packaged renderer sandbox and routing checks passed.');
+    console.log('Packaged renderer sandbox, routing, and credential persistence checks passed.');
   } catch (error) {
     if (stderr) console.error(stderr.trimEnd());
     throw error;

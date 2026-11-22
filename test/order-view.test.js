@@ -10,7 +10,7 @@ const bundle = buildSync({
   format: 'cjs',
   platform: 'node',
   external: ['xstream'],
-  banner: { js: 'const window = {}; const localStorage = { "api-secret": "test" };' },
+  define: { window: 'undefined' },
   loader: { '.styl': 'empty' },
   write: false,
 });
@@ -40,7 +40,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
     DOM: dom,
     HTTP: { select: (category) => category === 'orders' ? orders$ : never() },
     orderRequests: { select: never },
-    socket: { board$, executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
+    socket: { connected$: Stream.of(true), board$, executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
   }, Stream.of(false));
@@ -95,6 +95,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
 
   t.mock.timers.tick(100);
   orders$.shamefullySendNext(Stream.of({
+    request: { credentialVersion: 0 },
     text: JSON.stringify([
       { side: 'BUY', price: 99999, size: 0.1, executed_size: 0.06, outstanding_size: 0.04 },
       { side: 'BUY', price: 99998, size: 0.2, executed_size: 0, outstanding_size: 0.2 },
@@ -127,7 +128,7 @@ test('the summary waits for a public execution before valuing an open position',
     DOM: dom,
     HTTP: { select: (category) => ({ positions: positions$, collateral: collateral$ })[category] || never() },
     orderRequests: { select: never },
-    socket: { board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
+    socket: { connected$: Stream.of(true), board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
   }, Stream.of(false));
@@ -136,7 +137,12 @@ test('the summary waits for a public execution before valuing an open position',
   const stateSubscription = sinks.state.subscribe({
     next: (reduce) => state$.shamefullySendNext(state = reduce(state)),
   });
-  const domSubscription = sinks.DOM.subscribe({ next: (node) => { [summary] = node.children; } });
+  const domSubscription = sinks.DOM.subscribe({
+    next: (node) => {
+      const sidebar = node.children.find(({ sel }) => sel === 'div.trade-sidebar');
+      summary = sidebar.children.find(({ sel }) => sel === 'div.summary');
+    },
+  });
   t.after(() => {
     domSubscription.unsubscribe();
     stateSubscription.unsubscribe();
@@ -147,8 +153,8 @@ test('the summary waits for a public execution before valuing an open position',
     return [field.sel, field.text];
   };
 
-  collateral$.shamefullySendNext(Stream.of({ text: JSON.stringify({ collateral: 2_000_000 }) }));
-  positions$.shamefullySendNext(Stream.of({ text: JSON.stringify([{ side: 'BUY', price: 10_000_000, size: 0.1 }]) }));
+  collateral$.shamefullySendNext(Stream.of({ request: { credentialVersion: 0 }, text: JSON.stringify({ collateral: 2_000_000 }) }));
+  positions$.shamefullySendNext(Stream.of({ request: { credentialVersion: 0 }, text: JSON.stringify([{ side: 'BUY', price: 10_000_000, size: 0.1 }]) }));
   assert.deepEqual(value('div.current-price'), ['span.number', 'Pending']);
   assert.deepEqual(value('div.position'), ['span.number', (10_000_000).toLocaleString()]);
   assert.deepEqual(value('div.position-size'), ['span.number', '0.1']);
@@ -161,4 +167,84 @@ test('the summary waits for a public execution before valuing an open position',
   assert.deepEqual(value('div.position-diff'), ['span.number.plus', (100_000).toLocaleString()]);
   assert.deepEqual(value('div.profit'), ['span.number.plus', (10_000).toLocaleString()]);
   assert.deepEqual(value('div.collateral'), ['span.number', (2_000_000).toLocaleString()]);
+});
+
+test('recent market trades seed and refresh without credentials or extra board renders', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const executionBatch$ = Stream.create();
+  const reconnect$ = Stream.create();
+  const history$ = Stream.create();
+  const state$ = Stream.createWithMemory();
+  const never = () => Stream.never();
+  const dom = { select: () => dom, events: never };
+  const sinks = Trade({
+    DOM: dom,
+    HTTP: { select: (category) => category === 'recent-trades' ? history$ : never() },
+    orderRequests: { select: never },
+    socket: { connected$: Stream.of(true), board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$ },
+    state: new StateSource(state$, 'state'),
+    storage: { local: { getItem: never } },
+  }, Stream.of(false));
+  let state;
+  let board;
+  let panel;
+  let panelRenders = 0;
+  const requests = [];
+  const stateSub = sinks.state.subscribe({ next: (reduce) => state$.shamefullySendNext(state = reduce(state)) });
+  const domSub = sinks.DOM.subscribe({ next: ({ children }) => {
+    board = children[1];
+    if (children[3] !== panel) {
+      panel = children[3];
+      panelRenders++;
+    }
+  } });
+  const httpSub = sinks.HTTP.subscribe({ next: (request) => {
+    if (request?.category === 'recent-trades') requests.push(request);
+  } });
+  t.after(() => {
+    httpSub.unsubscribe();
+    domSub.unsubscribe();
+    stateSub.unsubscribe();
+    t.mock.timers.tick(100);
+  });
+
+  assert.equal(panel.children[0].text, 'Recent Trades');
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, 'GET');
+  assert.equal(requests[0].url, 'https://api.bitflyer.jp/v1/executions?product_code=FX_BTC_JPY&count=25');
+
+  const trade = (id, options = {}) =>
+    ({ id, side: 'BUY', price: 100000, size: 0.01, exec_date: '2026-11-21T09:57:40.397', ...options });
+  const respond = (rows) => history$.shamefullySendNext(Stream.of({ text: JSON.stringify(rows) }));
+  const displayed = () => panel.children[1].children[0].children[1].children;
+  const ids = () => displayed().map((row) => row.key);
+
+  executionBatch$.shamefullySendNext([trade(3)]);
+  respond([trade(2, { side: '' }), trade(3), trade(1, { exec_date: 'invalid' }), null]);
+  assert.equal(panelRenders, 1);
+  t.mock.timers.tick(100);
+  assert.equal(panelRenders, 2);
+  assert.deepEqual(ids(), [3, 2]);
+  assert.equal(displayed()[0].children[0].children[0].text, '09:57:40.397');
+  assert.equal(displayed()[0].children[1].text, 'BUY');
+  assert.equal(displayed()[0].children[2].text, (100000).toLocaleString());
+  assert.equal(displayed()[0].children[3].text, '0.01');
+  assert.equal(displayed()[1].children[1].text, '—');
+
+  const previousBoard = board;
+  reconnect$.shamefullySendNext(null);
+  assert.equal(requests.length, 2);
+  history$.shamefullySendNext(Stream.throw(new Error('Public executions unavailable')));
+  respond([trade(5), trade(4), trade(3)]);
+  t.mock.timers.tick(100);
+  assert.deepEqual(ids(), [5, 4, 3, 2]);
+  assert.equal(board, previousBoard);
+
+  const rendersBeforeBurst = panelRenders;
+  Array.from({ length: 30 }, (_, index) => trade(index + 6)).forEach((execution) =>
+    executionBatch$.shamefullySendNext([execution]));
+  assert.equal(panelRenders, rendersBeforeBurst);
+  t.mock.timers.tick(100);
+  assert.equal(panelRenders, rendersBeforeBurst + 1);
+  assert.deepEqual(ids(), Array.from({ length: 25 }, (_, index) => 35 - index));
 });

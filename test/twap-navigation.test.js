@@ -11,7 +11,10 @@ const Stream = require("xstream").default;
 const loadRoot = () => {
     const { outputFiles: [bundle] } = buildSync({
         absWorkingDir: path.resolve(__dirname, ".."),
-        entryPoints: ["src/components/index.ts"],
+        stdin: {
+            contents: 'export { Root } from "./src/components"; export { saveCredentials } from "./src/credentials";',
+            resolveDir: path.resolve(__dirname, ".."),
+        },
         bundle: true,
         loader: { ".styl": "empty" },
         external: ["xstream", "xstream/*"],
@@ -20,8 +23,8 @@ const loadRoot = () => {
     });
     const entry = { exports: {} };
     const evaluate = new Function("require", "module", "localStorage", "window", bundle.text);
-    evaluate(require, entry, { "api-key": "test-key", "api-secret": "test-secret" }, {});
-    return entry.exports.Root;
+    evaluate(require, entry, { getItem: () => null, removeItem() {} }, {});
+    return entry.exports;
 };
 
 const findNode = (node, selector) => {
@@ -50,7 +53,8 @@ test("leaving Trade stops a partially completed TWAP and restores idle controls"
 
     let state;
     let view;
-    const Root = loadRoot();
+    const { Root, saveCredentials } = loadRoot();
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
     const app = routerify(withState((sources) => {
         sources.state.stream.addListener({ next: (value) => { state = value; } });
         return Root(sources);
@@ -60,6 +64,7 @@ test("leaving Trade stops a partially completed TWAP and restores idle controls"
         HTTP: { select: (category) => category === "twap-order" ? twapResponses : Stream.never() },
         history,
         socket: {
+            connected$: Stream.of(true),
             board$: Stream.never(),
             childOrderEvent$: Stream.never(),
             executionBatch$: Stream.never(),
@@ -85,14 +90,16 @@ test("leaving Trade stops a partially completed TWAP and restores idle controls"
 
     buy.shamefullySendNext(null);
     assert.equal(requests.length, 1);
-    const response = { request: requests[0] };
+    const response = { request: { ...requests[0], credentialVersion: 1 } };
     twapResponses.shamefullySendNext(Object.assign(Stream.of(response), response));
     await flush();
     assert.equal(findNode(view, "p.twap-status").text, "Running: 2 / 3 slices left");
 
     history.shamefullySendNext({ pathname: "/setting" });
     await flush();
-    assert.deepEqual(state.trade.orderComponentState.twap, { interval: 2, remaining: 0, slices: 3, scheduleId: undefined });
+    assert.equal(state.trade.orderComponentState.twap.remaining, 0);
+    assert.equal(requests[0].isTwapActive(), false);
+    assert.deepEqual(state.trade.orderComponentState.twap, { interval: 2, remaining: 0, slices: 3, totalSlices: 3, error: undefined, scheduleId: undefined });
     t.mock.timers.tick(4000);
     assert.equal(requests.length, 1);
 

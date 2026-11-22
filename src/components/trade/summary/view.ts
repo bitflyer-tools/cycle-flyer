@@ -2,15 +2,19 @@ import {div, hr, li, span, ul} from "@cycle/dom";
 import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
 import {State} from "./index";
+import {priceAlertView} from "./priceAlertView";
 
-export const view = (state$: Stream<State>) =>
-    state$.compose(dropRepeats(sameViewInputs)).map((state) =>
+export const view = (state$: Stream<State>) => {
+    const historyList = createHistoryListView();
+
+    return state$.compose(dropRepeats(sameViewInputs)).map((state) =>
         div(".summary", [
             div(".current-price", [
                 span(".label", "Current price"),
                 span(".number", state.currentPrice?.toLocaleString() ?? "Pending"),
                 span(".unit", "JPY"),
             ]),
+            priceAlertView(state.priceAlert),
             div(".position", [
                 span(".label", "Position"),
                 span(".number", state.position.toPriceString()),
@@ -46,22 +50,41 @@ export const view = (state$: Stream<State>) =>
                 span(healthClass(state.marketState.state), state.marketState.state),
             ]),
             hr(),
-            ul(".histories", state.histories.map((history) =>
-                    li(".history", [
-                        span(
-                            history.status === "success" ? ".success" : ".failed",
-                            history.status === "success" ? "○" : "✗",
-                        ),
-                        span(".name", history.name),
-                        span(".description", history.description),
-                        span(".created-at", history.createdAt.toLocaleTimeString()),
-                    ]),
-                ),
-            ),
+            historyList(state.histories),
         ]));
+};
+
+const createHistoryListView = () => {
+    let previousHistories: State["histories"] = [];
+    let list = ul(".histories", []);
+
+    return (histories: State["histories"]) => {
+        if (histories === previousHistories) { return list; }
+
+        previousHistories = histories;
+        list = ul(".histories", histories.map((history) =>
+            li(".history", [
+                span(
+                    "." + history.status,
+                    historyStatus(history.status, history.timedOut),
+                ),
+                span(".name", history.name),
+                span(".description", history.description),
+                span(".created-at", history.createdAt.toLocaleTimeString()),
+            ]),
+        ));
+        return list;
+    };
+};
+
+const historyStatus = (status: string, timedOut?: boolean): string => {
+    if (status === "unconfirmed") return timedOut ? "Unconfirmed (timed out)" : "Unconfirmed";
+    return status === "success" ? "○" : "✗";
+};
 
 const sameViewInputs = (previous: State, next: State): boolean =>
     Object.is(previous.currentPrice, next.currentPrice)
+    && previous.priceAlert === next.priceAlert
     && Object.is(previous.collateral, next.collateral)
     && Object.is(previous.position.price, next.position.price)
     && Object.is(previous.position.size, next.position.size)
