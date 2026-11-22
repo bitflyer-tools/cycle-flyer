@@ -8,9 +8,9 @@ const { main } = require('../package.json');
 
 const entryPath = path.resolve(__dirname, '..', main);
 const entry = readFileSync(entryPath, 'utf8');
-const helper = readFileSync(require.resolve('electron-squirrel-startup'), 'utf8');
+const helper = readFileSync(require.resolve('../srcElectron/squirrelStartup'), 'utf8');
 
-async function launch(argument) {
+async function launch(argument, platform = 'win32') {
   const events = [];
   const update = new EventEmitter();
   const app = {
@@ -38,13 +38,11 @@ async function launch(argument) {
     },
   };
   const startupRequire = (name) => {
-    if (name === 'electron') return electron;
-    if (name === 'path') return path.win32;
-    if (name === 'debug') return () => () => {};
-    if (name === 'child_process') {
+    if (name === 'node:child_process') {
       return {
-        spawn: (executable, args) => {
+        spawn: (executable, args, options) => {
           assert.equal(executable, String.raw`C:\app\Update.exe`);
+          assert.deepEqual(options, { detached: true });
           events.push(...args);
           return update;
         },
@@ -54,16 +52,16 @@ async function launch(argument) {
   };
   const execPath = String.raw`C:\app\app-1.1.0\cycle-flyer.exe`;
   const process = {
-    platform: 'win32',
+    platform,
     execPath,
     argv: argument ? [execPath, argument] : [execPath],
   };
   const entryRequire = (name) => {
     if (name === 'electron') return electron;
     if (name === './credentials') return { createCredentialStore: () => ({}) };
-    if (name !== 'electron-squirrel-startup') return require(name);
+    if (name !== './squirrelStartup') return require(name);
     const module = { exports: {} };
-    compileFunction(helper, ['require', 'module', 'process'])(startupRequire, module, process);
+    compileFunction(helper, ['require', 'module'])(startupRequire, module);
     return module.exports;
   };
   compileFunction(entry, ['require', 'process', '__dirname'])(entryRequire, process, path.dirname(entryPath));
@@ -89,8 +87,10 @@ test('quits immediately for an obsolete version', async () => {
   assert.deepEqual(events, ['quit']);
 });
 
-test('opens the trading window on a normal launch', async () => {
-  const { events } = await launch();
-  assert.deepEqual(events, ['lock', 'whenReady', 'second-instance', 'activate', 'window-all-closed',
-    path.resolve(__dirname, '../public/index.html')]);
+test('opens the trading window on a normal launch or when Squirrel flags are inapplicable', async () => {
+  for (const args of [[], ['--squirrel-firstrun'], ['--squirrel-install', 'linux']]) {
+    const { events } = await launch(...args);
+    assert.deepEqual(events, ['lock', 'whenReady', 'second-instance', 'activate', 'window-all-closed',
+      path.resolve(__dirname, '../public/index.html')]);
+  }
 });

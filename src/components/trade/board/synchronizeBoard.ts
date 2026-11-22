@@ -8,7 +8,12 @@ import {BoardSnapshot} from "../../../models/boardSnapshot";
 import {Execution} from "../../../models/execution";
 import {State} from "./index";
 
-type BoardUpdate = (snapshot: BoardSnapshot) => void;
+interface UpdatableBoard {
+    merge(asks: BoardLevels["asks"], bids: BoardLevels["bids"]): void;
+    removeExecutions(executions: Execution[]): void;
+}
+
+type BoardUpdate = (board: UpdatableBoard) => void;
 const snapshotDeadlineMs = 30_000;
 
 interface PendingSnapshot {
@@ -24,14 +29,16 @@ export const synchronizeBoard = <T extends Stream<Response>>(
     executions$: Stream<Execution[]>,
     connected$: Stream<boolean>,
 ): Stream<Reducer<State>> => {
-    const liveReducer$ = deltas$
-        .map<Reducer<State>>((delta) => (state) => state && ({ ...state, board: mergeDelta(state.board, delta) }));
-
     const boardUpdates$ = Stream.merge(
-        deltas$.map<BoardUpdate>(({ asks, bids }) => (snapshot) => snapshot.merge(asks, bids)),
+        deltas$.map<BoardUpdate>(({ asks, bids }) => (board) => board.merge(asks, bids)),
         executions$.filter((batch) => batch.length > 0)
-            .map<BoardUpdate>((batch) => (snapshot) => snapshot.removeExecutions(batch)),
+            .map<BoardUpdate>((batch) => (board) => board.removeExecutions(batch)),
     );
+    const liveReducer$ = boardUpdates$.map<Reducer<State>>((update) => (state) => {
+        if (!state) { return state; }
+        update(state.board);
+        return { ...state };
+    });
     const connection$ = connected$.compose(dropRepeats()).remember();
     const invalidation$ = connection$.mapTo(invalidateSnapshot);
     const snapshotReducer$ = snapshotReducers(responses$$, boardUpdates$, connection$);
@@ -90,8 +97,6 @@ const reconcileSnapshot = (
         .endWhen(Stream.periodic(snapshotDeadlineMs).take(1))
         .replaceError(() => Stream.empty());
 };
-
-const mergeDelta = (board: Board, delta: BoardLevels): Board => board.merge(delta.asks, delta.bids);
 
 const decodeSnapshot = (text: string): BoardSnapshot => {
     const snapshot = JSON.parse(text);

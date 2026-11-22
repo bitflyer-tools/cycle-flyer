@@ -1,44 +1,97 @@
 const assert = require('node:assert/strict');
-const { spawnSync } = require('node:child_process');
-const { readFileSync } = require('node:fs');
+const { execFileSync, spawnSync } = require('node:child_process');
+const { mkdtempSync, readFileSync, rmSync } = require('node:fs');
 const path = require('node:path');
 const { test } = require('node:test');
 const { load } = require('js-yaml');
 
 const workflowPath = path.join(__dirname, '../.github/workflows/release.yml');
-const release = load(readFileSync(workflowPath, 'utf8'));
+const workflowSource = readFileSync(workflowPath, 'utf8');
+const release = load(workflowSource);
 const { jobs } = release;
-const [firstStep] = jobs['bump-version'].steps;
+const { version } = require('../package.json');
+const validation = jobs.validate.steps.find(({ name }) => name === 'Validate release tag');
 
-function runFirstStep(ref) {
-  assert.equal(firstStep.name, 'Require the master branch');
-  const result = spawnSync('bash', ['-e', '-c', firstStep.run], {
+test('pins external release actions to full commit SHAs with version comments', () => {
+  const actionReferences = Object.values(jobs)
+    .flatMap((job) => [job.uses, ...(job.steps ?? []).map(({ uses }) => uses)])
+    .filter((uses) => uses && !uses.startsWith('./') && !uses.startsWith('docker://'));
+  const documentedReferences = workflowSource.split(/\r?\n/)
+    .map((line) => line.match(/^\s*(?:-\s+)?uses:\s+(\S+)\s+#\s+v\d+\.\d+\.\d+\s*$/)?.[1]);
+
+  actionReferences.forEach((uses) => {
+    assert.match(uses, /@[0-9a-f]{40}$/);
+  });
+  assert.deepEqual(documentedReferences.filter((uses) => actionReferences.includes(uses)), actionReferences);
+});
+
+function validateTag(tag) {
+  const result = spawnSync('bash', ['-e', '-c', validation.run], {
+    cwd: path.join(__dirname, '..'),
     encoding: 'utf8',
-    env: { ...process.env, GITHUB_REF: ref },
+    env: { ...process.env, GITHUB_REF_NAME: tag },
   });
   assert.ifError(result.error);
   return result;
 }
 
-test('allows a master branch dispatch and builds from the new version tag', () => {
-  assert.equal(release.on.workflow_dispatch.inputs.version.type, 'choice');
-  assert.equal(runFirstStep('refs/heads/master').status, 0);
-  assert.equal(jobs.build.needs, 'bump-version');
+test('builds the tagged revision and publishes its artifacts with release notes', () => {
+  assert.deepEqual(release.on, { push: { tags: ['v*.*.*'] } });
+  assert.equal(jobs.build.needs, 'validate');
+  const validationCheckout = jobs.validate.steps[0];
+  assert.match(validationCheckout.uses, /^actions\/checkout@/);
+  assert.equal(validationCheckout.with['fetch-depth'], 0);
   const checkout = jobs.build.steps.find(({ uses }) => uses?.startsWith('actions/checkout@'));
-  assert.equal(checkout.with.ref, 'v${{ needs.bump-version.outputs.version }}');
+  assert.ok(checkout);
+  assert.equal(checkout.with?.ref, undefined);
+  assert.equal(jobs.publish.needs, 'build');
+  const publish = jobs.publish.steps.find(({ uses }) => uses?.startsWith('softprops/action-gh-release@'));
+  assert.equal(publish.with.tag_name, '${{ github.ref_name }}');
+  assert.equal(publish.with.generate_release_notes, true);
 });
 
-test('keeps the checkout credentials and full history for pushing the version tag', () => {
-  const checkout = jobs['bump-version'].steps.find(({ uses }) => uses?.startsWith('actions/checkout@'));
-  assert.equal(checkout.with['fetch-depth'], 0);
-  assert.equal(checkout.with['persist-credentials'], true);
+test('accepts the version tag that matches both manifests', () => {
+  const result = validateTag(`v${version}`);
+  assert.equal(result.status, 0, result.stderr);
 });
 
-test('rejects other branches and tags before checkout with a branch error', () => {
-  ['refs/heads/feature', 'refs/tags/master'].forEach((ref) => {
-    const result = runFirstStep(ref);
-    assert.equal(result.status, 1, ref);
-    assert.match(result.stdout, /::error::Dispatch the release workflow from the master branch\./);
+test('requires the tagged revision to be in the history of master', (t) => {
+  const cwd = mkdtempSync(path.join(__dirname, 'release-git-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const git = (...args) => execFileSync(
+    'git', [
+      '-c', 'user.name=Release Test', '-c', 'user.email=test@example.com',
+      '-c', 'commit.gpgSign=false', '-c', 'tag.gpgSign=false', ...args,
+    ],
+    { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+  ).trim();
+  git('init');
+  git('commit', '--allow-empty', '-m', 'Release revision');
+  git('tag', '-a', `v${version}`, '-m', 'Release');
+  git('commit', '--allow-empty', '-m', 'Advance master');
+  git('update-ref', 'refs/remotes/origin/master', 'HEAD');
+  git('checkout', '--detach', `refs/tags/v${version}`);
+
+  const step = jobs.validate.steps.find(({ name }) => name === 'Require the tagged commit on master');
+  const validate = () => spawnSync('bash', ['-e', '-c', step.run], { cwd, encoding: 'utf8' });
+  const accepted = validate();
+  assert.ifError(accepted.error);
+  assert.equal(accepted.status, 0, accepted.stderr);
+
+  git('commit', '--allow-empty', '-m', 'Revision outside master');
+  git('tag', '-f', `v${version}`);
+  git('checkout', '--detach', `refs/tags/v${version}`);
+  const rejected = validate();
+  assert.ifError(rejected.error);
+  assert.equal(rejected.status, 1, rejected.stderr);
+  assert.match(rejected.stdout, /::error::The tagged commit must be in the history of master/);
+});
+
+test('rejects a mismatched release tag or a prerelease tag', () => {
+  [`v${version}.1`, `v${version}-rc.1`].forEach((tag) => {
+    const result = validateTag(tag);
+    assert.equal(result.status, 1, tag);
+    assert.match(result.stderr, /::error::The release tag must match/);
   });
 });
 
@@ -50,10 +103,10 @@ test('limits CI jobs to repository read access', () => {
   });
 });
 
-test('grants release write access only for version bumps and publishing', () => {
+test('grants release write access only for publishing', () => {
   assert.deepEqual(release.permissions, { contents: 'read' });
   assert.deepEqual(
     Object.fromEntries(Object.entries(jobs).map(([name, job]) => [name, job.permissions ?? release.permissions])),
-    { 'bump-version': { contents: 'write' }, build: { contents: 'read' }, publish: { contents: 'write' } },
+    { validate: { contents: 'read' }, build: { contents: 'read' }, publish: { contents: 'write' } },
   );
 });

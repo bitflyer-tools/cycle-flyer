@@ -27,12 +27,17 @@ async function setup(t: TestContext, credentials = true, origin?: string) {
 
     const refresh$ = Stream.create();
     const older$ = Stream.create();
+    const scroll$ = Stream.create();
     const responses$ = Stream.create();
     const transport$ = Stream.create<RequestOptions>();
     const state$ = Stream.create<State>().remember();
     const sinks = ExecutionsComponent({
         DOM: { select: (selector: string) => ({
-            events: () => selector === ".refresh-executions" ? refresh$ : older$,
+            events: () => ({
+                ".refresh-executions": refresh$,
+                ".load-older-executions": older$,
+                ".executions-scroll": scroll$,
+            })[selector],
         }) } as any,
         HTTP: origin ? makeHTTPDriver(250)(transport$) : { select: (category: string) => {
             assert.equal(category, "executions");
@@ -67,6 +72,7 @@ async function setup(t: TestContext, credentials = true, origin?: string) {
         failSigning: () => unsignedRequests$.shamefullySendNext(requests.at(-1)!),
         refresh: () => refresh$.shamefullySendNext(null),
         older: () => older$.shamefullySendNext(null),
+        scroll: (scrollTop: number) => scroll$.shamefullySendNext({ target: { scrollTop } }),
         page: (rows: Execution[]) => respond(Stream.of({ text: JSON.stringify(rows) })),
         fail: (error: object) => respond(Stream.throw(error)),
         settled: () => new Promise<State>((resolve) =>
@@ -76,6 +82,11 @@ async function setup(t: TestContext, credentials = true, origin?: string) {
                 ?.data?.props?.disabled,
         get state() { return current; },
         get dom() { return JSON.stringify(dom); },
+        get tableRows() {
+            const scroll = dom.children?.find((child) => typeof child === "object" && child?.sel === "div.executions-scroll") as VNode;
+            const table = scroll.children![0] as VNode;
+            return (table.children![1] as VNode).children as VNode[];
+        },
     };
 }
 
@@ -177,6 +188,45 @@ test("loads on demand, appends older fills and replaces the list on refresh", as
     panel.page([]);
     assert.deepEqual(panel.state.rows, []);
     assert.match(panel.dom, /No executions found/);
+});
+
+test("windows 5,000 retained fills across the scroll range and only formats mounted fills while loading", async (t) => {
+    const panel = await setup(t);
+    const total = 5000;
+    panel.refresh();
+    for (let first = total; first > 0; first -= executionPageSize) {
+        panel.page(Array.from({ length: executionPageSize }, (_, index) => execution(first - index)));
+        if (first > executionPageSize) { panel.older(); }
+    }
+    assert.equal(panel.state.rows.length, total);
+
+    const seen = new Set();
+    for (let offset = 0; offset < total; offset += 8) {
+        panel.scroll(offset * 28);
+        const rows = panel.tableRows;
+        assert.ok(rows.length <= 21);
+        rows.filter(({ sel }) => sel === "tr").forEach(({ key }) => seen.add(key));
+        const spacerHeight = (spacer: VNode) => Number.parseInt(
+            (spacer.children![0] as VNode).data!.attrs!.style!.toString().replace("height: ", ""), 10);
+        assert.equal(spacerHeight(rows[0]) + spacerHeight(rows.at(-1)!) + (rows.length - 2) * 28, total * 28);
+    }
+    assert.equal(seen.size, total);
+    assert.equal(panel.tableRows.at(-2)?.key, 1);
+
+    const formatted: number[] = [];
+    panel.state.rows.forEach((fill) => {
+        const price = fill.price;
+        Object.defineProperty(fill, "price", { get: () => { formatted.push(fill.id); return price; } });
+    });
+    panel.older();
+    assert.equal(panel.state.loading, true);
+    assert.deepEqual(formatted, panel.tableRows.filter(({ sel }) => sel === "tr").map(({ key }) => key));
+    panel.page([execution(0)]);
+    assert.ok(panel.tableRows.some(({ key }) => key === 1));
+
+    panel.refresh();
+    panel.page([execution(6000)]);
+    assert.deepEqual(panel.tableRows.filter(({ sel }) => sel === "tr").map(({ key }) => key), [6000]);
 });
 
 test("reports permission failures and lets users retry without losing loaded fills", async (t) => {

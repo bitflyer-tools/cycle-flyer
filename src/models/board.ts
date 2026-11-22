@@ -62,6 +62,8 @@ export class Board {
         compare: (a: BoardOrder, b: BoardOrder) => number,
     ): BoardOrder[] {
         if (updates.length === 0) { return orders; }
+        if (updates.length === 1 && updates[0].size !== 0
+            && this.replaceExistingLevel(orders, updates[0], compare)) { return orders; }
         const pricesToRemove = new Set(updates.map((order) => order.price));
         const changedOrders = updates.filter((order) => order.size !== 0).map((order) => new BoardOrder(order));
         if (changedOrders.length > 1) { changedOrders.sort(compare); }
@@ -77,6 +79,23 @@ export class Board {
         }
         while (next < changedOrders.length) { merged.push(changedOrders[next++]); }
         return merged;
+    }
+
+    private replaceExistingLevel(
+        orders: BoardOrder[],
+        update: BoardOrder,
+        compare: (a: BoardOrder, b: BoardOrder) => number,
+    ): boolean {
+        let low = 0;
+        let high = orders.length;
+        while (low < high) {
+            const middle = Math.floor((low + high) / 2);
+            if (compare(orders[middle], update) < 0) { low = middle + 1; } else { high = middle; }
+        }
+
+        if (orders[low]?.price !== update.price || orders[low + 1]?.price === update.price) { return false; }
+        orders[low] = new BoardOrder(update);
+        return true;
     }
 
     private groupBy(

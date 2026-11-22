@@ -17,13 +17,27 @@ To work on the renderer in a browser, run `npm start` and open the local URL
 printed by the dev server. It rebuilds the renderer when source files change.
 Use the Electron app to verify desktop behavior such as saving API credentials.
 
+The Electron main-process inspector is disabled by default. To enable it for a
+debugging session, run:
+
+```sh
+npm run start:electron -- --inspect-electron
+```
+
+See the [Electron Forge debugging guide](https://www.electronforge.io/advanced/debugging)
+for how to attach a debugger.
+
 ## Run the checks
 
 ```sh
 npm run lint
+npm run format:check
 npm run test:coverage
 npm run build
 ```
+
+Run `npm run format -- --write` to format GitHub Actions and Dependabot YAML
+and the hand-written JSON configuration files.
 
 For packaging changes, run `npm run make` to build installers or archives for
 your platform under `out/make/`.

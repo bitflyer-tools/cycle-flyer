@@ -85,10 +85,8 @@ const startTradeSession = (state: State = defaultState): State => ({
     summaryComponentState: state.summaryComponentState && { ...state.summaryComponentState, priceAlert: null },
 });
 
-const applyExecutions = (state: State, executions: Execution[], time: Date): State => {
-    state.boardComponentState?.board.removeExecutions(executions);
-    return executions.reduce((next, { price }) => applyExecution(next, price, time), state);
-};
+const applyExecutions = (state: State, executions: Execution[], time: Date): State =>
+    executions.reduce((next, { price }) => applyExecution(next, price, time), state);
 
 const applyExecution = (state: State, price: number, time: Date): State => {
     if (!isExecutionPrice(price)) { return { ...state, lastExecutionPrice: 0 }; }
