@@ -335,6 +335,30 @@ test('Electron renderer migrates once and delegates both protocol signatures', a
   assert.equal(auth.signature, hmac(auth.timestamp + auth.nonce));
 });
 
+test('Electron signs initial and older execution requests with the full query string', async (t) => {
+  const store = createCredentialStore(withCredentialFile(t), {
+    isEncryptionAvailable: () => true,
+    encryptString: () => Buffer.from('mock ciphertext'),
+  }, 'darwin');
+  const renderer = createRenderer(new Map(), {
+    hasCredentials: async () => store.hasCredentials(),
+    save: async (value) => store.save(value),
+    signRest: async (...args) => store.signRest(...args),
+  });
+  await renderer.saveCredentials(pair);
+
+  const firstPagePath = '/v1/me/getexecutions?product_code=FX_BTC_JPY&count=50';
+  for (const [cursor, requestPath] of [[undefined, firstPagePath], [12345, `${firstPagePath}&before=12345`]]) {
+    const request = await renderer.authorizeRequest(renderer.getExecutions(cursor));
+    assert.ok(request, `Expected a signed request for ${requestPath}`);
+    assert.equal(request.url, 'https://api.bitflyer.jp' + requestPath);
+    assert.equal(request.method, 'GET');
+    assert.equal(request.send, '');
+    assert.equal(request.headers['ACCESS-KEY'], pair.key);
+    assert.equal(request.headers['ACCESS-SIGN'], hmac(request.headers['ACCESS-TIMESTAMP'] + 'GET' + requestPath));
+  }
+});
+
 test('Electron authorizes a parent order cancellation with the exact request body', async (t) => {
   const store = createCredentialStore(withCredentialFile(t), {
     isEncryptionAvailable: () => true,

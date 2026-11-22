@@ -2,7 +2,7 @@ const { createHmac, randomBytes, randomUUID } = require('node:crypto');
 const { existsSync, readFileSync, renameSync, rmSync, writeFileSync } = require('node:fs');
 
 const restPaths = {
-  GET: new Set(['getcollateral', 'getpositions', 'getchildorders', 'getparentorders', 'getparentorder']),
+  GET: new Set(['getcollateral', 'getpositions', 'getexecutions', 'getchildorders', 'getparentorders', 'getparentorder']),
   POST: new Set(['sendchildorder', 'sendparentorder', 'cancelallchildorders', 'cancelparentorder']),
 };
 
