@@ -18,9 +18,9 @@
     margin: 0
 
   .executions-scroll
-    max-height: 260px
     margin-top: 8px
     overflow: auto
+    overflow-anchor: none
 
     &::-webkit-scrollbar
       display: block
@@ -32,12 +32,18 @@
       background: #777
 
   table
-    border-collapse: collapse
+    border-collapse: separate
+    border-spacing: 0
 
   th, td
-    padding: 6px
+    padding: 0 6px
+    line-height: var(--execution-row-height)
     text-align: left
     white-space: nowrap
+
+  .executions-spacer td
+    padding: 0
+    line-height: 0
 
   th
     position: sticky

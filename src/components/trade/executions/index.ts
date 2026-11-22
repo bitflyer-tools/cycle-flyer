@@ -74,8 +74,14 @@ export const ExecutionsComponent = ({DOM, HTTP, state}: Sources) => {
             return reducer;
         });
 
+    const scrollTop$ = Stream.merge(
+        DOM.select(".executions-scroll").events("scroll", { passive: true })
+            .map((event) => (event.target as HTMLElement).scrollTop),
+        state.stream.filter(({ rows }) => rows.length === 0).mapTo(0),
+    ).startWith(0);
+
     return {
-        DOM: state.stream.map(view),
+        DOM: Stream.combine(state.stream, scrollTop$).map(([current, scrollTop]) => view(current, scrollTop)),
         HTTP: requests$.filter((request) => request !== null),
         state: Stream.merge<Reducer<State>>(
             Stream.of<Reducer<State>>(() => initialState),
