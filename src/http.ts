@@ -13,6 +13,11 @@ export const getCollateral = (): RequestInput =>
 export const getPositions = (): RequestInput =>
     requestInput("positions", "/v1/me/getpositions", "GET");
 
+export const recentTradesLimit = 25;
+
+export const getRecentTrades = (): RequestOptions =>
+    requestInput("recent-trades", "/v1/executions", "GET", undefined, { count: recentTradesLimit });
+
 export const executionPageSize = 50;
 
 export const getExecutions = (before?: number): RequestOptions | null => {

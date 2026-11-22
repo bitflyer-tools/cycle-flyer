@@ -20,6 +20,7 @@ import {intent} from "./intent";
 import {model} from "./model";
 import {OrderComponent, State as OrderComponentState} from "./order";
 import {OrderRequestBatch} from "./order/request";
+import {recentTrades} from "./recentTrades";
 import {request} from "./request";
 import {State as SummaryComponentState} from "./summary";
 import {SummaryComponent} from "./summary";
@@ -132,7 +133,9 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
 
     const actions = intent(sources);
     const reducer$ = model(actions);
-    const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM, executionsComponent.DOM);
+    const marketTrades = recentTrades(sources);
+    const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM, executionsComponent.DOM,
+        marketTrades.DOM);
     const settledCloseId$ = sources.state.stream
         .map((state) => state?.positionClose?.settled ? state.positionClose.id : undefined)
         .startWith(undefined)
@@ -150,7 +153,7 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
     return {
         DOM: view$,
         HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP,
-            executionsComponent.HTTP),
+            executionsComponent.HTTP, marketTrades.HTTP),
         orderRequests: orderComponent.orderRequests,
         router: Stream.never(),
         sound: Stream.merge(
