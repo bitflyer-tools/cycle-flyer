@@ -27,7 +27,7 @@ const { SocketIOSource, intent, model, synchronizeBoard, Board, BoardSnapshot } 
 
 function tradeWithBoard(board) {
   const handlers = new Map();
-  const socket = new SocketIOSource({ on: (name, handler) => handlers.set(name, handler) });
+  const socket = new SocketIOSource({ connected: true, on: (name, handler) => handlers.set(name, handler) });
   const actions = intent({ socket, HTTP: { select: () => Stream.never() } });
   let state;
   model(actions).addListener({ next: (reducer) => { state = reducer(state); } });
@@ -109,6 +109,38 @@ const invalidExecutions = [
   { side: 'BUY', price: NaN },
 ];
 
+test('publishes only valid public executions and continues updating Trade', () => {
+  const board = new Board(snapshotLevels);
+  const trade = tradeWithBoard(board);
+  const batches = [];
+  const executions = [];
+  trade.socket.executionBatch$.addListener({ next: (batch) => batches.push(batch) });
+  trade.socket.execution$.addListener({ next: (execution) => executions.push(execution) });
+
+  const initialState = trade.state;
+  const buy = { side: 'BUY', price: 102, id: 1 };
+  [null, buy, 'invalid', [], [null], invalidExecutions].forEach(trade.receive);
+  assert.equal(trade.state, initialState);
+  assert.deepEqual(batches, []);
+  assert.deepEqual(executions, []);
+
+  const sell = { side: 'SELL', price: 98 };
+  trade.receive([null, buy, {}, { price: 103 }, { side: 'UNKNOWN', price: 103 },
+    { side: 'SELL', price: '97' }, sell, ...invalidExecutions]);
+  assert.deepEqual(batches, [[buy, sell]]);
+  assert.deepEqual(executions, [buy, sell]);
+  assert.equal(trade.state.currentPrice, 98);
+  assert.deepEqual(board, new Board({ asks: [snapshotLevels.asks[1]], bids: [snapshotLevels.bids[1]] }));
+
+  const nextBuy = { side: 'BUY', price: 103 };
+  const auction = { side: '', price: 100 };
+  trade.receive([nextBuy, auction]);
+  assert.deepEqual(batches, [[buy, sell], [nextBuy, auction]]);
+  assert.deepEqual(executions, [buy, sell, nextBuy, auction]);
+  assert.equal(trade.state.currentPrice, 100);
+  assert.deepEqual(board, new Board({ asks: [], bids: [snapshotLevels.bids[1]] }));
+});
+
 test('keeps both sides unchanged for invalid executions during a delayed snapshot', () => {
   assertLiveAndReplayedBoard(invalidExecutions, snapshotLevels);
 });
@@ -128,7 +160,7 @@ function assertLiveAndReplayedBoard(executions, expectedLevels) {
   const trade = tradeWithBoard(new Board(snapshotLevels));
   const responses = Stream.create();
   const response = Stream.create();
-  synchronizeBoard(Stream.never(), responses, trade.socket.executionBatch$).addListener({
+  synchronizeBoard(Stream.never(), responses, trade.socket.executionBatch$, trade.socket.connected$).addListener({
     next: (reduce) => { trade.state.boardComponentState = reduce(trade.state.boardComponentState); },
   });
   responses.shamefullySendNext(response);

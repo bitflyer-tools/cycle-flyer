@@ -1,5 +1,6 @@
-const assert = require('node:assert/strict');
 const { webcrypto } = require('node:crypto');
+const credentials = { 'api-secret': 'test-secret' };
+const assert = require('node:assert/strict');
 const path = require('node:path');
 const { runInNewContext } = require('node:vm');
 const { test } = require('node:test');
@@ -27,6 +28,8 @@ runInNewContext(outputFiles[0].text, {
   module: testModule,
   require,
   setTimeout,
+  setInterval: (...args) => setInterval(...args),
+  clearInterval: (...args) => clearInterval(...args),
   crypto: webcrypto,
   localStorage: { getItem: () => null, removeItem: () => {} },
 });
@@ -40,6 +43,7 @@ function makeSocket() {
   const handlers = new Map();
   const subscriptions = [];
   return {
+    connected: false,
     handlers,
     disconnect() { return this; },
     connect() { return this; },
@@ -49,7 +53,10 @@ function makeSocket() {
       assert.equal(event, 'subscribe');
       subscriptions.push(channel);
     },
-    receive: (event, message) => handlers.get(event)?.(message),
+    receive(event, message) {
+      if (event === 'connect' || event === 'disconnect') this.connected = event === 'connect';
+      handlers.get(event)?.(message);
+    },
   };
 }
 
@@ -126,7 +133,8 @@ test('ignores events from the previous account until the new socket authenticate
   assert.deepEqual(events, ['a', 'b']);
 });
 
-test('reconciles the board immediately after reconnect and preserves in-flight updates', () => {
+test('polls REST offline and synchronizes previews only from a fresh connected snapshot', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
   const socket = makeSocket();
   const responses = Stream.create();
   const dom = { select: () => dom, events: () => Stream.never() };
@@ -144,17 +152,18 @@ test('reconciles the board immediately after reconnect and preserves in-flight u
   });
 
   let state;
-  const subscription = sinks.state.subscribe({ next: (reduce) => { state = reduce(state); } });
-  const refresh = Stream.create();
   const requests = [];
-  const http = sinks.HTTP.subscribe({
-    next: (request) => {
-      requests.push(request);
-      if (requests.length === 2) responses.shamefullySendNext(refresh);
+  let requestResponse;
+  const requestSubscription = sinks.HTTP.subscribe({
+    next: (value) => {
+      requests.push(value);
+      requestResponse = Stream.create();
+      responses.shamefullySendNext(requestResponse);
     },
   });
+  const subscription = sinks.state.subscribe({ next: (reduce) => { state = reduce(state); } });
   try {
-    socket.receive('connect');
+    await Promise.resolve();
     assert.equal(requests.length, 1);
     assert.equal(requests[0].category, 'board');
     const url = new URL(requests[0].url);
@@ -165,21 +174,33 @@ test('reconciles the board immediately after reconnect and preserves in-flight u
       asks: [{ price: 102, size: 1 }, { price: 103, size: 2 }],
       bids: [{ price: 100, size: 2 }],
     };
-    responses.shamefullySendNext(Stream.of({ text: JSON.stringify(snapshot) }));
+    requestResponse.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    requestResponse.shamefullySendComplete();
     assert.equal(state.board.asks[0].size, 1);
     assert.equal(state.board.bids[0].size, 2);
+    assert.equal(state.hasBoardSnapshot, false);
+
+    t.mock.timers.tick(15000);
+    assert.equal(requests.length, 2);
+    requestResponse.shamefullySendNext({ text: JSON.stringify({ ...snapshot, asks: [] }) });
+    requestResponse.shamefullySendComplete();
+    assert.equal(state.board.asks.length, 0);
+    assert.equal(state.hasBoardSnapshot, false);
+
+    socket.receive('connect');
+    await Promise.resolve();
+    assert.equal(requests.length, 3);
+    requestResponse.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    requestResponse.shamefullySendComplete();
+    assert.equal(state.hasBoardSnapshot, true);
 
     socket.receive(snapshotChannel, { asks: [], bids: [] });
     socket.receive(boardChannel, { asks: [{ price: 102, size: 3 }], bids: [] });
     assert.equal(state.board.asks[0].size, 3);
     assert.equal(state.board.bids[0].size, 2);
 
-    socket.receive('disconnect');
-    socket.receive('connect');
-    assert.equal(requests.length, 2);
-    assert.equal(requests[1].category, 'board');
-    assert.equal(requests[1].url, requests[0].url);
-    assert.equal(state.board.asks[1].price, 103);
+    const refresh = Stream.create();
+    responses.shamefullySendNext(refresh);
 
     const beforeMalformed = state;
     const asks = state.board.asks;
@@ -196,6 +217,7 @@ test('reconciles the board immediately after reconnect and preserves in-flight u
 
     socket.receive(executionChannel, [{ side: 'SELL', price: 99 }]);
     socket.receive(boardChannel, { asks: [{ price: 102, size: 4 }], bids: [] });
+    assert.equal(state.board.asks[1].price, 103);
     assert.equal(state.board.asks[0].size, 4);
     refresh.shamefullySendNext({ text: JSON.stringify({ ...snapshot, asks: [snapshot.asks[0]] }) });
     refresh.shamefullySendComplete();
@@ -203,8 +225,42 @@ test('reconciles the board immediately after reconnect and preserves in-flight u
     assert.equal(state.board.asks[0].price, 102);
     assert.equal(state.board.asks[0].size, 4);
     assert.equal(state.board.bids.length, 0);
+    assert.equal(state.hasBoardSnapshot, true);
+
+    const stale = Stream.create();
+    responses.shamefullySendNext(stale);
+    socket.receive(executionChannel, [{ side: 'BUY', price: 103 }]);
+    socket.receive('disconnect');
+    assert.equal(state.hasBoardSnapshot, false);
+    const displayedBoard = state.board;
+
+    stale.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    assert.equal(state.board, displayedBoard);
+    assert.equal(state.hasBoardSnapshot, false);
+
+    await Promise.resolve();
+    assert.equal(requests.length, 4);
+    t.mock.timers.tick(15000);
+    assert.equal(requests.length, 5);
+    const offlineResponse = requestResponse;
+
+    socket.receive('connect');
+    offlineResponse.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    assert.equal(state.board, displayedBoard);
+    assert.equal(state.hasBoardSnapshot, false);
+    await Promise.resolve();
+    assert.equal(requests.length, 6);
+    assert.equal(requests[5].url, requests[0].url);
+    assert.equal(state.hasBoardSnapshot, false);
+
+    socket.receive(boardChannel, { asks: [{ price: 102, size: 5 }], bids: [] });
+    assert.equal(state.hasBoardSnapshot, false);
+    requestResponse.shamefullySendNext({ text: JSON.stringify(snapshot) });
+    requestResponse.shamefullySendComplete();
+    assert.equal(state.hasBoardSnapshot, true);
+    assert.equal(state.board.asks[0].size, 5);
   } finally {
-    http.unsubscribe();
+    requestSubscription.unsubscribe();
     subscription.unsubscribe();
   }
 });

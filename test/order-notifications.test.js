@@ -43,6 +43,7 @@ function appHarness(t) {
     HTTP: { select },
     history: Stream.of({ pathname: '/' }),
     socket: {
+      connected$: Stream.of(true),
       board$: Stream.never(),
       execution$: Stream.never(),
       executionBatch$,
@@ -105,4 +106,5 @@ test('notifies for submissions, TWAP slices, and private executions', (t) => {
   assert.deepEqual(app.histories().map(({ name }) => name), [
     'Executed', 'Executed', 'TWAP', 'Stop', 'Limit', 'Market',
   ]);
+  assert.equal(app.histories().at(-1).status, 'unconfirmed');
 });

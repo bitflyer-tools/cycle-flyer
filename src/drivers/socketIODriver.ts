@@ -2,7 +2,7 @@ import { io, Socket } from "socket.io-client";
 import Stream from "xstream";
 import {credentialsChanged$, currentCredentialVersion} from "../credentials";
 import {BoardLevels, isBoardLevels} from "../models/board";
-import {Execution} from "../models/execution";
+import {Execution, isExecution} from "../models/execution";
 import {ChildOrderEvent, ParentOrderEvent} from "../models/orderEvent";
 import {authenticate, privateChannelNames} from "./privateChannel";
 
@@ -20,6 +20,7 @@ export class SocketIOSource {
     public execution$: Stream<Execution> = Stream.create();
     public executionBatch$: Stream<Execution[]> = Stream.create();
     public childOrderEvent$: Stream<ChildOrderEvent> = Stream.create();
+    public connected$: Stream<boolean>;
     public reconnect$: Stream<null> = Stream.create();
     public parentOrderEvent$: Stream<ParentOrderEvent> = Stream.create();
 
@@ -27,9 +28,12 @@ export class SocketIOSource {
         [`lightning_board_${productCode}`]: (message: unknown) => {
             if (isBoardLevels(message)) { this.board$.shamefullySendNext(message); }
         },
-        [`lightning_executions_${productCode}`]: (messages: Execution[]) => {
-            this.executionBatch$.shamefullySendNext(messages);
-            sendEach(this.execution$, messages);
+        [`lightning_executions_${productCode}`]: (message: unknown) => {
+            if (!Array.isArray(message)) { return; }
+            const executions = message.filter(isExecution);
+            if (executions.length === 0) { return; }
+            this.executionBatch$.shamefullySendNext(executions);
+            sendEach(this.execution$, executions);
         },
         child_order_events: (events) => sendEach(this.childOrderEvent$, events.filter(isTargetProduct)),
         parent_order_events: (events) => sendEach(this.parentOrderEvent$, events.filter(isTargetProduct)),
@@ -37,6 +41,12 @@ export class SocketIOSource {
 
     constructor(client: Socket) {
         const publicChannelNames = Object.keys(this.channels).filter((name) => privateChannelNames.indexOf(name) < 0);
+
+        this.connected$ = Stream.createWithMemory<boolean>({
+            start: (listener) => listener.next(client.connected),
+            stop: () => undefined,
+        });
+        client.on("disconnect", () => this.connected$.shamefullySendNext(false));
 
         let authenticatedVersion: number | null = null;
         let connectedOnce = false;
@@ -49,6 +59,7 @@ export class SocketIOSource {
                 authenticatedVersion = version;
                 privateChannelNames.forEach((channelName) => client.emit("subscribe", channelName));
             });
+            this.connected$.shamefullySendNext(true);
             if (connectedOnce) { this.reconnect$.shamefullySendNext(null); }
             connectedOnce = true;
         });

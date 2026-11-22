@@ -36,6 +36,8 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
     t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
     await components.saveCredentials(key && secret ? { key, secret } : null);
     const reconnect$ = Stream.create();
+    const connected$ = Stream.createWithMemory();
+    connected$.shamefullySendNext(false);
     const parentOrders$ = Stream.create();
     const request = { credentialVersion: components.currentCredentialVersion() };
     const parentResponse$ = Object.assign(Stream.create(), { request });
@@ -46,18 +48,21 @@ for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'sec
     });
     const categories = [];
     const subscription = Stream.merge(
-      components.trade_request(actions), components.summary_request(), components.board_request(reconnect$),
+      components.trade_request(actions), components.summary_request(), components.board_request(connected$),
     ).subscribe({ next: (request) => categories.push(request.category) });
     t.after(() => subscription.unsubscribe());
     const takeCategories = () => categories.splice(0).sort();
     const authenticated = key && secret;
 
+    await Promise.resolve();
     assert.deepEqual(takeCategories(), (authenticated ? [...initialCategories] : ['board', 'status']).sort());
 
     if (authenticated) {
       parentOrders$.shamefullySendNext(parentResponse$);
     }
+    connected$.shamefullySendNext(true);
     reconnect$.shamefullySendNext(null);
+    await Promise.resolve();
     assert.deepEqual(takeCategories(), ['board']);
     t.mock.timers.tick(500);
     assert.deepEqual(takeCategories(), authenticated ? otherAccountCategories : []);
@@ -148,7 +153,7 @@ for (const { component, category, first, invalid, next, read, expected } of test
     const actions = components[`${component}_intent`]({
       DOM: dom,
       storage: { local: { getItem: () => idle } },
-      socket: { board$: idle, executionBatch$: idle, childOrderEvent$: idle, parentOrderEvent$: idle, reconnect$: idle },
+      socket: { connected$: Stream.of(true), board$: idle, executionBatch$: idle, childOrderEvent$: idle, parentOrderEvent$: idle, reconnect$: idle },
       HTTP: { select: (name) => name === category ? responses : idle },
     });
 

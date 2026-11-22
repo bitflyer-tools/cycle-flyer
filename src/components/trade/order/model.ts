@@ -6,6 +6,7 @@ import {defaultTwapOrder} from "../../../models/twapOrder";
 import {State} from "./index";
 import {Actions} from "./intent";
 import {twapModel} from "./twapModel";
+import {TwapLifecycle} from "./twapRequest";
 
 const defaultState: State = {
     currentPrice: 0,
@@ -21,7 +22,9 @@ const defaultState: State = {
     twap: defaultTwapOrder,
 };
 
-export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Reducer<State>> => {
+export const model = (
+    actions: Actions, isOrdering$: Stream<boolean>, twapLifecycle$ = Stream.never<TwapLifecycle>(),
+): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
 
     const isOrderingReducer$ = isOrdering$
@@ -50,6 +53,6 @@ export const model = (actions: Actions, isOrdering$: Stream<boolean>): Stream<Re
         ratioReducer$,
         sizeReducer$,
         triggerPriceReducer$,
-        twapModel(actions),
+        twapModel(actions, twapLifecycle$),
     ) as Stream<Reducer<State>>;
 };

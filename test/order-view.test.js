@@ -40,7 +40,7 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
     DOM: dom,
     HTTP: { select: (category) => category === 'orders' ? orders$ : never() },
     orderRequests: { select: never },
-    socket: { board$, executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
+    socket: { connected$: Stream.of(true), board$, executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
   }, Stream.of(false));
@@ -128,7 +128,7 @@ test('the summary waits for a public execution before valuing an open position',
     DOM: dom,
     HTTP: { select: (category) => ({ positions: positions$, collateral: collateral$ })[category] || never() },
     orderRequests: { select: never },
-    socket: { board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
+    socket: { connected$: Stream.of(true), board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
   }, Stream.of(false));
@@ -183,7 +183,7 @@ test('the Position preset fills the latest size after a position-only poll', (t)
     DOM: dom,
     HTTP: { select: (category) => category === 'positions' ? positions$ : never() },
     orderRequests: { select: never },
-    socket: { board$: never(), executionBatch$: never(), childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
+    socket: { connected$: Stream.of(true), board$: never(), executionBatch$: never(), childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
   }, Stream.of(false));
@@ -212,4 +212,84 @@ test('the Position preset fills the latest size after a position-only poll', (t)
   presetClick$.shamefullySendNext({ currentTarget: { dataset: positionPreset().data.dataset } });
 
   assert.equal(sizeGroup('div.size').children[0].data.attrs.value, 0.04);
+});
+
+test('recent market trades seed and refresh without credentials or extra board renders', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const executionBatch$ = Stream.create();
+  const reconnect$ = Stream.create();
+  const history$ = Stream.create();
+  const state$ = Stream.createWithMemory();
+  const never = () => Stream.never();
+  const dom = { select: () => dom, events: never };
+  const sinks = Trade({
+    DOM: dom,
+    HTTP: { select: (category) => category === 'recent-trades' ? history$ : never() },
+    orderRequests: { select: never },
+    socket: { connected$: Stream.of(true), board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$ },
+    state: new StateSource(state$, 'state'),
+    storage: { local: { getItem: never } },
+  }, Stream.of(false));
+  let state;
+  let board;
+  let panel;
+  let panelRenders = 0;
+  const requests = [];
+  const stateSub = sinks.state.subscribe({ next: (reduce) => state$.shamefullySendNext(state = reduce(state)) });
+  const domSub = sinks.DOM.subscribe({ next: ({ children }) => {
+    board = children[1];
+    if (children[3] !== panel) {
+      panel = children[3];
+      panelRenders++;
+    }
+  } });
+  const httpSub = sinks.HTTP.subscribe({ next: (request) => {
+    if (request?.category === 'recent-trades') requests.push(request);
+  } });
+  t.after(() => {
+    httpSub.unsubscribe();
+    domSub.unsubscribe();
+    stateSub.unsubscribe();
+    t.mock.timers.tick(100);
+  });
+
+  assert.equal(panel.children[0].text, 'Recent Trades');
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, 'GET');
+  assert.equal(requests[0].url, 'https://api.bitflyer.jp/v1/executions?product_code=FX_BTC_JPY&count=25');
+
+  const trade = (id, options = {}) =>
+    ({ id, side: 'BUY', price: 100000, size: 0.01, exec_date: '2026-11-21T09:57:40.397', ...options });
+  const respond = (rows) => history$.shamefullySendNext(Stream.of({ text: JSON.stringify(rows) }));
+  const displayed = () => panel.children[1].children[0].children[1].children;
+  const ids = () => displayed().map((row) => row.key);
+
+  executionBatch$.shamefullySendNext([trade(3)]);
+  respond([trade(2, { side: '' }), trade(3), trade(1, { exec_date: 'invalid' }), null]);
+  assert.equal(panelRenders, 1);
+  t.mock.timers.tick(100);
+  assert.equal(panelRenders, 2);
+  assert.deepEqual(ids(), [3, 2]);
+  assert.equal(displayed()[0].children[0].children[0].text, '09:57:40.397');
+  assert.equal(displayed()[0].children[1].text, 'BUY');
+  assert.equal(displayed()[0].children[2].text, (100000).toLocaleString());
+  assert.equal(displayed()[0].children[3].text, '0.01');
+  assert.equal(displayed()[1].children[1].text, '—');
+
+  const previousBoard = board;
+  reconnect$.shamefullySendNext(null);
+  assert.equal(requests.length, 2);
+  history$.shamefullySendNext(Stream.throw(new Error('Public executions unavailable')));
+  respond([trade(5), trade(4), trade(3)]);
+  t.mock.timers.tick(100);
+  assert.deepEqual(ids(), [5, 4, 3, 2]);
+  assert.equal(board, previousBoard);
+
+  const rendersBeforeBurst = panelRenders;
+  Array.from({ length: 30 }, (_, index) => trade(index + 6)).forEach((execution) =>
+    executionBatch$.shamefullySendNext([execution]));
+  assert.equal(panelRenders, rendersBeforeBurst);
+  t.mock.timers.tick(100);
+  assert.equal(panelRenders, rendersBeforeBurst + 1);
+  assert.deepEqual(ids(), Array.from({ length: 25 }, (_, index) => 35 - index));
 });
