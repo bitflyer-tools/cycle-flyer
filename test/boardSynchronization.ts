@@ -157,16 +157,25 @@ test("replays execution pruning on both sides of a delayed snapshot", () => {
     });
 });
 
-test("replays board deltas and execution batches in arrival order", () => {
+test("applies deltas and execution pruning in the same order live and in snapshot replay", () => {
     const {request, execute, update, asks} = setup();
-    const respond = request();
+    const initial = [{ price: 100, size: 1 }, { price: 110, size: 1 }];
+    request()(initial);
 
+    execute({ side: "BUY", price: 110 });
+    assert.deepEqual(asks(), [[110, 1]]);
+    update(100, 3);
+    assert.deepEqual(asks(), [[100, 3], [110, 1]]);
+
+    const respond = request();
     update(99, 2);
     execute({ side: "BUY", price: 110 });
+    assert.deepEqual(asks(), [[110, 1]]);
     update(100, 3);
-    respond([{ price: 100, size: 1 }, { price: 110, size: 1 }]);
-
-    assert.deepEqual(asks(), [[100, 3], [110, 1]]);
+    const liveAsks = asks();
+    respond(initial);
+    assert.deepEqual(liveAsks, [[100, 3], [110, 1]]);
+    assert.deepEqual(asks(), liveAsks);
 });
 
 test("discards an older response when snapshot requests overlap", () => {
