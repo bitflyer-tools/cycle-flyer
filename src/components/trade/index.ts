@@ -8,6 +8,7 @@ import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
 import {SocketIOSource} from "../../drivers/socketIODriver";
 import {Sound} from "../../drivers/soundDriver";
+import {estimateMarketFills} from "../../models/marketFill";
 import {Order} from "../../models/order";
 import {OrderHistory} from "../../models/orderHistory";
 import {flattenStopOrders, ParentStopOrders} from "../../models/parentStopOrders";
@@ -105,6 +106,10 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
         state: {
             get: (state: State) => state.orderComponentState && {
                 ...state.orderComponentState,
+                marketFills: estimateMarketFills(
+                    state.boardComponentState?.hasBoardSnapshot ? state.boardComponentState.board : undefined,
+                    state.orderComponentState.size,
+                ),
                 currentPrice: state.currentPrice ?? 0,
                 histories: state.histories,
                 orders: state.orders,

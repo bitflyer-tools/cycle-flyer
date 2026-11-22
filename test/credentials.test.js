@@ -156,7 +156,7 @@ for (const saved of [false, true]) {
 
     const board = [];
     const status = [];
-    const boardSubscription = renderer.boardRequest(renderer.Stream.never())
+    const boardSubscription = renderer.boardRequest(renderer.Stream.of(false))
       .subscribe({ next: (request) => board.push(request) });
     const statusSubscription = renderer.summaryRequest()
       .filter((request) => request.category === 'status')
@@ -166,6 +166,7 @@ for (const saved of [false, true]) {
       statusSubscription.unsubscribe();
     });
 
+    await Promise.resolve();
     assert.equal(board.length, 1);
     assert.equal(status.length, 1);
     t.mock.timers.tick(60000);
