@@ -185,7 +185,7 @@ test("releases a failed IFDOCO and keeps a later market order locked through sta
     const order = setup(t);
 
     order.buy("ifdoco");
-    order.respondTo(order.requests[0]).fail();
+    order.respondTo(order.requests[0]).reject();
     equal(order.state.isOrdering, false);
     deepEqual(order.histories.map(({ status }) => status), ["failed", "failed", "failed"]);
 
@@ -205,8 +205,8 @@ test("releases a failed IFDOCO and keeps a later market order locked through sta
     equal(order.requests.length, 3);
 });
 
-for (const outcome of ["succeed", "fail"] as const) {
-    const status = outcome === "succeed" ? "success" : "failed";
+for (const outcome of ["succeed", "reject", "disconnect"] as const) {
+    const status = { succeed: "success", reject: "failed", disconnect: "unconfirmed" }[outcome];
     const sound = outcome === "succeed" ? "success" : "failure";
     const expectedHistories = ["Stop", "Limit", "Market"].map((name) => ({ name, status }));
 
@@ -264,6 +264,123 @@ for (const outcome of ["succeed", "fail"] as const) {
     }
 }
 
+const disconnectedOrders = [
+    ["market", [["Market", "BUY / 0.03 / MARKET"]]],
+    ["stop", [["Stop", "BUY / 0.03 / 11,000,000"]]],
+    ["ifdoco", [
+        ["Stop", "SELL / 0.03 / 9,999,999.99"],
+        ["Limit", "SELL / 0.03 / 10,000,000"],
+        ["Market", "BUY / 0.03 / MARKET"],
+    ]],
+] as const;
+
+for (const [category, entries] of disconnectedOrders) {
+    test(`${category} records an unconfirmed order after a disconnect and permits a later submission`, (t) => {
+        const order = setup(t);
+        order.buy(category);
+        equal(order.state.isOrdering, true);
+        order.respondTo(order.requests[0]).disconnect();
+        equal(order.state.isOrdering, false);
+        deepEqual(
+            order.histories.map(({ name, description, status }) => [name, description, status]),
+            entries.map((entry) => [...entry, "unconfirmed"]),
+        );
+
+        summaryView(Stream.of<SummaryState>({
+            ...order.tradeState,
+            priceAlert: order.tradeState.summaryComponentState!.priceAlert,
+            collateral: 0,
+            marketState: { health: "", state: "" },
+        })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /"text":"Unconfirmed"/) });
+
+        order.buy(category);
+        equal(order.requests.length, 2);
+        order.respondTo(order.requests[1]).succeed();
+        equal(order.state.isOrdering, false);
+        deepEqual(order.histories.map(({ status }) => status), [
+            ...entries.map(() => "success"),
+            ...entries.map(() => "unconfirmed"),
+        ]);
+    });
+}
+
+for (const [category, entries] of disconnectedOrders) {
+    test(`records an unconfirmed ${category} order when the HTTP connection drops`, { timeout: 5_000 }, async (t) => {
+        const writes: string[] = [];
+        const server = createServer((request, response) => {
+            request.resume();
+            const path = new URL(request.url!, "http://localhost").pathname;
+            writes.push(`${request.method} ${path}`);
+            if (writes.length > 1) response.end();
+        });
+        t.after(() => {
+            server.closeAllConnections();
+            server.close();
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const { port } = server.address() as { port: number };
+        const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${port}`, writeDeadline: 2_000, apis: [] });
+        const endpoint = category === "market" ? "sendchildorder" : "sendparentorder";
+        const expectedWrite = `POST /v1/me/${endpoint}`;
+
+        const received = once(server, "request");
+        order.buy(category);
+        equal(order.state.isOrdering, true);
+        const [request] = await received;
+        request.socket.destroy();
+        await order.waitForHistoryCount(entries.length);
+
+        equal(order.state.isOrdering, false);
+        deepEqual(writes, [expectedWrite]);
+        deepEqual(order.sounds, ["failure"]);
+        deepEqual(order.histories.map(({ name, description, status, timedOut }) => [name, description, status, timedOut]),
+            entries.map((entry) => [...entry, "unconfirmed", undefined]));
+        summaryView(Stream.of<SummaryState>({
+            ...order.tradeState,
+            priceAlert: order.tradeState.summaryComponentState!.priceAlert,
+            collateral: 0,
+            marketState: { health: "", state: "" },
+        })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /"text":"Unconfirmed"/) });
+
+        order.buy(category);
+        equal(order.state.isOrdering, true);
+        await order.waitForHistoryCount(entries.length * 2);
+        equal(order.state.isOrdering, false);
+        deepEqual(writes, [expectedWrite, expectedWrite]);
+        deepEqual(order.sounds, ["failure", "success"]);
+        deepEqual(order.histories.map(({ status }) => status), [
+            ...entries.map(() => "success"),
+            ...entries.map(() => "unconfirmed"),
+        ]);
+    });
+}
+
+for (const [statusCode, expectedStatus] of [[400, "failed"], [200, "unconfirmed"]] as const) {
+    test(`records a malformed HTTP ${statusCode} order response as ${expectedStatus}`, { timeout: 5_000 }, async (t) => {
+        const server = createServer((request, response) => {
+            request.resume();
+            response.writeHead(statusCode, { "Content-Type": "application/json" });
+            response.end("{");
+        });
+        t.after(() => {
+            server.closeAllConnections();
+            server.close();
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const { port } = server.address() as { port: number };
+        const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${port}`, writeDeadline: 2_000, apis: [] });
+
+        order.buy("market");
+        await order.waitForHistoryCount(1);
+
+        equal(order.state.isOrdering, false);
+        deepEqual(order.sounds, ["failure"]);
+        deepEqual(order.histories.map(({ name, status }) => [name, status]), [["Market", expectedStatus]]);
+    });
+}
+
 test("routes account executions without changing session history or reviving stale responses", async (t) => {
     await saveCredentials({ key: "account-a", secret: "secret-a" });
     t.after(() => saveCredentials(null));
@@ -306,7 +423,7 @@ test("routes account executions without changing session history or reviving sta
 });
 
 test("records a rejected limit order and permits a retry", (t) => {
-    const order = setup(t, "0.01", { apis: ["Date", "setInterval"] });
+    const order = setup(t, "0.01", { apis: ["Date", "setInterval", "setTimeout"] });
     order.enterPrice("900");
 
     order.buy("limit");
@@ -353,7 +470,7 @@ test("reports mixed Clear Orders results and stays locked until every request se
     equal(order.tradeState.orders.length, 1);
     deepEqual(flattenStopOrders(order.tradeState.parentStopOrders).map(({ price }) => price), [200, 300]);
 
-    order.respondTo(order.requests[2]).fail();
+    order.respondTo(order.requests[2]).disconnect();
     equal(order.state.isOrdering, true);
     deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-success", "JCO-failure"]);
     order.respondTo(order.requests[1]).succeed();
@@ -369,7 +486,7 @@ test("reports mixed Clear Orders results and stays locked until every request se
     deepEqual(order.histories.map(({ name, description, status }) => [name, description, status]), [
         ["Cancel", "All child orders", "success"],
         ["Cancel", "Parent order JCO-success", "success"],
-        ["Cancel", "Parent order JCO-failure", "failed"],
+        ["Cancel", "Parent order JCO-failure", "unconfirmed"],
     ]);
     deepEqual(order.sounds, ["failure", "success", "success"]);
     order.clearOrders();
@@ -418,7 +535,7 @@ test("reports a failed bulk cancellation and keeps the child orders visible", (t
     const childOrders = order.tradeState.orders;
 
     order.clearOrders();
-    order.respondTo(order.requests[0]).fail();
+    order.respondTo(order.requests[0]).reject();
 
     equal(order.state.isOrdering, false);
     equal(order.tradeState.orders, childOrders);
@@ -469,7 +586,7 @@ test("ignores Clear Orders results from the previous account", async (t) => {
     order.navigate("/setting");
     await saveCredentials({ key: "account-b", secret: "secret-b" });
     order.navigate("/");
-    pendingParentCancel.fail();
+    pendingParentCancel.disconnect();
     pendingBulkCancel.succeed();
 
     equal(order.state.isOrdering, false);
@@ -545,7 +662,7 @@ test("blocks TWAP with missing credentials and immediately after clearing them",
 });
 
 test("stops TWAP on signing failure and ignores old slices after a restart", async (t) => {
-    const order = setup(t);
+    const order = setup(t, "0.01", { apis: ["setInterval"] });
     await saveCredentials({ key: "test-key", secret: "test-secret" });
     t.after(() => saveCredentials(null));
 
@@ -653,7 +770,7 @@ test("a pending IFDOCO from the previous account cannot lock or update the new a
     trade.buy("market");
     equal(trade.state.isOrdering, true);
 
-    original.fail();
+    original.disconnect();
     equal(trade.state.isOrdering, true);
     equal(trade.histories.length, 0);
     equal(trade.sounds.length, 0);
@@ -801,6 +918,7 @@ test("allows retry after a definite rejection and a fresh unchanged position", a
 
     order.respondTo(order.requests[0]).reject(400);
     equal(order.state.isOrdering, false);
+    deepEqual(order.histories.map(({ status }) => status), ["failed"]);
     equal(order.positionRequests.length, 2);
     order.respondTo(initialPoll).succeed(position);
     order.clearPosition();
@@ -819,7 +937,7 @@ test("allows retry after a definite rejection and a fresh unchanged position", a
     deepEqual({ side, size }, { side: "SELL", size: 0.08 });
 });
 
-for (const failure of ["network", "server"] as const) {
+for (const failure of ["network", 408, 503] as const) {
     test(`waits for position reconciliation after an ambiguous ${failure} failure`, async (t) => {
         const order = setup(t);
         await saveCredentials({ key: "test-key", secret: "test-secret" });
@@ -830,9 +948,19 @@ for (const failure of ["network", "server"] as const) {
 
         order.navigate("/setting");
         const response = order.respondTo(order.requests[0]);
-        if (failure === "network") response.fail();
-        else response.reject(503);
+        if (failure === "network") response.disconnect();
+        else response.reject(failure);
         order.navigate("/");
+        deepEqual(order.histories.map(({ status, timedOut }) => ({ status, timedOut })), [
+            { status: "unconfirmed", timedOut: undefined },
+        ]);
+        equal(order.tradeState.positionClose?.rejected, false);
+        summaryView(Stream.of<SummaryState>({
+            ...order.tradeState,
+            priceAlert: order.tradeState.summaryComponentState!.priceAlert,
+            collateral: 0,
+            marketState: { health: "", state: "" },
+        })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /"text":"Unconfirmed"/) });
         order.clearPosition();
         equal(order.requests.length, 1);
 
@@ -944,8 +1072,8 @@ test("leaving Trade cancels a TWAP slice that is still signing", async (t) => {
 });
 
 for (const route of ["/", "/setting"]) {
-    for (const status of ["success", "failed", "unconfirmed"] as const) {
-        test(`records and notifies a TWAP slice once when it settles on ${route} (${status})`, async (t) => {
+    for (const outcome of ["success", "failed", "deadline", "disconnect"] as const) {
+        test(`records and notifies a TWAP slice once when it settles on ${route} (${outcome})`, async (t) => {
             const order = setup(t, "0.01", { twapSlices: 2 });
             await saveCredentials({ key: "test-key", secret: "test-secret" });
             t.after(() => saveCredentials(null));
@@ -966,9 +1094,12 @@ for (const route of ["/", "/setting"]) {
             response.progress();
             deepEqual(order.histories, []);
             deepEqual(order.sounds, []);
-            if (status === "success") response.succeed({ child_order_acceptance_id: "JRF-TWAP" });
-            else if (status === "failed") response.reject();
+            if (outcome === "success") response.succeed({ child_order_acceptance_id: "JRF-TWAP" });
+            else if (outcome === "failed") response.reject();
+            else if (outcome === "disconnect") response.disconnect();
             else response.fail(Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }));
+
+            const status = outcome === "deadline" || outcome === "disconnect" ? "unconfirmed" : outcome;
 
             const sounds = [status === "success" ? "success" : "failure"];
             deepEqual(order.sounds, sounds);
@@ -983,43 +1114,55 @@ for (const route of ["/", "/setting"]) {
             ]);
             deepEqual(order.sounds, sounds);
             if (status === "unconfirmed") {
+                const label = outcome === "deadline" ? "Unconfirmed (timed out)" : "Unconfirmed";
                 summaryView(Stream.of<SummaryState>({
                     ...order.tradeState,
                     priceAlert: order.tradeState.summaryComponentState!.priceAlert,
                     collateral: 0,
                     marketState: { health: "", state: "" },
-                })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /Unconfirmed \(timed out\)/) });
+                })).addListener({ next: (vnode) => equal(JSON.stringify(vnode).includes(`"text":"${label}"`), true) });
             }
         });
     }
 }
 
 for (const route of ["/", "/setting"]) {
-    test(`records a TWAP slice deadline once when it expires on ${route}`, (t) => {
-        const order = setup(t);
-        Array.from({ length: HISTORY_LIMIT }, (_, index) => {
-            order.buy("market");
-            order.respondTo(order.requests[index]).succeed();
+    for (const failure of ["deadline", "disconnect"] as const) {
+        test(`records an unconfirmed TWAP slice once after a ${failure} on ${route}`, (t) => {
+            const order = setup(t);
+            Array.from({ length: HISTORY_LIMIT }, (_, index) => {
+                order.buy("market");
+                order.respondTo(order.requests[index]).succeed();
+            });
+            const previous = order.histories;
+            const request = twapSliceOrder(0.01, "BUY", Symbol());
+            const response = order.respondTo({ ...request, _namespace: ["trade"] });
+
+            if (route === "/setting") order.navigate(route);
+            if (failure === "deadline") {
+                response.fail(Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }));
+            } else {
+                response.disconnect();
+            }
+            const { name, status, timedOut } = order.histories[0];
+            deepEqual({ name, status, timedOut }, {
+                name: "TWAP",
+                status: "unconfirmed",
+                timedOut: failure === "deadline" ? true : undefined,
+            });
+            deepEqual(order.histories.slice(1), previous.slice(0, HISTORY_LIMIT - 1));
+
+            if (route === "/setting") order.navigate("/");
+            equal(order.histories.length, HISTORY_LIMIT);
+            const label = failure === "deadline" ? "Unconfirmed (timed out)" : "Unconfirmed";
+            summaryView(Stream.of<SummaryState>({
+                ...order.tradeState,
+                priceAlert: order.tradeState.summaryComponentState!.priceAlert,
+                collateral: 0,
+                marketState: { health: "", state: "" },
+            })).addListener({ next: (vnode) => equal(JSON.stringify(vnode).includes(`"text":"${label}"`), true) });
         });
-        const previous = order.histories;
-        const request = twapSliceOrder(0.01, "BUY", Symbol());
-        const response = order.respondTo({ ...request, _namespace: ["trade"] });
-
-        if (route === "/setting") order.navigate(route);
-        response.fail(Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }));
-        const { name, status } = order.histories[0];
-        deepEqual({ name, status }, { name: "TWAP", status: "unconfirmed" });
-        deepEqual(order.histories.slice(1), previous.slice(0, HISTORY_LIMIT - 1));
-
-        if (route === "/setting") order.navigate("/");
-        equal(order.histories.length, HISTORY_LIMIT);
-        summaryView(Stream.of<SummaryState>({
-            ...order.tradeState,
-            priceAlert: order.tradeState.summaryComponentState!.priceAlert,
-            collateral: 0,
-            marketState: { health: "", state: "" },
-        })).addListener({ next: (vnode) => match(JSON.stringify(vnode), /Unconfirmed \(timed out\)/) });
-    });
+    }
 }
 
 test("ignores order and cancellation deadlines from the previous account", async (t) => {
@@ -1067,11 +1210,12 @@ test("ignores write deadlines from the previous account", async (t) => {
 
 function setup(t: TestContext, width = "0.01", options: {
     initialPrice?: number | null;
+    writeDeadline?: number;
     twapSlices?: number;
     writeOrigin?: string;
-    apis?: Array<"Date" | "setInterval">;
+    apis?: Array<"Date" | "setInterval" | "setTimeout">;
 } = {}) {
-    const { initialPrice = 10000000, twapSlices = 3, writeOrigin, apis = ["setInterval"] } = options;
+    const { initialPrice = 10000000, writeDeadline = 250, twapSlices = 3, writeOrigin, apis = ["setInterval", "setTimeout"] } = options;
     if (apis.length > 0) t.mock.timers.enable({ apis, now: 1000 });
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { "api-key": "test", "api-secret": "test" } });
@@ -1105,7 +1249,7 @@ function setup(t: TestContext, width = "0.01", options: {
     const publishExecution = (price: number) => executionBatch$.shamefullySendNext([{ side: "BUY", price }]);
     const responses$ = Stream.create<MemoryStream<Response> & ResponseStream>();
     const writes$ = Stream.create<RequestInput | null>();
-    const transport$ = makeHTTPDriver(250)(writes$).select();
+    const transport$ = makeHTTPDriver(writeDeadline)(writes$).select();
     const source = new MainHTTPSource(Stream.merge(responses$, transport$), "HTTP");
     const state$ = Stream.createWithMemory<{ trade?: TradeState }>();
     const history$ = Stream.createWithMemory<{ pathname: string }>();
@@ -1193,11 +1337,14 @@ function setup(t: TestContext, width = "0.01", options: {
     const sounds: Sound[] = [];
     const audio = main.sound!.subscribe({ next: (sound) => sounds.push(sound) });
     if (initialPrice !== null) publishExecution(initialPrice);
-    t.after(() => {
+    t.after(async () => {
         dom.unsubscribe();
         audio.unsubscribe();
         http.unsubscribe();
         reducers.unsubscribe();
+        // Let xstream stop its timers before the next test installs timer mocks.
+        if (apis.includes("setTimeout")) t.mock.timers.tick(1);
+        else await new Promise<void>((resolve) => setTimeout(resolve, 30));
     });
 
     return {
@@ -1215,6 +1362,11 @@ function setup(t: TestContext, width = "0.01", options: {
         enterTriggerPrice: (value: string) => triggerInput$.shamefullySendNext({ target: { value } }),
         get executions() { return state!.trade!.executionsComponentState!; },
         get histories() { return state!.trade!.histories; },
+        waitForHistoryCount: (count: number) => new Promise<void>((resolve) => {
+            const subscription = state$.filter(({ trade }) => trade?.histories.length === count)
+                .take(1).subscribe({ next: () => resolve() });
+            t.after(() => subscription.unsubscribe());
+        }),
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         pages,
         parentDetails,
@@ -1228,7 +1380,8 @@ function setup(t: TestContext, width = "0.01", options: {
             const response$ = Object.assign(Stream.createWithMemory<Response>(), { request });
             responses$.shamefullySendNext(response$);
             return {
-                fail: (error = new Error("Network failure")) => response$.shamefullySendError(error),
+                fail: (error: Error) => response$.shamefullySendError(error),
+                disconnect: () => response$.shamefullySendError(new Error("Disconnected")),
                 reject: (status = 400) => response$.shamefullySendError({
                     response: { request, status, text: JSON.stringify({ status: -1, error_message: "Order rejected" }) },
                 }),

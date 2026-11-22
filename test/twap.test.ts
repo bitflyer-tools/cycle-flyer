@@ -60,7 +60,7 @@ test("ignores a canceled schedule's response when tracking replacement progress"
     strictEqual(twap.state.twap.remaining, 2);
 
     context.mock.timers.tick(1000);
-    twap.requests[1].fail();
+    twap.requests[1].disconnect();
     strictEqual(twap.state.twap.remaining, 1);
     twap.requests[2].succeed();
     strictEqual(isRunning(twap.state.twap), false);
@@ -222,7 +222,7 @@ const fakeResponse = (input: TwapSliceRequest) => {
     const response$ = Object.assign(Stream.createWithMemory<{request: TwapSliceRequest}>(), { request });
     return {
         response$,
-        fail: () => response$.shamefullySendError(new Error("Network error")),
+        disconnect: () => response$.shamefullySendError(new Error("Network error")),
         succeed: () => {
             response$.shamefullySendNext({ request });
             response$.shamefullySendNext({ request });
