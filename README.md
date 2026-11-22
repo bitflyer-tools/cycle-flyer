@@ -31,7 +31,8 @@ You can view the order book without an API key.
 ### Optional: View account information
 
 1. Open **Setting** and enter your bitFlyer Lightning credentials in **API Key** and **API Secret**. Use an API key with read permissions for collateral, positions, and orders.
-2. Return to **Trade** to check your account summary, including collateral and position information. You can verify access without placing an order.
+2. Click **Save credentials** and wait for the **Credentials saved.** confirmation.
+3. Return to **Trade** to check your account summary, including collateral and position information. You can verify access without placing an order.
 
 ## Tests
 
