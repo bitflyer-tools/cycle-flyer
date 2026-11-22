@@ -62,6 +62,7 @@ function setup(t) {
     t.after(() => subscriptions.forEach((subscription) => subscription.unsubscribe()));
 
     return {
+        get currentPrice() { return state.trade.currentPrice; },
         get alert() { return state.trade.summaryComponentState.priceAlert; },
         dismiss: () => dismiss$.shamefullySendNext({}),
         execute: (...prices) => executionBatch$.shamefullySendNext(prices.map((price) => ({ price, side: "BUY" }))),
@@ -114,6 +115,7 @@ test("an upward touch disarms the alert and emits one sound", (t) => {
     assert.deepEqual(trade.alert, { threshold: 100, direction: "up", status: "active" });
 
     trade.execute(100, 99);
+    assert.equal(trade.currentPrice, 99);
     const triggered = trade.alert;
     assert.equal(triggered.status, "triggered");
     assert.equal(triggered.price, 100);
