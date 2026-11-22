@@ -25,18 +25,25 @@ const bundledExports = { exports: {} };
 new Function('require', 'module', bundle)(require, bundledExports);
 const { SocketIOSource, intent, model, synchronizeBoard, Board, BoardSnapshot } = bundledExports.exports;
 
-function tradeWithBoard(board) {
+function setupSocket() {
   const handlers = new Map();
   const socket = new SocketIOSource({ connected: true, on: (name, handler) => handlers.set(name, handler) });
-  const actions = intent({ socket, HTTP: { select: () => Stream.never() } });
+  return { socket, receive: handlers.get('lightning_executions_FX_BTC_JPY') };
+}
+
+function setupTrade(source) {
+  const actions = intent({ socket: source.socket, HTTP: { select: () => Stream.never() } });
   let state;
   model(actions).addListener({ next: (reducer) => { state = reducer(state); } });
-  state = { ...state, boardComponentState: { board } };
-  return {
-    socket,
-    get state() { return state; },
-    receive: handlers.get('lightning_executions_FX_BTC_JPY'),
-  };
+  return { ...source, get state() { return state; } };
+}
+
+function setupBoard(socket, board, responses = Stream.never()) {
+  let state = { board };
+  synchronizeBoard(socket.board$, responses, socket.executionBatch$, socket.connected$).addListener({
+    next: (reduce) => { state = reduce(state); },
+  });
+  return () => state.board;
 }
 
 test('keeps both live side arrays and reads only the best quotes for executions at those prices', () => {
@@ -52,7 +59,8 @@ test('keeps both live side arrays and reads only the best quotes for executions 
     const { price } = level;
     Object.defineProperty(level, 'price', { get: () => { priceReads++; return price; } });
   });
-  const trade = tradeWithBoard(board);
+  const trade = setupTrade(setupSocket());
+  setupBoard(trade.socket, board);
 
   trade.receive(Array.from({ length: 50 }, () => [
     { side: 'BUY', price: 1001 }, { side: 'SELL', price: 1000 },
@@ -111,7 +119,8 @@ const invalidExecutions = [
 
 test('publishes only valid public executions and continues updating Trade', () => {
   const board = new Board(snapshotLevels);
-  const trade = tradeWithBoard(board);
+  const trade = setupTrade(setupSocket());
+  setupBoard(trade.socket, board);
   const batches = [];
   const executions = [];
   trade.socket.executionBatch$.addListener({ next: (batch) => batches.push(batch) });
@@ -157,21 +166,19 @@ test('prunes both sides using only valid prices in a mixed batch during a delaye
 });
 
 function assertLiveAndReplayedBoard(executions, expectedLevels) {
-  const trade = tradeWithBoard(new Board(snapshotLevels));
+  const { socket, receive } = setupSocket();
   const responses = Stream.create();
   const response = Stream.create();
-  synchronizeBoard(Stream.never(), responses, trade.socket.executionBatch$, trade.socket.connected$).addListener({
-    next: (reduce) => { trade.state.boardComponentState = reduce(trade.state.boardComponentState); },
-  });
+  const board = setupBoard(socket, new Board(snapshotLevels), responses);
   responses.shamefullySendNext(response);
 
   const expected = new Board(expectedLevels);
-  trade.receive(executions);
-  const liveBoard = trade.state.boardComponentState.board;
+  receive(executions);
+  const liveBoard = board();
   assert.deepEqual(liveBoard, expected);
   response.shamefullySendNext({ text: JSON.stringify(snapshotLevels) });
-  assert.notEqual(trade.state.boardComponentState.board, liveBoard);
-  assert.deepEqual(trade.state.boardComponentState.board, expected);
+  assert.notEqual(board(), liveBoard);
+  assert.deepEqual(board(), expected);
 }
 
 test('matches sequential pruning and delivers every execution in order', () => {
@@ -188,7 +195,8 @@ test('matches sequential pruning and delivers every execution in order', () => {
     { side: 'BUY', price: 102 },
   ];
   executions.forEach(({ side, price }) => expected.remove(side, price));
-  const trade = tradeWithBoard(board);
+  const trade = setupTrade(setupSocket());
+  setupBoard(trade.socket, board);
   const individualExecutions = [];
   trade.socket.execution$.addListener({ next: (execution) => individualExecutions.push(execution) });
 

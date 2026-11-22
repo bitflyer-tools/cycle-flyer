@@ -43,13 +43,13 @@ function setup(t) {
     return { board, executionBatch$, parentOrder$, parentOrders$, snapshots };
 }
 
-test("a public execution batch prunes the board and updates the price while the active stop stays visible", (t) => {
+test("a public execution batch updates the price and leaves board levels and active stops intact", (t) => {
     const { board, executionBatch$, parentOrder$, snapshots } = setup(t);
     const beforeExecution = snapshots.length;
     executionBatch$.shamefullySendNext([{ side: "BUY", price: 110 }, { side: "SELL", price: 108 }]);
     parentOrder$.shamefullySendNext(parentOrder);
 
-    assert.deepEqual(board.asks.map(({ price }) => price), [110]);
+    assert.deepEqual(board.asks.map(({ price }) => price), [109, 110]);
     assert.equal(snapshots[beforeExecution].stopOrders, snapshots[beforeExecution - 1].stopOrders);
     assert.deepEqual(snapshots.slice(beforeExecution - 1).map(({ price, stops }) => ({ price, stops })), [
         { price: null, stops: [110] },
