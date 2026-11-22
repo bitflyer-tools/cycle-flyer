@@ -1,4 +1,4 @@
-import {deepStrictEqual, strictEqual} from "node:assert";
+import {deepStrictEqual, ok, strictEqual} from "node:assert";
 import {test} from "node:test";
 import {Board, BoardLevels} from "../src/models/board";
 import {BoardOrder} from "../src/models/boardOrder";
@@ -42,19 +42,55 @@ test("merge replaces all existing levels at a changed price and retains nonzero 
     deepStrictEqual(board.asks.map(({ size }) => size), [4, 5, 3]);
 });
 
-test("merge replaces one level on a 5,000-level side without sorting", () => {
-    const asks = Array.from({ length: 5_000 }, (_, index) => ({ price: index + 1, size: 1 }));
-    const board = new Board({ asks, bids: [] });
-    const sort = Array.prototype.sort;
-    try {
-        Array.prototype.sort = () => { throw new Error("Unexpected sort for a single update"); };
-        board.merge([{ price: 2_500, size: 2 }], []);
-    } finally {
-        Array.prototype.sort = sort;
-    }
+test("merge replaces a duplicate price with a single level on either side", () => {
+    const board = new Board({
+        asks: [{ price: 110, size: 1 }, { price: 110, size: 2 }, { price: 120, size: 3 }],
+        bids: [{ price: 100, size: 1 }, { price: 90, size: 2 }, { price: 90, size: 3 }],
+    });
 
+    board.merge([{ price: 110, size: 4 }], [{ price: 90, size: 5 }]);
+
+    deepStrictEqual(board.asks, [new BoardOrder({ price: 110, size: 4 }), new BoardOrder({ price: 120, size: 3 })]);
+    deepStrictEqual(board.bids, [new BoardOrder({ price: 100, size: 1 }), new BoardOrder({ price: 90, size: 5 })]);
+    strictEqual(board.spread(), 10);
+});
+
+test("repeated single-level replacements use logarithmic reads and reuse the side arrays", () => {
+    const asks = Array.from({ length: 5_000 }, (_, index) => ({ price: 10_001 + index, size: 1 }));
+    const bids = Array.from({ length: 5_000 }, (_, index) => ({ price: 10_000 - index, size: 1 }));
+    const board = new Board({ asks, bids });
+    const originalAsk = board.asks[2_499];
+    const originalBid = board.bids[0];
+    let levelReads = 0;
+    const trackReads = (orders: BoardOrder[]) => new Proxy(orders, {
+        get(target, key, receiver) {
+            if (typeof key === "string" && /^\d+$/.test(key)) { levelReads++; }
+            return Reflect.get(target, key, receiver);
+        },
+    });
+    const liveAsks = board.asks = trackReads(board.asks);
+    const liveBids = board.bids = trackReads(board.bids);
+
+    const askUpdate = { price: 12_500, size: 1 };
+    const bidUpdate = { price: 10_000, size: 1 };
+    Array.from({ length: 100 }, (_, index) => index + 2).forEach((size) => {
+        askUpdate.size = bidUpdate.size = size;
+        board.merge([askUpdate], [bidUpdate]);
+        strictEqual(board.spread(), 1);
+    });
+    askUpdate.size = bidUpdate.size = 0;
+
+    strictEqual(board.asks, liveAsks);
+    strictEqual(board.bids, liveBids);
+    const maxReadsPerSide = Math.ceil(Math.log2(5_000)) + 2;
+    const maxReads = 100 * (2 * maxReadsPerSide + 2);
+    ok(levelReads <= maxReads, `Read ${levelReads} levels, expected at most ${maxReads}`);
+    strictEqual(originalAsk.size, 1);
+    strictEqual(originalBid.size, 1);
     deepStrictEqual(board.asks, asks.map(({ price }) =>
-        new BoardOrder({ price, size: price === 2_500 ? 2 : 1 })));
+        new BoardOrder({ price, size: price === 12_500 ? 101 : 1 })));
+    deepStrictEqual(board.bids, bids.map(({ price }) =>
+        new BoardOrder({ price, size: price === 10_000 ? 101 : 1 })));
 });
 
 test("snapshots order asks and bids best first", () => {
