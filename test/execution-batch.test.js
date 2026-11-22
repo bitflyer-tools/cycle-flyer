@@ -109,6 +109,38 @@ const invalidExecutions = [
   { side: 'BUY', price: NaN },
 ];
 
+test('publishes only valid public executions and continues updating Trade', () => {
+  const board = new Board(snapshotLevels);
+  const trade = tradeWithBoard(board);
+  const batches = [];
+  const executions = [];
+  trade.socket.executionBatch$.addListener({ next: (batch) => batches.push(batch) });
+  trade.socket.execution$.addListener({ next: (execution) => executions.push(execution) });
+
+  const initialState = trade.state;
+  const buy = { side: 'BUY', price: 102, id: 1 };
+  [null, buy, 'invalid', [], [null], invalidExecutions].forEach(trade.receive);
+  assert.equal(trade.state, initialState);
+  assert.deepEqual(batches, []);
+  assert.deepEqual(executions, []);
+
+  const sell = { side: 'SELL', price: 98 };
+  trade.receive([null, buy, {}, { price: 103 }, { side: 'UNKNOWN', price: 103 },
+    { side: 'SELL', price: '97' }, sell, ...invalidExecutions]);
+  assert.deepEqual(batches, [[buy, sell]]);
+  assert.deepEqual(executions, [buy, sell]);
+  assert.equal(trade.state.currentPrice, 98);
+  assert.deepEqual(board, new Board({ asks: [snapshotLevels.asks[1]], bids: [snapshotLevels.bids[1]] }));
+
+  const nextBuy = { side: 'BUY', price: 103 };
+  const auction = { side: '', price: 100 };
+  trade.receive([nextBuy, auction]);
+  assert.deepEqual(batches, [[buy, sell], [nextBuy, auction]]);
+  assert.deepEqual(executions, [buy, sell, nextBuy, auction]);
+  assert.equal(trade.state.currentPrice, 100);
+  assert.deepEqual(board, new Board({ asks: [], bids: [snapshotLevels.bids[1]] }));
+});
+
 test('keeps both sides unchanged for invalid executions during a delayed snapshot', () => {
   assertLiveAndReplayedBoard(invalidExecutions, snapshotLevels);
 });
