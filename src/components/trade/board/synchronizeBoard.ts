@@ -1,6 +1,7 @@
 import {Response} from "@cycle/http";
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
+import dropRepeats from "xstream/extra/dropRepeats";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {Board, BoardLevels, isBoardLevels} from "../../../models/board";
 import {BoardSnapshot} from "../../../models/boardSnapshot";
@@ -13,42 +14,66 @@ const snapshotDeadlineMs = 30_000;
 interface PendingSnapshot {
     updates: BoardUpdate[];
     board?: Board;
+    synchronized?: boolean;
+    expired?: boolean;
 }
 
 export const synchronizeBoard = <T extends Stream<Response>>(
     deltas$: Stream<BoardLevels>,
     responses$$: Stream<T>,
     executions$: Stream<Execution[]>,
+    connected$: Stream<boolean>,
 ): Stream<Reducer<State>> => {
     const liveReducer$ = deltas$
         .map<Reducer<State>>((delta) => (state) => state && ({ ...state, board: mergeDelta(state.board, delta) }));
+
     const boardUpdates$ = Stream.merge(
         deltas$.map<BoardUpdate>(({ asks, bids }) => (snapshot) => snapshot.merge(asks, bids)),
         executions$.filter((batch) => batch.length > 0)
             .map<BoardUpdate>((batch) => (snapshot) => snapshot.removeExecutions(batch)),
     );
+    const connection$ = connected$.compose(dropRepeats()).remember();
+    const invalidation$ = connection$.mapTo(invalidateSnapshot);
+    const snapshotReducer$ = snapshotReducers(responses$$, boardUpdates$, connection$);
 
+    return Stream.merge(liveReducer$, invalidation$, snapshotReducer$);
+};
+
+const invalidateSnapshot: Reducer<State> = (state) => state && ({ ...state, hasBoardSnapshot: false });
+
+const snapshotReducers = (
+    responses$$: Stream<Stream<Response>>,
+    boardUpdates$: Stream<BoardUpdate>,
+    connection$: Stream<boolean>,
+): Stream<Reducer<State>> => {
     let nextRequest = 0;
     let latestApplied = 0;
-    const snapshotReducer$ = responses$$
+    return responses$$
         .map((response$) => {
             const request = ++nextRequest;
-            return reconcileSnapshot(response$, boardUpdates$)
-                .map((board) => ({ request, board }));
+            return reconcileSnapshot(response$, boardUpdates$, connection$)
+                .map((snapshot) => ({ request, ...snapshot }));
         })
         .compose(flattenConcurrently)
         .filter(({ request }) => request > latestApplied)
-        .map<Reducer<State>>(({ request, board }) => {
+        .map<Reducer<State>>(({ request, board, synchronized }) => {
             latestApplied = request;
-            return (state) => state && ({ ...state, board });
+            return (state) => state && ({ ...state, board, hasBoardSnapshot: synchronized === true });
         });
-
-    return Stream.merge(liveReducer$, snapshotReducer$);
 };
 
-const reconcileSnapshot = (response$: Stream<Response>, boardUpdates$: Stream<BoardUpdate>): Stream<Board> => {
+const reconcileSnapshot = (
+    response$: Stream<Response>,
+    boardUpdates$: Stream<BoardUpdate>,
+    connection$: Stream<boolean>,
+): Stream<PendingSnapshot & {board: Board}> => {
+    const connectionUpdates$ = connection$.map((connected) => (pending: PendingSnapshot) => ({
+        updates: [],
+        synchronized: connected,
+        expired: pending.synchronized !== undefined,
+    }));
     const updates$ = boardUpdates$.map((update) => (pending: PendingSnapshot) => {
-        pending.updates.push(update);
+        if (pending.synchronized) { pending.updates.push(update); }
         return pending;
     });
     const snapshot$ = response$.map((response) => (pending: PendingSnapshot) => {
@@ -57,11 +82,11 @@ const reconcileSnapshot = (response$: Stream<Response>, boardUpdates$: Stream<Bo
         return { ...pending, board: snapshot.toBoard() };
     });
 
-    return Stream.merge(updates$, snapshot$)
+    return Stream.merge(connectionUpdates$, updates$, snapshot$)
         .fold((pending, update) => update(pending), { updates: [] } as PendingSnapshot)
-        .map((pending) => pending.board)
-        .filter((board): board is Board => !!board)
+        .filter((pending) => pending.expired === true || !!pending.board)
         .take(1)
+        .filter((pending): pending is PendingSnapshot & {board: Board} => !!pending.board)
         .endWhen(Stream.periodic(snapshotDeadlineMs).take(1))
         .replaceError(() => Stream.empty());
 };

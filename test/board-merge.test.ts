@@ -2,6 +2,7 @@ import {deepStrictEqual, strictEqual} from "node:assert";
 import {test} from "node:test";
 import {Board, BoardLevels} from "../src/models/board";
 import {BoardOrder} from "../src/models/boardOrder";
+import {estimateMarketFills} from "../src/models/marketFill";
 
 test("merge replaces, removes, and sorts levels on both sides", () => {
     const board = new Board({
@@ -110,4 +111,56 @@ test("merge reads an existing price once when checking many changed prices", () 
 
     strictEqual(board.asks.length, 1);
     strictEqual(priceReads, 1);
+});
+
+test("estimates fills from raw levels in best-price order without changing the book", () => {
+    const board = new Board({
+        asks: [{ price: 120, size: 3 }, { price: 100, size: 1 }, { price: 99, size: 0 }],
+        bids: [{ price: 80, size: 3 }, { price: 90, size: 1 }],
+    });
+    const before = JSON.stringify(board);
+
+    deepStrictEqual(estimateMarketFills(board, 2), {
+        buy: { status: "estimated", averagePrice: 110, priceDifferencePercent: 10 },
+        sell: { status: "estimated", averagePrice: 85, priceDifferencePercent: -5 / 90 * 100 },
+    });
+    strictEqual(JSON.stringify(board), before);
+});
+
+test("handles exact decimal depth, insufficient depth, and unavailable sides", () => {
+    const board = new Board({
+        asks: [{ price: 100, size: 0.1 }, { price: 116, size: 0.7 }],
+        bids: [],
+    });
+    const fills = estimateMarketFills(board, 0.8)!;
+    strictEqual(fills.buy.status, "estimated");
+    strictEqual(fills.buy.averagePrice, 114);
+    strictEqual(fills.buy.priceDifferencePercent.toFixed(4), "14.0000");
+    deepStrictEqual(fills.sell, { status: "unavailable" });
+    deepStrictEqual(estimateMarketFills(board, 0.81), {
+        buy: { status: "insufficient" },
+        sell: { status: "unavailable" },
+    });
+    deepStrictEqual(estimateMarketFills(undefined, 1), {
+        buy: { status: "unavailable" },
+        sell: { status: "unavailable" },
+    });
+    [0, -1, NaN, Infinity].forEach((size) => strictEqual(estimateMarketFills(board, size), undefined));
+});
+
+test("estimates an order matching the total depth across 100 decimal levels", () => {
+    const board = new Board({
+        asks: Array.from({ length: 100 }, (_, index) => ({ price: 100 + index, size: 0.03 })),
+        bids: Array.from({ length: 100 }, (_, index) => ({ price: 99 - index / 2, size: 0.03 })),
+    });
+
+    const fills = estimateMarketFills(board, 3)!;
+    strictEqual(fills.buy.status, "estimated");
+    strictEqual(fills.sell.status, "estimated");
+    strictEqual(fills.buy.averagePrice.toFixed(4), "149.5000");
+    strictEqual(fills.sell.averagePrice.toFixed(4), "74.2500");
+    deepStrictEqual(estimateMarketFills(board, 3.00000001), {
+        buy: { status: "insufficient" },
+        sell: { status: "insufficient" },
+    });
 });

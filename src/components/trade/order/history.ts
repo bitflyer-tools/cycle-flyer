@@ -82,10 +82,24 @@ const createOutcome = (
 ): Stream<OrderOutcome> =>
     stream$
         .last()
-        .map<OrderStatus>((response) => isOrderRejection(response) ? "failed" : "success")
-        .replaceError((error) => Stream.of<OrderStatus>(isWriteDeadlineError(error) ? "unconfirmed" : "failed"))
+        .map<{ status: OrderStatus; timedOut: boolean }>((response) => ({
+            status: isOrderRejection(response) ? "failed" : "success",
+            timedOut: false,
+        }))
+        .replaceError((error) => {
+            const timedOut = isWriteDeadlineError(error);
+            const statusCode = error?.statusCode;
+            const hasHTTPError = !!error?.response || (statusCode >= 400 && statusCode < 600);
+            const isClosePosition = (stream$.request as { closePositionSize?: number }).closePositionSize !== undefined;
+            const rejected = isClosePosition ? isOrderRejection(error?.response) : hasHTTPError;
+            const status: OrderStatus = !timedOut && rejected ? "failed" : "unconfirmed";
+            return Stream.of({ status, timedOut });
+        })
         .filter(() => isCurrentAccountRequest(stream$.request))
-        .map((status) => ({ status, histories: createHistories(stream$.request.send as string, status) }));
+        .map(({ status, timedOut }) => {
+            const histories = createHistories(stream$.request.send as string, status);
+            return { status, histories: timedOut ? histories.map((history) => ({ ...history, timedOut })) : histories };
+        });
 
 const orderNames: { [conditionType: string]: string } = {
     LIMIT: "Limit",

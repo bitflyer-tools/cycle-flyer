@@ -42,6 +42,7 @@ function setup(t) {
         socket: {
             board$: Stream.never(),
             childOrderEvent$: Stream.never(),
+            connected$: Stream.of(true),
             executionBatch$,
             parentOrderEvent$: Stream.never(),
             reconnect$: Stream.never(),

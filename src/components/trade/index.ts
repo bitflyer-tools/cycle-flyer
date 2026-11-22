@@ -8,6 +8,7 @@ import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
 import {SocketIOSource} from "../../drivers/socketIODriver";
 import {Sound} from "../../drivers/soundDriver";
+import {estimateMarketFills} from "../../models/marketFill";
 import {Order} from "../../models/order";
 import {OrderHistory} from "../../models/orderHistory";
 import {flattenStopOrders, ParentStopOrders} from "../../models/parentStopOrders";
@@ -20,6 +21,7 @@ import {model} from "./model";
 import {OrderComponent, State as OrderComponentState} from "./order";
 import {CancellationOutcome} from "./order/history";
 import {OrderRequestBatch} from "./order/request";
+import {recentTrades} from "./recentTrades";
 import {request} from "./request";
 import {State as SummaryComponentState} from "./summary";
 import {SummaryComponent} from "./summary";
@@ -63,7 +65,8 @@ export interface State {
 }
 
 export const Trade = (
-    sources: Sources, isOrdering$: Stream<boolean>, cancellationOutcome$?: Stream<CancellationOutcome>,
+    sources: Sources, isOrdering$: Stream<boolean>, leaveTrade$?: Stream<void>,
+    cancellationOutcome$?: Stream<CancellationOutcome>,
 ): Sinks & {
     orderRequests: Stream<OrderRequestBatch>;
 } => {
@@ -108,6 +111,10 @@ export const Trade = (
         state: {
             get: (state: State) => state.orderComponentState && {
                 ...state.orderComponentState,
+                marketFills: estimateMarketFills(
+                    state.boardComponentState?.hasBoardSnapshot ? state.boardComponentState.board : undefined,
+                    state.orderComponentState.size,
+                ),
                 currentPrice: state.currentPrice ?? 0,
                 histories: state.histories,
                 orders: state.orders,
@@ -126,11 +133,13 @@ export const Trade = (
                 price: orderComponentState.price,
             }),
         },
-    })(sources, isOrdering$);
+    })(sources, isOrdering$, leaveTrade$);
 
     const actions = intent(sources, cancellationOutcome$);
     const reducer$ = model(actions);
-    const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM, executionsComponent.DOM);
+    const marketTrades = recentTrades(sources);
+    const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM, executionsComponent.DOM,
+        marketTrades.DOM);
     const settledCloseId$ = sources.state.stream
         .map((state) => state?.positionClose?.settled ? state.positionClose.id : undefined)
         .startWith(undefined)
@@ -148,7 +157,7 @@ export const Trade = (
     return {
         DOM: view$,
         HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP,
-            executionsComponent.HTTP),
+            executionsComponent.HTTP, marketTrades.HTTP),
         orderRequests: orderComponent.orderRequests,
         router: Stream.never(),
         sound: Stream.merge(

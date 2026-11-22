@@ -8,6 +8,7 @@ import {synchronizeBoard} from "../src/components/trade/board/synchronizeBoard";
 import {Board, BoardLevels} from "../src/models/board";
 import {BoardOrder} from "../src/models/boardOrder";
 import {Execution} from "../src/models/execution";
+import {estimateMarketFills} from "../src/models/marketFill";
 
 test("replays realtime changes over a delayed snapshot", () => {
     const {request, update, asks} = setup();
@@ -21,11 +22,11 @@ test("replays realtime changes over a delayed snapshot", () => {
     assert.deepEqual(asks(), [[101, 4], [102, 3]]);
 });
 
-test("installs snapshots that consistently arrive after the next poll", (t) => {
+test("installs snapshots that consistently arrive after the next poll", async (t) => {
     t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
     const {request, update, asks} = setup();
     let poll = 0;
-    const subscription = pollBoard(Stream.never()).subscribe({
+    const subscription = pollBoard(Stream.of(true)).subscribe({
         next: () => {
             const respond = request();
             const size = ++poll;
@@ -34,6 +35,7 @@ test("installs snapshots that consistently arrive after the next poll", (t) => {
     });
     t.after(() => subscription.unsubscribe());
 
+    await Promise.resolve();
     t.mock.timers.tick(15_000);
     assert.equal(poll, 2);
     assert.deepEqual(asks(), []);
@@ -138,7 +140,7 @@ test("initializes from a fresh snapshot and applies subsequent realtime updates"
 });
 
 test("replays execution pruning on both sides of a delayed snapshot", () => {
-    const {request, execute, asks, bids} = setup();
+    const {request, execute, asks, bids, board} = setup();
     const respond = request();
 
     execute({ side: "BUY", price: 110 }, { side: "SELL", price: 90 });
@@ -149,6 +151,10 @@ test("replays execution pruning on both sides of a delayed snapshot", () => {
 
     assert.deepEqual(asks(), [[110, 2]]);
     assert.deepEqual(bids(), [[90, 2]]);
+    assert.deepEqual(estimateMarketFills(board(), 2), {
+        buy: { status: "estimated", averagePrice: 110, priceDifferencePercent: 0 },
+        sell: { status: "estimated", averagePrice: 90, priceDifferencePercent: 0 },
+    });
 });
 
 test("replays board deltas and execution batches in arrival order", () => {
@@ -209,7 +215,7 @@ const setup = () => {
     const responses$$ = Stream.create<Stream<Response>>();
     const executions$ = Stream.create<Execution[]>();
     let state = { board: new Board({ asks: [], bids: [] }) } as State;
-    synchronizeBoard(updates$, responses$$, executions$).addListener({
+    synchronizeBoard(updates$, responses$$, executions$, Stream.of(true)).addListener({
         next: (reduce) => { state = reduce(state) as State; },
     });
 

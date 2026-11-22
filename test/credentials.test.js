@@ -156,7 +156,7 @@ for (const saved of [false, true]) {
 
     const board = [];
     const status = [];
-    const boardSubscription = renderer.boardRequest(renderer.Stream.never())
+    const boardSubscription = renderer.boardRequest(renderer.Stream.of(false))
       .subscribe({ next: (request) => board.push(request) });
     const statusSubscription = renderer.summaryRequest()
       .filter((request) => request.category === 'status')
@@ -166,6 +166,7 @@ for (const saved of [false, true]) {
       statusSubscription.unsubscribe();
     });
 
+    await Promise.resolve();
     assert.equal(board.length, 1);
     assert.equal(status.length, 1);
     t.mock.timers.tick(60000);
@@ -196,7 +197,7 @@ for (const [operation, replacement] of [
     const requests$ = renderer.twapRequest({
       onTwapStarted$: buy$.map(() => ({ id: Symbol(), side: "BUY" })),
       onClickTwapCancelButton$: renderer.Stream.never(),
-    }, state$);
+    }, state$).requests$;
     requests$.addListener(listener);
     t.after(() => requests$.removeListener(listener));
 
@@ -248,13 +249,63 @@ test('a missing Electron signature stops the current TWAP before its next slice'
     onTwapStarted$: buy$.map(() => ({ id: Symbol(), side: "BUY" })),
     onClickTwapCancelButton$: renderer.Stream.never(),
   }, renderer.Stream.of({ size: 0.03, twap: { interval: 1, slices: 3 } }))
-    .subscribe({ next: (request) => requests.push(request) });
+    .requests$.subscribe({ next: (request) => requests.push(request) });
   t.after(() => subscription.unsubscribe());
 
   buy$.shamefullySendNext(null);
   assert.equal(await renderer.authorizeRequest(requests[0]), null);
   t.mock.timers.tick(3000);
   assert.equal(requests.length, 1);
+});
+
+test('starting, canceling, and failing a TWAP leave another scheduler signing independently', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let finishSigning;
+  const headers = { 'ACCESS-KEY': pair.key };
+  const renderer = createRenderer(new Map(), {
+    hasCredentials: async () => true,
+    signRest: () => finishSigning
+      ? Promise.resolve(headers)
+      : new Promise((resolve) => { finishSigning = resolve; }),
+  });
+  await renderer.initializeCredentials();
+
+  const scheduler = () => {
+    const start$ = renderer.Stream.create();
+    const cancel$ = renderer.Stream.create();
+    const requests = [];
+    const { requests$ } = renderer.twapRequest({
+      onTwapStarted$: start$,
+      onClickTwapCancelButton$: cancel$,
+    }, renderer.Stream.of({ size: 0.03, twap: { interval: 1, slices: 3 } }));
+    const subscription = requests$.subscribe({ next: (request) => requests.push(request) });
+    t.after(() => subscription.unsubscribe());
+    return {
+      start: () => start$.shamefullySendNext({ id: Symbol(), side: 'BUY' }),
+      cancel: () => cancel$.shamefullySendNext(null),
+      requests,
+    };
+  };
+
+  const first = scheduler();
+  const second = scheduler();
+  first.start();
+  const signing = renderer.authorizeRequest(first.requests[0]);
+  await Promise.resolve();
+  assert.equal(typeof finishSigning, 'function');
+
+  second.start();
+  second.cancel();
+  assert.equal(await renderer.authorizeRequest(second.requests[0]), null);
+  second.start();
+  assert.equal(await renderer.authorizeRequest({ ...second.requests[1], send: {} }), null);
+
+  finishSigning(headers);
+  assert.equal((await signing).headers['ACCESS-KEY'], pair.key);
+  t.mock.timers.tick(1000);
+  assert.equal(first.requests.length, 2);
+  assert.equal((await renderer.authorizeRequest(first.requests[1])).headers['ACCESS-KEY'], pair.key);
+  assert.equal(second.requests.length, 2);
 });
 
 test('TWAP authorization drops requests that overlap an Electron credential update', async () => {
@@ -332,6 +383,30 @@ test('Electron renderer migrates once and delegates both protocol signatures', a
   assert.equal(request.headers['ACCESS-SIGN'],
     hmac(request.headers['ACCESS-TIMESTAMP'] + 'GET/v1/me/getpositions?product_code=FX_BTC_JPY'));
   assert.equal(auth.signature, hmac(auth.timestamp + auth.nonce));
+});
+
+test('Electron signs initial and older execution requests with the full query string', async (t) => {
+  const store = createCredentialStore(withCredentialFile(t), {
+    isEncryptionAvailable: () => true,
+    encryptString: () => Buffer.from('mock ciphertext'),
+  }, 'darwin');
+  const renderer = createRenderer(new Map(), {
+    hasCredentials: async () => store.hasCredentials(),
+    save: async (value) => store.save(value),
+    signRest: async (...args) => store.signRest(...args),
+  });
+  await renderer.saveCredentials(pair);
+
+  const firstPagePath = '/v1/me/getexecutions?product_code=FX_BTC_JPY&count=50';
+  for (const [cursor, requestPath] of [[undefined, firstPagePath], [12345, `${firstPagePath}&before=12345`]]) {
+    const request = await renderer.authorizeRequest(renderer.getExecutions(cursor));
+    assert.ok(request, `Expected a signed request for ${requestPath}`);
+    assert.equal(request.url, 'https://api.bitflyer.jp' + requestPath);
+    assert.equal(request.method, 'GET');
+    assert.equal(request.send, '');
+    assert.equal(request.headers['ACCESS-KEY'], pair.key);
+    assert.equal(request.headers['ACCESS-SIGN'], hmac(request.headers['ACCESS-TIMESTAMP'] + 'GET' + requestPath));
+  }
 });
 
 test('Electron authorizes a parent order cancellation with the exact request body', async (t) => {

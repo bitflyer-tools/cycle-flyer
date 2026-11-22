@@ -67,9 +67,9 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
     return null;
 };
 
-const writeDeadlineMs = 10_000;
+const requestDeadlineMs = 10_000;
 
-export const makeHTTPDriver = (deadlineMs = writeDeadlineMs) =>
+export const makeHTTPDriver = (deadlineMs = requestDeadlineMs) =>
     (requests$: Stream<RequestInput | null>, name = "HTTP"): HTTPSource => {
         const responses$ = requests$
             .filter((input): input is RequestInput => input !== null)
@@ -83,15 +83,15 @@ export const isWriteDeadlineError = (error: any): boolean =>
 
 const responseStream = (options: RequestOptions, deadlineMs: number) => {
     const isWrite = options.method?.toUpperCase() === "POST";
-    const response$ = isWrite
-        ? writeResponse(options, deadlineMs)
+    const response$ = isWrite || options.category === "executions"
+        ? responseWithDeadline(options, deadlineMs)
         : createResponse$(options);
     const remembered$ = Object.assign(response$.remember(), { request: options });
     if (!options.lazy || isWrite) remembered$.addListener({});
     return remembered$;
 };
 
-const writeResponse = (options: RequestOptions, deadlineMs: number): Stream<Response> =>
+const responseWithDeadline = (options: RequestOptions, deadlineMs: number): Stream<Response> =>
     Stream.fromPromise(new Promise<Response>((resolve, reject) => {
         const request: SuperAgentRequest = optionsToSuperagent(options);
         request.timeout({ deadline: deadlineMs }).end((error, response) => {

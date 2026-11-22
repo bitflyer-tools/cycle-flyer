@@ -3,6 +3,7 @@ export interface OrderHistory {
     description: string;
     name: string;
     status: string;
+    timedOut?: boolean;
 }
 
 export const HISTORY_LIMIT = 100;

@@ -60,7 +60,7 @@ test("ignores a canceled schedule's response when tracking replacement progress"
     strictEqual(twap.state.twap.remaining, 2);
 
     context.mock.timers.tick(1000);
-    twap.requests[1].fail();
+    twap.requests[1].disconnect();
     strictEqual(twap.state.twap.remaining, 1);
     twap.requests[2].succeed();
     strictEqual(isRunning(twap.state.twap), false);
@@ -189,7 +189,8 @@ const createTwap = (context: TestContext, interval = 1, slices = 2) => {
     const state$ = Stream.createWithMemory<State>();
     const actions = intent(sources, state$);
     let state: State | undefined;
-    const reducer = model(actions, Stream.never()).subscribe({
+    const scheduler = twapRequest(actions, state$);
+    const reducer = model(actions, Stream.never(), scheduler.lifecycle$).subscribe({
         next: (reduce) => {
             state = reduce(state);
             if (state) { state$.shamefullySendNext(state); }
@@ -199,7 +200,7 @@ const createTwap = (context: TestContext, interval = 1, slices = 2) => {
     state$.shamefullySendNext(state);
 
     const requests: Array<ReturnType<typeof fakeResponse>> = [];
-    const request = twapRequest(actions, state$).subscribe({
+    const request = scheduler.requests$.subscribe({
         next: (input) => {
             const pending = fakeResponse(input as TwapSliceRequest);
             requests.push(pending);
@@ -221,7 +222,7 @@ const fakeResponse = (input: TwapSliceRequest) => {
     const response$ = Object.assign(Stream.createWithMemory<{request: TwapSliceRequest}>(), { request });
     return {
         response$,
-        fail: () => response$.shamefullySendError(new Error("Network error")),
+        disconnect: () => response$.shamefullySendError(new Error("Network error")),
         succeed: () => {
             response$.shamefullySendNext({ request });
             response$.shamefullySendNext({ request });

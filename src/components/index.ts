@@ -17,7 +17,6 @@ import {cancellationReducer} from "./trade/cancellation";
 import {initialState as initialExecutionsState} from "./trade/executions";
 import {cancellationOutcomes, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
 import {closePositionOutcomes, OrderRequestBatch, submissions, unsignedSubmissions$} from "./trade/order/request";
-import {stopTwap, twapSigningFailed$} from "./trade/order/twapRequest";
 
 export interface Sources {
     DOM: DOMSource;
@@ -45,6 +44,7 @@ const tradeScope = "trade";
 
 export const Root = (sources: Sources): Sinks => {
     const cancellationOutcome$ = cancellationOutcomes(sources.HTTP);
+    const leaveTrade$ = Stream.create<void>();
     const trade = isolate(Trade, { "*": tradeScope });
     const routes$: Stream<Sinks & { orderRequests?: Stream<OrderRequestBatch> }> = sources.router
         .define({
@@ -52,15 +52,14 @@ export const Root = (sources: Sources): Sinks => {
             "/setting": isolate(Setting, { "*": "setting" }),
         })
         .map((route: any) => {
-            const sinks = route.value({
+            // Cancel while the outgoing Trade reducer is still subscribed.
+            if (route.value !== trade) { leaveTrade$.shamefullySendNext(undefined); }
+            return route.value({
                 ...sources,
                 // Tag order batches with the same HTTP scopes as the other requests.
                 orderRequests: sources.HTTP,
                 router: sources.router.path(route.path),
-            }, isOrdering$, cancellationOutcome$);
-            if (route.value === trade) { return sinks; }
-            stopTwap();
-            return { ...sinks, state: sinks.state.startWith(resetTwap()) };
+            }, isOrdering$, leaveTrade$, cancellationOutcome$);
         })
         .remember();
 
@@ -136,7 +135,6 @@ export const Root = (sources: Sources): Sinks => {
         state: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.state).flatten(),
             credentialsChanging$.mapTo(resetAccount),
-            twapSigningFailed$.mapTo(resetTwap("TWAP stopped because an order could not be signed.")),
             sources.state.isolateSink(positionCloseReducer$, tradeScope),
             sources.state.isolateSink(closeOutcomeReducer$, tradeScope),
             sources.state.isolateSink(orderOutcomeReducer$, tradeScope),
@@ -148,11 +146,9 @@ export const Root = (sources: Sources): Sinks => {
 
 const resetAccount: Reducer<RootState> = (state) => {
     if (!state?.trade) { return state; }
-    stopTwap();
-    const reset = resetTwap("TWAP stopped because credentials changed.")(state) ?? state;
-    const trade = reset.trade ?? state.trade;
+    const {trade} = state;
     return {
-        ...reset,
+        ...state,
         trade: {
             ...trade,
             canceledParentOrderIds: undefined,
@@ -171,12 +167,4 @@ const resetAccount: Reducer<RootState> = (state) => {
             positionClose: undefined,
         },
     };
-};
-
-const resetTwap = (error?: string): Reducer<RootState> => (state) => {
-    const trade = state?.trade;
-    const order = trade?.orderComponentState;
-    if (!trade || !order || !order.twap.remaining) { return state; }
-    const orderComponentState = { ...order, twap: { ...order.twap, remaining: 0, scheduleId: undefined, error: error ?? order.twap.error } };
-    return { ...state, trade: { ...trade, orderComponentState } };
 };
