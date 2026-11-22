@@ -30,4 +30,6 @@ immediately, and subsequent slices are scheduled at the configured interval.
 Edits to the schedule apply to the next run.
 
 **Cancel TWAP** stops future slices. Leaving **Trade** or changing credentials
-also stops the schedule. Orders already sent to bitFlyer can still execute.
+also stops the schedule. If an order request cannot be signed, TWAP stops
+sending the remaining slices, so only some of the planned orders may have been
+sent. Orders already sent to bitFlyer can still execute.
