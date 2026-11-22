@@ -32,17 +32,18 @@ export interface State {
     twap: TwapOrder;
 }
 
-export const OrderComponent = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
+export const OrderComponent = (sources: Sources, isOrdering$: Stream<boolean>, leaveTrade$?: Stream<void>): Sinks & {
     orderRequests: Stream<OrderRequestBatch>;
 } => {
     const state$ = sources.state.stream as any as Stream<State>;
     const actions = intent(sources, state$);
-    const reducer$ = model(actions, isOrdering$);
+    const twap = twapRequest(actions, state$, leaveTrade$);
+    const reducer$ = model(actions, isOrdering$, twap.lifecycle$);
     const view$ = view(state$);
 
     return {
         DOM: view$,
-        HTTP: twapRequest(actions, state$).map<RequestInput | null>((input) => input),
+        HTTP: twap.requests$.map<RequestInput | null>((input) => input),
         orderRequests: orderRequests(actions, state$),
         router: Stream.never(),
         state: reducer$ as any,

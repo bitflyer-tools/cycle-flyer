@@ -61,7 +61,7 @@ export interface State {
     summaryComponentState?: SummaryComponentState;
 }
 
-export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
+export const Trade = (sources: Sources, isOrdering$: Stream<boolean>, leaveTrade$?: Stream<void>): Sinks & {
     orderRequests: Stream<OrderRequestBatch>;
 } => {
     const executionsComponent = isolate(ExecutionsComponent, { state: "executionsComponentState" })({
@@ -123,7 +123,7 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>): Sinks & {
                 price: orderComponentState.price,
             }),
         },
-    })(sources, isOrdering$);
+    })(sources, isOrdering$, leaveTrade$);
 
     const actions = intent(sources);
     const reducer$ = model(actions);
