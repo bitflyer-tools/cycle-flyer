@@ -68,6 +68,8 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
 };
 
 const requestDeadlineMs = 10_000;
+const pollDeadlineMs = 15_000;
+const periodicReadCategories = new Set(["orders", "positions", "collateral", "status"]);
 
 export const makeHTTPDriver = (deadlineMs = requestDeadlineMs) =>
     (requests$: Stream<RequestInput | null>, name = "HTTP"): HTTPSource => {
@@ -82,10 +84,12 @@ export const isWriteDeadlineError = (error: any): boolean =>
     error?.code === "ECONNABORTED" && error.errno === "ETIME";
 
 const responseStream = (options: RequestOptions, deadlineMs: number) => {
-    const isWrite = options.method?.toUpperCase() === "POST";
-    const response$ = isWrite || options.category === "executions"
-        ? responseWithDeadline(options, deadlineMs)
-        : createResponse$(options);
+    const method = options.method?.toUpperCase() ?? "GET";
+    const isWrite = method === "POST";
+    const isPeriodicRead = method === "GET" && periodicReadCategories.has(options.category ?? "");
+    const deadline = isWrite || options.category === "executions" ? deadlineMs
+        : isPeriodicRead ? pollDeadlineMs : undefined;
+    const response$ = deadline === undefined ? createResponse$(options) : responseWithDeadline(options, deadline);
     const remembered$ = Object.assign(response$.remember(), { request: options });
     if (!options.lazy || isWrite) remembered$.addListener({});
     return remembered$;

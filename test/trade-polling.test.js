@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const { once } = require('node:events');
+const { createServer } = require('node:http');
 const path = require('node:path');
 const { runInNewContext } = require('node:vm');
 const { test } = require('node:test');
@@ -13,6 +15,8 @@ const { outputFiles } = buildSync({
         `export { ${name} as ${component}_${name} } from "./src/components/${directory}/${name}";`);
     }).concat(
       'export { request as board_request } from "./src/components/trade/board/request";',
+      'export { pollResponse } from "./src/components/trade/pollResponse";',
+      'export { makeHTTPDriver } from "./src/drivers/httpDriver";',
       'export { saveCredentials, currentCredentialVersion } from "./src/credentials";',
     ).join('\n'),
     resolveDir: path.join(__dirname, '..'),
@@ -261,5 +265,75 @@ for (const [category, action, payload, read] of accountPolls) {
     assert.deepEqual(values, [2]);
     t.mock.timers.tick(7000);
     assert.deepEqual(values, [2, 3]);
+  });
+}
+
+for (const category of ['orders', 'positions', 'collateral', 'status']) {
+  test(`${category} transport bounds stalled polls and accepts delayed and recovery responses`, { timeout: 5000 }, async (t) => {
+    const server = createServer();
+    t.after(() => {
+      server.closeAllConnections();
+      server.close();
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+
+    const requests = Stream.create();
+    const responses = components.makeHTTPDriver()(requests).select(category);
+    const failures = [];
+    let outstanding = 0;
+    const transport = responses.subscribe({ next: (response) => {
+      outstanding++;
+      response.addListener({
+        error: (error) => { failures.push(error); outstanding--; },
+        complete: () => { outstanding--; },
+      });
+    } });
+    const values = [];
+    const applied = Stream.create();
+    const polls = components.pollResponse(responses, (value) => value).subscribe({ next: (value) => {
+      values.push(value);
+      applied.shamefullySendNext(value);
+    } });
+    t.after(() => { polls.unsubscribe(); transport.unsubscribe(); });
+
+    const sendPoll = async () => {
+      const incoming = once(server, 'request');
+      requests.shamefullySendNext({ url: `http://127.0.0.1:${server.address().port}`, category, method: 'GET' });
+      const [, response] = await incoming;
+      return { response, closed: once(response, 'close') };
+    };
+    const succeed = async ({ response }, value) => {
+      const next = new Promise((resolve) => applied.take(1).addListener({ next: resolve }));
+      response.end(JSON.stringify(value));
+      assert.equal(await next, value);
+    };
+
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const initial = await sendPoll();
+    t.mock.timers.tick(10000);
+    let stalled = await sendPoll();
+    t.mock.timers.tick(1000);
+    await succeed(initial, 1);
+    t.mock.timers.tick(9000);
+
+    for (let round = 1; round <= 3; round++) {
+      const next = await sendPoll();
+      assert.equal(outstanding, 2);
+      t.mock.timers.tick(5000);
+      await stalled.closed;
+      assert.equal(stalled.response.writableFinished, false);
+      assert.equal(failures.length, round);
+      assert.equal(failures.at(-1).code, 'ECONNABORTED');
+      assert.equal(outstanding, 1);
+      stalled = next;
+      t.mock.timers.tick(5000);
+    }
+
+    await succeed(await sendPoll(), 2);
+    t.mock.timers.tick(5000);
+    await stalled.closed;
+    assert.equal(outstanding, 0);
+    assert.deepEqual(values, [1, 2]);
   });
 }

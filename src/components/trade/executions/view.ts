@@ -13,7 +13,8 @@ export const view = (state: State, scrollTop: number): VNode => section(".execut
     state.error ? p({ attrs: { role: "alert" } }, state.error) : null,
     p(".executions-status", { attrs: { role: "status" } }, status(state)),
     state.rows.length ? div(".executions-scroll", {
-        attrs: { tabindex: "0", "aria-label": "Execution rows", style: `--execution-row-height: ${rowHeight}px; max-height: ${viewportHeight}px` },
+        attrs: { tabindex: "0", "aria-label": "Execution rows" },
+        style: { "--execution-row-height": `${rowHeight}px`, maxHeight: `${viewportHeight}px` },
     }, [
         table({ attrs: { "aria-rowcount": state.rows.length + 1 } }, [
             thead([tr({ attrs: { "aria-rowindex": 1 } }, ["Exchange time", "Side", "Price (JPY)", "Size (bFX)", "Order acceptance ID"]
@@ -34,7 +35,7 @@ const windowRows = (rows: Execution[], scrollTop: number): VNode[] => {
 };
 
 const spacer = (key: string, count: number): VNode => tr(".executions-spacer", { key, attrs: { "aria-hidden": "true" } }, [
-    td({ attrs: { colspan: "5", style: `height: ${count * rowHeight}px` } }),
+    td({ attrs: { colspan: "5" }, style: { height: `${count * rowHeight}px` } }),
 ]);
 
 const row = (execution: Execution, rowIndex: number): VNode => tr({

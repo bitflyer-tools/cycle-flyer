@@ -31,6 +31,59 @@ const checkRenderer = async () => {
   assert.equal(preferences.contextIsolation, true);
   assert.equal(preferences.sandbox, true);
 
+  const rest = 'https://api.bitflyer.jp/v1/executions';
+  const realtime = 'wss://io.lightstream.bitflyer.com/socket.io/';
+  const requests = new Set();
+  const { webRequest } = contents.session;
+  webRequest.onBeforeRequest({ urls: [rest + '*', realtime + '*'] }, (details, callback) => {
+    if (details.webContentsId === contents.id) {
+      const url = new URL(details.url);
+      requests.add(url.origin + url.pathname);
+    }
+    callback({});
+  });
+  try {
+    contents.reload();
+    await waitFor(() => requests.has(rest), 'the bitFlyer REST request to pass CSP');
+    await waitFor(() => requests.has(realtime), 'the bitFlyer WebSocket handshake to pass CSP');
+  } finally {
+    webRequest.onBeforeRequest(null);
+  }
+
+  await contents.executeJavaScript(`(() => {
+    window.cspViolations = [];
+    document.addEventListener('securitypolicyviolation', (event) => {
+      if (event.disposition === 'enforce') {
+        window.cspViolations.push([event.effectiveDirective, event.blockedURI]);
+      }
+    });
+    const inline = document.createElement('script');
+    inline.textContent = 'window.inlineScriptRan = true';
+    document.head.append(inline);
+    const external = document.createElement('script');
+    external.src = 'https://example.invalid/csp-probe.js';
+    document.head.append(external);
+    setTimeout(() => {
+      try {
+        window.eval('window.evalRan = true');
+      } catch (error) {
+        if (!(error instanceof EvalError)) throw error;
+      }
+    }, 0);
+  })()`);
+  const scriptBlocked = (source) => contents.executeJavaScript(
+    `window.cspViolations.some(([directive, uri]) =>
+      directive === 'script-src-elem' && uri.startsWith(${JSON.stringify(source)}))`
+  );
+  await waitFor(() => scriptBlocked('inline'), 'CSP to block an inline script');
+  await waitFor(() => scriptBlocked('https://example.invalid'), 'CSP to block an external script');
+  await waitFor(() => contents.executeJavaScript(
+    "window.cspViolations.some(([directive, uri]) => directive === 'script-src' && uri === 'eval')"
+  ), 'CSP to block dynamic evaluation');
+  assert.deepEqual(await contents.executeJavaScript(
+    '[window.inlineScriptRan, window.evalRan]'
+  ), [undefined, undefined]);
+
   const visible = (selector) => contents.executeJavaScript(
     `Boolean(document.querySelector(${JSON.stringify(selector)}))`
   );
@@ -144,7 +197,7 @@ const main = async (executable) => {
     const { error, result } = JSON.parse(message.data);
     assert.ifError(error);
     assert.equal(result.exceptionDetails, undefined, result.result.description);
-    console.log('Packaged renderer sandbox, routing, and credential persistence checks passed.');
+    console.log('Packaged renderer sandbox, CSP, routing, and credential persistence checks passed.');
   } catch (error) {
     if (stderr) console.error(stderr.trimEnd());
     throw error;

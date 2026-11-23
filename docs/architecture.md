@@ -52,12 +52,19 @@ send HTTP requests also use a `request.ts` module.
 ## Follow an order book update
 
 1. [The board component](../src/components/trade/board/index.ts) passes live
-   socket updates and REST snapshot responses to the synchronization code. It
-   requests a snapshot when it starts and every 15 seconds afterward.
+   socket updates and REST snapshot responses to the synchronization code. The
+   first socket connection state (connected or disconnected) triggers a REST
+   snapshot. Each change in that state, including disconnects and reconnects,
+   triggers another snapshot. A separate timer requests a snapshot every
+   15 seconds regardless of connection state.
 2. [`synchronizeBoard.ts`](../src/components/trade/board/synchronizeBoard.ts)
-   applies live updates to the current board. When a snapshot arrives, it
-   reapplies the updates received while that request was in flight before
-   replacing the board.
+   applies live updates to the current board. A connection transition clears
+   the board's synchronized flag and expires all in-flight snapshots, so their
+   responses are ignored. A snapshot requested while connected buffers live
+   board deltas and execution updates while the request is in flight. If the
+   response is accepted, those updates are replayed before the snapshot replaces
+   the board and marks it synchronized. A snapshot accepted while disconnected
+   can replace the board with no replay and leaves the synchronized flag unset.
 3. [The board view](../src/components/trade/board/view.ts) renders the bids, asks,
    and spread from the resulting state. Start with the
    [synchronization tests](../test/boardSynchronization.ts) when changing how

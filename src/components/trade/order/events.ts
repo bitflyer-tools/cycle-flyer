@@ -7,10 +7,13 @@ export const clicks = (dom: DOMSource, container: string, selector: string): Str
         .mapTo(null);
 
 export const numberInputs = (dom: DOMSource, selector: string): Stream<number> =>
+    textInputs(dom, selector).map((value) => +value);
+
+export const textInputs = (dom: DOMSource, selector: string): Stream<string> =>
     dom.select(selector)
         .events("input")
         .map((event: Event) => event.target as HTMLInputElement)
-        .map((element: HTMLInputElement) => +element.value);
+        .map((element: HTMLInputElement) => element.value);
 
 export const sizePresetClicks = (dom: DOMSource): Stream<number> =>
     dom.select(".size-presets").select(".size-preset")
