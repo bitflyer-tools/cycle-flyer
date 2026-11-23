@@ -83,7 +83,7 @@ export const isWriteDeadlineError = (error: any): boolean =>
 
 const responseStream = (options: RequestOptions, deadlineMs: number) => {
     const isWrite = options.method?.toUpperCase() === "POST";
-    const response$ = isWrite || options.category === "executions"
+    const response$ = isWrite || options.category === "executions" || options.category === "recent-trades"
         ? responseWithDeadline(options, deadlineMs)
         : createResponse$(options);
     const remembered$ = Object.assign(response$.remember(), { request: options });

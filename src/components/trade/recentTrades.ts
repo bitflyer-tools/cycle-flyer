@@ -4,19 +4,30 @@ import dropRepeats from "xstream/extra/dropRepeats";
 import {getRecentTrades, recentTradesLimit} from "../../http";
 import {executionTime, isMarketExecution, MarketExecution} from "../../models/execution";
 import type {Sources} from "./index";
-import {pollResponse} from "./pollResponse";
 import {throttleLatest} from "./throttleLatest";
 
-export const recentTrades = ({ HTTP, socket }: Pick<Sources, "HTTP" | "socket">) => {
-    const history$ = pollResponse<unknown[]>(HTTP.select("recent-trades"),
-        (body) => Array.isArray(body) ? body : undefined);
+const historyRetryDelayMs = 1_000;
+
+export const recentTrades = ({ HTTP, socket }: Pick<Sources, "HTTP" | "socket">,
+    leaveTrade$ = Stream.never<void>()) => {
+    const historyResult$ = HTTP.select("recent-trades").map((response$) => response$
+        .map((response): unknown[] | null => {
+            const body = JSON.parse(response.text);
+            if (!Array.isArray(body)) { throw new Error("Invalid recent trades history"); }
+            return body;
+        })
+        .replaceError(() => Stream.periodic(historyRetryDelayMs).take(1)
+            .mapTo<unknown[] | null>(null).endWhen(socket.reconnect$)),
+    ).flatten().endWhen(leaveTrade$);
+    const history$ = historyResult$.filter((batch): batch is unknown[] => batch !== null);
     const rows$ = Stream.merge(history$, socket.executionBatch$)
         .fold(mergeTrades, [])
         .compose(dropRepeats());
 
     return {
         DOM: throttleLatest(rows$, 100).map(render),
-        HTTP: socket.reconnect$.map(getRecentTrades).startWith(getRecentTrades()),
+        HTTP: Stream.merge(socket.reconnect$, historyResult$.filter((batch) => batch === null))
+            .map(getRecentTrades).startWith(getRecentTrades()).endWhen(leaveTrade$),
     };
 };
 

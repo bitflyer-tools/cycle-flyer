@@ -133,7 +133,7 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>, leaveTrade
 
     const actions = intent(sources);
     const reducer$ = model(actions);
-    const marketTrades = recentTrades(sources);
+    const marketTrades = recentTrades(sources, leaveTrade$);
     const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM, executionsComponent.DOM,
         marketTrades.DOM);
     const settledCloseId$ = sources.state.stream
