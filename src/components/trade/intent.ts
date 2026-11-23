@@ -1,12 +1,13 @@
 import {RequestOptions} from "@cycle/http";
 import {Stream} from "xstream";
 import debounce from "xstream/extra/debounce";
-import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {AccountRequest, isCurrentAccountRequest} from "../../drivers/httpDriver";
 import {Execution} from "../../models/execution";
 import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
 import {Position} from "../../models/position";
+import {nextParentOrderSequence} from "./cancellation";
 import {Sources} from "./index";
+import {CancellationOutcome} from "./order/history";
 import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
 import {parentOrderPages} from "./parentOrderPages";
 import {pollResponse} from "./pollResponse";
@@ -14,7 +15,6 @@ import {PositionRequest} from "./request";
 
 export interface Actions {
     onCancelOrders$: Stream<null>;
-    onCancelParentOrder$: Stream<{ id: string; sequence: number }>;
     onExecutionBatch$: Stream<Execution[]>;
     onMyExecutionCreated$: Stream<ChildOrderEvent>;
     onMyOrderChanged$: Stream<null>;
@@ -26,20 +26,8 @@ export interface Actions {
     onPositionsLoaded$: Stream<{ position: Position; positionCredentialVersion: number; positionCloseId: symbol | undefined }>;
 }
 
-// Trade state survives navigation, so request and cancellation ordering must survive it too.
-let parentOrderSequence = 0;
-
-export const intent = (sources: Sources): Actions => {
+export const intent = (sources: Sources, cancellationOutcome$ = Stream.never<CancellationOutcome>()): Actions => {
     const isCurrent = (response: { request: AccountRequest }) => isCurrentAccountRequest(response.request);
-
-    const onCancelParentOrder$ = sources.HTTP.select("cancel-parent-order")
-        .map((response$) => response$.replaceError(() => Stream.empty()))
-        .compose(flattenConcurrently)
-        .filter(isCurrent)
-        .map((response) => ({
-            id: JSON.parse(response.request.send as string).parent_order_id as string,
-            sequence: ++parentOrderSequence,
-        }));
 
     const onMyExecutionCreated$ = sources.socket.childOrderEvent$.filter(isExecution);
 
@@ -49,12 +37,11 @@ export const intent = (sources: Sources): Actions => {
         sources.socket.reconnect$,
     ).compose(debounce(500));
 
+    // Invalidate pending polls before triggering a fresh list. Root clears the retained orders.
     const ordersCanceled = Symbol("ordersCanceled");
-    const cancelOrders$ = sources.HTTP.select("cancel-orders")
-        .map((response$) => response$.replaceError(() => Stream.empty()))
-        .compose(flattenConcurrently)
-        .filter(isCurrent)
-        .mapTo<typeof ordersCanceled>(ordersCanceled);
+    const cancelOrders$ = cancellationOutcome$
+        .filter(({ status, parentOrderId }) => status === "success" && parentOrderId === null)
+        .mapTo<object[] | typeof ordersCanceled>(ordersCanceled);
 
     const orderLists$ = pollResponse<object[] | typeof ordersCanceled>(
         sources.HTTP.select("orders"),
@@ -62,7 +49,7 @@ export const intent = (sources: Sources): Actions => {
         cancelOrders$,
     );
 
-    const pages = parentOrderPages(sources.HTTP, () => ++parentOrderSequence);
+    const pages = parentOrderPages(sources.HTTP, nextParentOrderSequence);
     const onParentOrdersLoaded$ = pages.loaded$;
 
     const details = parentOrderDetails(
@@ -79,11 +66,10 @@ export const intent = (sources: Sources): Actions => {
 
     return {
         onCancelOrders$: orderLists$.filter((orders) => orders === ordersCanceled).mapTo(null),
-        onCancelParentOrder$,
         onExecutionBatch$: sources.socket.executionBatch$,
         onMyExecutionCreated$,
         onMyOrderChanged$,
-        onOrdersLoaded$: orderLists$.map<object[]>((orders) => orders === ordersCanceled ? [] : orders),
+        onOrdersLoaded$: orderLists$.filter((orders): orders is object[] => orders !== ordersCanceled),
         onParentOrderLoaded$: details.loaded$,
         onParentOrdersLoaded$,
         onParentOrderListSettled$: pages.settled$,

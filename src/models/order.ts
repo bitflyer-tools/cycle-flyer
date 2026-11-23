@@ -10,7 +10,7 @@ export class Order {
     }
 }
 
-export const minimumMarketOrderSize = 0.01;
+export const minimumOrderSize = 0.001;
 
-export const isValidMarketOrderSize = (size: number): boolean =>
-    Number.isFinite(size) && size >= minimumMarketOrderSize;
+export const isValidOrderSize = (size: number): boolean =>
+    Number.isFinite(size) && size >= minimumOrderSize;

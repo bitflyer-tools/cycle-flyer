@@ -93,6 +93,47 @@ test('publishes only board deltas with finite prices and sizes on both sides', (
   assert.deepEqual(received, [deletion]);
 });
 
+test('delivers matching private order events from mixed and subsequent batches', async (t) => {
+  await saveCredentials({ key: 'test-account', secret: 'test-secret' });
+  t.after(() => saveCredentials(null));
+
+  const socket = makeSocket();
+  const subscribe = socket.emit;
+  socket.emit = (event, value, done) => {
+    if (event === 'auth') {
+      done();
+    } else {
+      subscribe(event, value);
+    }
+  };
+  const source = new SocketIOSource(socket);
+  socket.receive('connect');
+  await new Promise(setImmediate);
+
+  [
+    ['child_order_events', source.childOrderEvent$, 'child_order_id'],
+    ['parent_order_events', source.parentOrderEvent$, 'parent_order_id'],
+  ].forEach(([channel, stream, idField]) => {
+    assert.ok(socket.subscriptions.includes(channel));
+    const received = [];
+    const listener = stream.subscribe({ next: (event) => received.push(event) });
+    t.after(() => listener.unsubscribe());
+    const matching = { [idField]: 'matching', event_type: 'ORDER', product_code: 'FX_BTC_JPY' };
+    const withoutProduct = { [idField]: 'no-product', event_type: 'CANCEL' };
+    const later = { ...matching, [idField]: 'later' };
+
+    socket.receive(channel, matching);
+    socket.receive(channel, null);
+    assert.deepEqual(received, []);
+
+    socket.receive(channel, [null, matching, 'invalid', [], { ...matching, product_code: 'BTC_JPY' }, withoutProduct]);
+    assert.deepEqual(received, [matching, withoutProduct]);
+
+    socket.receive(channel, [later]);
+    assert.deepEqual(received, [matching, withoutProduct, later]);
+  });
+});
+
 test('ignores events from the previous account until the new socket authenticates', async (t) => {
   await saveCredentials({ key: 'account-a', secret: 'test-secret' });
 

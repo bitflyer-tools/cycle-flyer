@@ -2,7 +2,7 @@ import {Stream} from "xstream";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
 import {State} from "./index";
-import {clicks, numberInputs, sizePresetClicks} from "./events";
+import {clicks, numberInputs, sizePresetClicks, textInputs} from "./events";
 import {TwapActions, twapIntent} from "./twapIntent";
 
 export interface Actions extends TwapActions {
@@ -50,7 +50,8 @@ export const intent = (sources: Sources, state$: Stream<State>): Actions => {
         onPriceChanged$: numberInputs(sources.DOM, "#price-input"),
         onPriceWidthChanged$: numberInputs(sources.DOM, "#price-width-input"),
         onPriceWidthLoaded$: loadNumber(sources.storage, storageKeys.priceWidth, () => true),
-        onRatioChanged$: numberInputs(sources.DOM, "#ratio-input"),
+        onRatioChanged$: textInputs(sources.DOM, "#ratio-input")
+            .map((value) => value.trim() === "" ? NaN : +value),
         onRatioLoaded$: loadNumber(sources.storage, storageKeys.ratio),
         onSizeChanged$: numberInputs(sources.DOM, "#size-input"),
         onSizeLoaded$: loadNumber(sources.storage, storageKeys.size),
