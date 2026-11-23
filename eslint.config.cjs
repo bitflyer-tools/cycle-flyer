@@ -25,4 +25,15 @@ module.exports = defineConfig({
         "object-shorthand": "error",
         radix: "error",
     },
+}, {
+    files: ["srcElectron/**/*.js"],
+    extends: [js.configs.recommended],
+    languageOptions: {
+        sourceType: "commonjs",
+        globals: {
+            __dirname: "readonly",
+            console: "readonly",
+            process: "readonly",
+        },
+    },
 });
