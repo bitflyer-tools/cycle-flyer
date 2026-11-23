@@ -10,6 +10,52 @@ import {BoardOrder} from "../src/models/boardOrder";
 import {Execution} from "../src/models/execution";
 import {estimateMarketFills} from "../src/models/marketFill";
 
+test("requests snapshots for the initial socket state, disconnect, and reconnect", async (t) => {
+    t.mock.timers.enable({ apis: ["setInterval"] });
+    const connected$ = Stream.createWithMemory<boolean>();
+    let requests = 0;
+    const subscription = pollBoard(connected$).subscribe({ next: () => { requests++; } });
+    t.after(() => subscription.unsubscribe());
+
+    for (const [connected, expected] of [[true, 1], [true, 1], [false, 2], [true, 3]] as const) {
+        connected$.shamefullySendNext(connected);
+        await Promise.resolve();
+        assert.equal(requests, expected);
+    }
+});
+
+test("expires pending snapshots on transitions and replays updates only while connected", () => {
+    const connected$ = Stream.createWithMemory<boolean>();
+    connected$.shamefullySendNext(true);
+    const {request, update, asks, hasBoardSnapshot} = setup(connected$);
+    request()([{ price: 100, size: 1 }]);
+    assert.equal(hasBoardSnapshot(), true);
+    const respondBeforeDisconnect = request();
+
+    connected$.shamefullySendNext(false);
+    assert.equal(hasBoardSnapshot(), false);
+    respondBeforeDisconnect([{ price: 100, size: 2 }]);
+    assert.deepEqual(asks(), [[100, 1]]);
+
+    const respondWhileDisconnected = request();
+    update(101, 3);
+    respondWhileDisconnected([{ price: 102, size: 4 }]);
+    assert.deepEqual(asks(), [[102, 4]]);
+    assert.equal(hasBoardSnapshot(), false);
+    const respondBeforeReconnect = request();
+
+    connected$.shamefullySendNext(true);
+    respondBeforeReconnect([{ price: 103, size: 5 }]);
+    assert.deepEqual(asks(), [[102, 4]]);
+    assert.equal(hasBoardSnapshot(), false);
+
+    const respondAfterReconnect = request();
+    update(104, 6);
+    respondAfterReconnect([{ price: 105, size: 7 }]);
+    assert.deepEqual(asks(), [[104, 6], [105, 7]]);
+    assert.equal(hasBoardSnapshot(), true);
+});
+
 test("replays realtime changes over a delayed snapshot", () => {
     const {request, update, asks} = setup();
     const respond = request();
@@ -219,12 +265,12 @@ test("keeps the last valid board and replays deltas after malformed snapshots", 
     assert.deepEqual(asks(), [[101, 2], [102, 3]]);
 });
 
-const setup = () => {
+const setup = (connected$ = Stream.of(true)) => {
     const updates$ = Stream.create<BoardLevels>();
     const responses$$ = Stream.create<Stream<Response>>();
     const executions$ = Stream.create<Execution[]>();
     let state = { board: new Board({ asks: [], bids: [] }) } as State;
-    synchronizeBoard(updates$, responses$$, executions$, Stream.of(true)).addListener({
+    synchronizeBoard(updates$, responses$$, executions$, connected$).addListener({
         next: (reduce) => { state = reduce(state) as State; },
     });
 
@@ -232,6 +278,7 @@ const setup = () => {
         board: () => state.board,
         asks: () => state.board.asks.map(({price, size}) => [price, size]),
         bids: () => state.board.bids.map(({price, size}) => [price, size]),
+        hasBoardSnapshot: () => state.hasBoardSnapshot,
         execute: (...executions: Execution[]) => executions$.shamefullySendNext(executions),
         request: () => {
             const response$ = Stream.create<Response>();
