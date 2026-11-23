@@ -96,6 +96,50 @@ test("blocks both stop sides for invalid triggers or a missing market price", (t
     }
 });
 
+test("requires a fresh price for Stop and Ranged IFDOCO after returning to Trade", async (t) => {
+    const order = setup(t, "10000", { initialPrice: 1_000_000 });
+    const assertBlocked = () => {
+        deepEqual(order.disabledSides("stop"), [true, true]);
+        deepEqual(order.disabledSides("ranged-ifdoco"), [true, true]);
+        order.buy("stop");
+        order.sellStop();
+        order.buy("ifdoco");
+        order.sellIFDOCO();
+        deepEqual(order.requests, []);
+    };
+
+    order.enterTriggerPrice("1050000");
+    deepEqual(order.disabledSides("stop"), [true, false]);
+    deepEqual(order.disabledSides("ranged-ifdoco"), [false, false]);
+
+    order.navigate("/setting");
+    await flush();
+    order.publishExecution(1_100_000);
+    order.navigate("/");
+    await flush();
+    assertBlocked();
+
+    order.publishExecution(0);
+    assertBlocked();
+
+    order.publishExecution(1_100_000);
+    deepEqual(order.disabledSides("stop"), [false, true]);
+    deepEqual(order.disabledSides("ranged-ifdoco"), [false, false]);
+    order.buy("stop");
+    deepEqual(order.requests, []);
+
+    order.buy("ifdoco");
+    const [, profit, loss] = JSON.parse(order.requests[0].send as string).parameters;
+    equal(profit.price, 1_100_001);
+    equal(loss.trigger_price, 1_090_001);
+    order.respondTo(order.requests[0]).succeed();
+
+    order.enterTriggerPrice("1150000");
+    deepEqual(order.disabledSides("stop"), [true, false]);
+    order.buy("stop");
+    deepEqual(order.requests.map(({ category }) => category), ["ifdoco-order", "stop-order"]);
+});
+
 test("submits only the stop side matching the trigger direction and preserves the trigger price", (t) => {
     const order = setup(t, "0.01", { initialPrice: 100000 });
     order.enterTriggerPrice("110000.25");
@@ -217,6 +261,7 @@ for (const outcome of ["succeed", "reject", "disconnect"] as const) {
 
         order.navigate("/setting");
         order.navigate("/");
+        order.publishExecution(10_000_000);
         equal(order.state.isOrdering, true);
         order.sellIFDOCO();
         equal(order.requests.length, 1);
@@ -258,6 +303,7 @@ for (const outcome of ["succeed", "reject", "disconnect"] as const) {
             deepEqual(order.sounds, [sound]);
             equal(order.state.isOrdering, false);
             deepEqual(order.histories.map(({ name, status }) => ({ name, status })), histories);
+            if (category === "stop" || category === "ifdoco") order.publishExecution(10_000_000);
             order.buy(category);
             equal(order.requests.length, 2);
         });
@@ -1355,6 +1401,10 @@ function setup(t: TestContext, width = "0.01", options: {
         get clearPositionDisabled() { return findNode(vNode, "button.clear-button")?.data?.attrs?.disabled; },
         get positionRequests() { return polls.filter(({ category }) => category === "positions"); },
         clearOrders: () => clearOrders$.shamefullySendNext(null),
+        disabledSides: (orderType: "stop" | "ranged-ifdoco") =>
+            (findNode(vNode, "div." + orderType + "-order-buttons.order-buttons")?.children as VNode[])
+                .filter(({ sel }) => sel?.startsWith("button."))
+                .map(({ data }) => data?.attrs?.disabled),
         enterSize: (value: string) => sizeInput$.shamefullySendNext({ target: { value } }),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         rendered: () => JSON.stringify(vNode),
