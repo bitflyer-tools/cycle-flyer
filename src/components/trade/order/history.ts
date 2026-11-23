@@ -15,6 +15,10 @@ export interface OrderOutcome {
     histories: OrderHistory[];
 }
 
+export interface CancellationOutcome extends OrderOutcome {
+    parentOrderId: string | null;
+}
+
 export interface TwapSliceOutcome extends OrderOutcome {
     scheduleId: symbol;
 }
@@ -54,15 +58,23 @@ const createParentOrderOutcome = (stream$: HTTPResponse$): Stream<OrderOutcome> 
         ),
     );
 
-export const createCancellationOutcome = (stream$: HTTPResponse$): Stream<OrderOutcome> =>
-    createOutcome(stream$, (body, status) => [{
+export const cancellationOutcomes = (http: HTTPSource): Stream<CancellationOutcome> =>
+    Stream.merge(
+        http.select("cancel-orders"),
+        http.select("cancel-parent-order"),
+    ).map(createCancellationOutcome).compose(flattenConcurrently);
+
+const createCancellationOutcome = (stream$: HTTPResponse$): Stream<CancellationOutcome> => {
+    const parentOrderId: string | null = stream$.request.category === "cancel-parent-order"
+        ? JSON.parse(stream$.request.send as string).parent_order_id
+        : null;
+    return createOutcome(stream$, (_, status) => [{
         createdAt: new Date(),
-        description: stream$.request.category === "cancel-parent-order"
-            ? `Parent order ${JSON.parse(body).parent_order_id}`
-            : "All child orders",
+        description: parentOrderId === null ? "All child orders" : `Parent order ${parentOrderId}`,
         name: "Cancel",
         status,
-    }]);
+    }]).map((outcome) => ({ ...outcome, parentOrderId }));
+};
 
 const createOutcome = (
     stream$: HTTPResponse$,

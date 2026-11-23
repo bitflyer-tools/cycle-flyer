@@ -95,7 +95,7 @@ export const ExecutionsComponent = ({DOM, HTTP, state}: Sources) => {
 
 const pageLoaded = (page: Execution[], before?: number): Reducer<State> => (state = initialState) => {
     const rows = before === undefined ? [] : state.rows.slice();
-    const seen = new Set(rows.map((row) => row.id));
+    const seen = new Set<number>();
     const ordered = page.filter((row) => before === undefined || row.id < before)
         .sort((a, b) => b.id - a.id);
     ordered.forEach((row) => {

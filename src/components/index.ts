@@ -13,8 +13,9 @@ import {prependOrderHistories} from "../models/orderHistory";
 import {Position} from "../models/position";
 import {Setting} from "./setting";
 import {State as TradeState, Trade} from "./trade";
+import {cancellationReducer} from "./trade/cancellation";
 import {initialState as initialExecutionsState} from "./trade/executions";
-import {createCancellationOutcome, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
+import {cancellationOutcomes, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
 import {closePositionOutcomes, OrderRequestBatch, submissions, unsignedSubmissions$} from "./trade/order/request";
 
 export interface Sources {
@@ -42,6 +43,7 @@ interface RootState {
 const tradeScope = "trade";
 
 export const Root = (sources: Sources): Sinks => {
+    const cancellationOutcome$ = cancellationOutcomes(sources.HTTP);
     const leaveTrade$ = Stream.create<void>();
     const trade = isolate(Trade, { "*": tradeScope });
     const routes$: Stream<Sinks & { orderRequests?: Stream<OrderRequestBatch> }> = sources.router
@@ -57,7 +59,7 @@ export const Root = (sources: Sources): Sinks => {
                 // Tag order batches with the same HTTP scopes as the other requests.
                 orderRequests: sources.HTTP,
                 router: sources.router.path(route.path),
-            }, isOrdering$, leaveTrade$);
+            }, isOrdering$, leaveTrade$, cancellationOutcome$);
         })
         .remember();
 
@@ -92,14 +94,16 @@ export const Root = (sources: Sources): Sinks => {
     const orderOutcome$ = Stream.merge(
         submittedOrderOutcomes(sources.HTTP),
         twapOutcomes(sources.HTTP),
-        Stream.merge(
-            sources.HTTP.select("cancel-orders"),
-            sources.HTTP.select("cancel-parent-order"),
-        ).map(createCancellationOutcome).compose(flattenConcurrently),
+        cancellationOutcome$,
     );
-    const orderHistoryReducer$ = orderOutcome$
-        .map<Reducer<TradeState>>(({ histories }) => (state) =>
-            state && { ...state, histories: prependOrderHistories(state.histories, histories) });
+    const orderOutcomeReducer$ = orderOutcome$
+        .map<Reducer<TradeState>>((outcome) => {
+            const reconcile = "parentOrderId" in outcome ? cancellationReducer(outcome) : undefined;
+            return (state) => state && {
+                ...(reconcile?.(state) ?? state),
+                histories: prependOrderHistories(state.histories, outcome.histories),
+            };
+        });
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>
@@ -133,7 +137,7 @@ export const Root = (sources: Sources): Sinks => {
             credentialsChanging$.mapTo(resetAccount),
             sources.state.isolateSink(positionCloseReducer$, tradeScope),
             sources.state.isolateSink(closeOutcomeReducer$, tradeScope),
-            sources.state.isolateSink(orderHistoryReducer$, tradeScope),
+            sources.state.isolateSink(orderOutcomeReducer$, tradeScope),
             sources.state.isolateSink(orderSigningReducer$, tradeScope),
         ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),

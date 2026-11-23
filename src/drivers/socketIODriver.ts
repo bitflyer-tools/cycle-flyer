@@ -24,7 +24,7 @@ export class SocketIOSource {
     public reconnect$: Stream<null> = Stream.create();
     public parentOrderEvent$: Stream<ParentOrderEvent> = Stream.create();
 
-    private channels: { [channelName: string]: (message: any) => void } = {
+    private channels: { [channelName: string]: (message: unknown) => void } = {
         [`lightning_board_${productCode}`]: (message: unknown) => {
             if (isBoardLevels(message)) { this.board$.shamefullySendNext(message); }
         },
@@ -35,8 +35,8 @@ export class SocketIOSource {
             this.executionBatch$.shamefullySendNext(executions);
             sendEach(this.execution$, executions);
         },
-        child_order_events: (events) => sendEach(this.childOrderEvent$, events.filter(isTargetProduct)),
-        parent_order_events: (events) => sendEach(this.parentOrderEvent$, events.filter(isTargetProduct)),
+        child_order_events: (message) => sendOrderEvents(this.childOrderEvent$, message),
+        parent_order_events: (message) => sendOrderEvents(this.parentOrderEvent$, message),
     };
 
     constructor(client: Socket) {
@@ -83,5 +83,13 @@ export class SocketIOSource {
 const sendEach = <T>(stream: Stream<T>, messages: T[]) =>
     messages.forEach((message) => stream.shamefullySendNext(message));
 
-const isTargetProduct = (event: { product_code?: string }): boolean =>
-    !event.product_code || event.product_code === productCode;
+const sendOrderEvents = <T extends ChildOrderEvent | ParentOrderEvent>(stream: Stream<T>, message: unknown) => {
+    if (!Array.isArray(message)) { return; }
+    sendEach(stream, message.filter(isTargetProduct));
+};
+
+const isTargetProduct = (event: unknown): boolean => {
+    if (event === null || typeof event !== "object" || Array.isArray(event)) { return false; }
+    const { product_code } = event as { product_code?: unknown };
+    return !product_code || product_code === productCode;
+};
