@@ -466,8 +466,7 @@ const assertMigrationRequiresReentry = async (migrate) => {
   assert.equal(await createRenderer(entries, {}).initializeCredentials(), true);
 };
 
-test('Submitting the Settings credentials form makes credentials available', async () => {
-  const renderer = createRenderer(new Map());
+const submitSettingsCredentials = (renderer, credentials) => {
   const submit$ = renderer.Stream.create();
   const never = () => renderer.Stream.never();
   const settings = renderer.settingsIntent({
@@ -479,19 +478,43 @@ test('Submitting the Settings credentials form makes credentials available', asy
   const message = new Promise((resolve, reject) => {
     settings.credentialsMessage$.take(1).addListener({ next: resolve, error: reject });
   });
-  assert.equal(renderer.hasApiCredentials(), false);
-
   submit$.shamefullySendNext({
     preventDefault() {},
     target: {
-      elements: { namedItem: (name) => ({ value: pair[name] }) },
+      elements: { namedItem: (name) => ({ value: credentials[name] }) },
       reset() {},
     },
   });
 
-  assert.equal(await message, 'Credentials saved.');
+  return message;
+};
+
+test('Submitting the Settings credentials form makes credentials available', async () => {
+  const renderer = createRenderer(new Map());
+  assert.equal(renderer.hasApiCredentials(), false);
+  assert.equal(await submitSettingsCredentials(renderer, pair), 'Credentials saved.');
   assert.equal(renderer.hasApiCredentials(), true);
   assert.equal((await renderer.signRest('GET', '/v1/me/getpositions', ''))['ACCESS-KEY'], pair.key);
+});
+
+test('Settings rejects a blank API key or secret without saving credentials', async (t) => {
+  for (const field of ['key', 'secret']) {
+    await t.test(`blank ${field}`, async () => {
+      const save = t.mock.fn();
+      const renderer = createRenderer(new Map(), { save });
+      const message = await submitSettingsCredentials(renderer, { ...pair, [field]: '  ' });
+      assert.equal(message, 'Enter both an API key and an API secret.');
+      assert.equal(save.mock.callCount(), 0);
+    });
+  }
+});
+
+test('Settings reports an OS credential storage failure when saving', async (t) => {
+  const save = t.mock.fn(async () => { throw new Error('OS credential storage is unavailable'); });
+  const renderer = createRenderer(new Map(), { save });
+  const message = await submitSettingsCredentials(renderer, pair);
+  assert.equal(message, 'Could not update credentials. Check that OS credential storage is available and try again.');
+  assert.equal(save.mock.callCount(), 1);
 });
 
 test('Settings shows empty inputs with password masking even after credentials are saved', async () => {
