@@ -36,7 +36,7 @@ export const executionPriceLimits = (executions: Execution[]) => {
         if (!isExecutionPrice(price)) { return; }
         if (side === "BUY") {
             highestBuy = Math.max(highestBuy ?? price, price);
-        } else {
+        } else if (side === "SELL") {
             lowestSell = Math.min(lowestSell ?? price, price);
         }
     });

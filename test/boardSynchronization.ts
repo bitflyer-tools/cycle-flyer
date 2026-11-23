@@ -185,16 +185,34 @@ test("initializes from a fresh snapshot and applies subsequent realtime updates"
     assert.deepEqual(asks(), []);
 });
 
-test("replays execution pruning on both sides of a delayed snapshot", () => {
-    const {request, execute, asks, bids, board} = setup();
+test("preserves both sides for auction executions live and during snapshot replay", () => {
+    const {request, execute, asks, bids} = setup();
+    const initialAsks = [{ price: 110, size: 1 }, { price: 120, size: 2 }];
+    const initialBids = [{ price: 105, size: 3 }, { price: 95, size: 4 }];
+    request()(initialAsks, initialBids);
     const respond = request();
 
-    execute({ side: "BUY", price: 110 }, { side: "SELL", price: 90 });
-    respond(
-        [{ price: 100, size: 1 }, { price: 110, size: 2 }],
-        [{ price: 95, size: 1 }, { price: 90, size: 2 }],
-    );
+    execute({ side: "", price: 100 });
+    assert.deepEqual(asks(), [[110, 1], [120, 2]]);
+    assert.deepEqual(bids(), [[105, 3], [95, 4]]);
 
+    respond(initialAsks, initialBids);
+    assert.deepEqual(asks(), [[110, 1], [120, 2]]);
+    assert.deepEqual(bids(), [[105, 3], [95, 4]]);
+});
+
+test("prunes both sides for directional executions in a mixed batch live and during snapshot replay", () => {
+    const {request, execute, asks, bids, board} = setup();
+    const initialAsks = [{ price: 100, size: 1 }, { price: 110, size: 2 }];
+    const initialBids = [{ price: 95, size: 1 }, { price: 90, size: 2 }];
+    request()(initialAsks, initialBids);
+    const respond = request();
+
+    execute({ side: "BUY", price: 110 }, { side: "", price: 85 }, { side: "SELL", price: 90 });
+    assert.deepEqual(asks(), [[110, 2]]);
+    assert.deepEqual(bids(), [[90, 2]]);
+
+    respond(initialAsks, initialBids);
     assert.deepEqual(asks(), [[110, 2]]);
     assert.deepEqual(bids(), [[90, 2]]);
     assert.deepEqual(estimateMarketFills(board(), 2), {
