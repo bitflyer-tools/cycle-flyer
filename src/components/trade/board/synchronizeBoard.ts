@@ -37,7 +37,7 @@ export const synchronizeBoard = <T extends Stream<Response>>(
     const liveReducer$ = boardUpdates$.map<Reducer<State>>((update) => (state) => {
         if (!state) { return state; }
         update(state.board);
-        return { ...state };
+        return { ...state, boardRevision: (state.boardRevision ?? 0) + 1 };
     });
     const connection$ = connected$.compose(dropRepeats()).remember();
     const invalidation$ = connection$.mapTo(invalidateSnapshot);
