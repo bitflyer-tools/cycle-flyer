@@ -14,6 +14,7 @@ import {Sound} from "../src/drivers/soundDriver";
 import {Root, Sinks, Sources} from "../src/components";
 import {State as TradeState} from "../src/components/trade";
 import {groupSizeStorageKey} from "../src/components/trade/board/intent";
+import {marketFillRefreshMs} from "../src/components/trade/order/marketFillPreview";
 import {twapStorageKeys} from "../src/components/trade/order/twapIntent";
 import {stopSection} from "../src/components/trade/order/stopView";
 import {storageKeys} from "../src/components/trade/order/intent";
@@ -494,7 +495,7 @@ test("reports mixed Clear Orders results and stays locked until every request se
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
 
-test("previews both market sides from synchronized public depth without credentials", async (t) => {
+test("coalesces synchronized market depth scans and immediately refreshes on size or synchronization changes", async (t) => {
     await saveCredentials(null);
     const order = setup(t);
     order.enterSize("0.01");
@@ -510,6 +511,7 @@ test("previews both market sides from synchronized public depth without credenti
         asks: [{ price: 100, size: 0.01 }],
         bids: [{ price: 90, size: 0.01 }, { price: 72, size: 0.02 }],
     });
+    t.mock.timers.tick(1);
     match(order.rendered(), /Live average fill estimates \(before fees\)/);
     match(order.rendered(), /100 JPY \(0.0000%\)/);
     match(order.rendered(), /90 JPY \(0.0000%\)/);
@@ -518,9 +520,49 @@ test("previews both market sides from synchronized public depth without credenti
     match(order.rendered(), /105 JPY \(\+5.0000%\)/);
     match(order.rendered(), /81 JPY \(-10.0000%\)/);
 
-    order.updateBoard({ asks: [{ price: 110, size: 0 }], bids: [] });
+    order.enterSize("0.1");
     match(order.rendered(), /Insufficient depth/);
+    const { board } = order.tradeState.boardComponentState!;
+    const scans = { asks: 0, bids: 0 };
+    // Count preview scans independently of the order book's row grouping.
+    t.mock.method(board, "groupedAsks", () => []);
+    t.mock.method(board, "groupedBids", () => []);
+    for (const side of ["asks", "bids"] as const) {
+        Object.defineProperty(board[side], Symbol.iterator, {
+            value() {
+                scans[side]++;
+                return Array.prototype[Symbol.iterator].call(this);
+            },
+        });
+    }
+    const updateDepth = (size: number) => order.updateBoard({
+        asks: [{ price: 110, size }],
+        bids: [{ price: 72, size }],
+    });
+    for (let index = 3; index <= 9; index++) {
+        updateDepth(index / 100);
+    }
+    equal(order.tradeState.boardComponentState?.board, board);
+    deepEqual(scans, { asks: 0, bids: 0 });
+    t.mock.timers.tick(marketFillRefreshMs);
+    deepEqual(scans, { asks: 1, bids: 1 });
+    match(order.rendered(), /109 JPY \(\+9.0000%\)/);
+    match(order.rendered(), /73.8 JPY \(-18.0000%\)/);
+
+    updateDepth(0.01);
+    order.enterSize("0.02");
+    deepEqual(scans, { asks: 2, bids: 2 });
+    match(order.rendered(), /105 JPY \(\+5.0000%\)/);
     match(order.rendered(), /81 JPY \(-10.0000%\)/);
+    t.mock.timers.tick(marketFillRefreshMs);
+    deepEqual(scans, { asks: 2, bids: 2 });
+
+    updateDepth(0.02);
+    order.setConnected(false);
+    match(order.rendered(), /Order book unavailable/);
+    doesNotMatch(order.rendered(), /105 JPY|81 JPY/);
+    t.mock.timers.tick(marketFillRefreshMs);
+    deepEqual(scans, { asks: 2, bids: 2 });
 
     order.enterSize("0");
     doesNotMatch(order.rendered(), /market-fill-preview/);
@@ -1241,6 +1283,8 @@ function setup(t: TestContext, width = "0.01", options: {
     const sellStop$ = Stream.create<null>();
     const sellIFDOCO$ = Stream.create<null>();
     const board$ = Stream.create<BoardLevels>();
+    const connected$ = Stream.createWithMemory<boolean>();
+    connected$.shamefullySendNext(true);
     const refreshExecutions$ = Stream.create<null>();
     const buyTWAP$ = Stream.create<null>();
     const clearPosition$ = Stream.create<null>();
@@ -1286,7 +1330,7 @@ function setup(t: TestContext, width = "0.01", options: {
         HTTP: source,
         history: history$,
         socket: {
-            connected$: Stream.of(true),
+            connected$,
             board$,
             childOrderEvent$: Stream.never(),
             execution$: Stream.never(),
@@ -1358,6 +1402,7 @@ function setup(t: TestContext, width = "0.01", options: {
         enterSize: (value: string) => sizeInput$.shamefullySendNext({ target: { value } }),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         rendered: () => JSON.stringify(vNode),
+        setConnected: (connected: boolean) => connected$.shamefullySendNext(connected),
         updateBoard: (delta: BoardLevels) => board$.shamefullySendNext(delta),
         enterTriggerPrice: (value: string) => triggerInput$.shamefullySendNext({ target: { value } }),
         get executions() { return state!.trade!.executionsComponentState!; },

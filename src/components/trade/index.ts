@@ -8,7 +8,6 @@ import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
 import {SocketIOSource} from "../../drivers/socketIODriver";
 import {Sound} from "../../drivers/soundDriver";
-import {estimateMarketFills} from "../../models/marketFill";
 import {Order} from "../../models/order";
 import {OrderHistory} from "../../models/orderHistory";
 import {flattenStopOrders, ParentStopOrders} from "../../models/parentStopOrders";
@@ -19,6 +18,7 @@ import "./index.styl";
 import {intent} from "./intent";
 import {model} from "./model";
 import {OrderComponent, State as OrderComponentState} from "./order";
+import {withMarketFillPreview} from "./order/marketFillPreview";
 import {OrderRequestBatch} from "./order/request";
 import {recentTrades} from "./recentTrades";
 import {request} from "./request";
@@ -103,24 +103,13 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>, leaveTrade
         },
     })(sources);
 
+    const orderViewInputs$ = sources.state.stream.map((state) => ({
+        order: state && orderState(state),
+        book: state?.boardComponentState,
+    }));
     const orderComponent = isolate(OrderComponent, {
         state: {
-            get: (state: State) => state.orderComponentState && {
-                ...state.orderComponentState,
-                marketFills: estimateMarketFills(
-                    state.boardComponentState?.hasBoardSnapshot ? state.boardComponentState.board : undefined,
-                    state.orderComponentState.size,
-                ),
-                currentPrice: state.currentPrice ?? 0,
-                histories: state.histories,
-                orders: state.orders,
-                orderSigningError: state.orderSigningError,
-                positionCredentialVersion: state.positionCredentialVersion,
-                parentStopOrders: state.parentStopOrders,
-                position: state.position,
-                price: state.price,
-                positionClosePending: !!state.positionClose,
-            },
+            get: orderState,
             set: (state: State, orderComponentState: OrderComponentState) => ({
                 ...state,
                 histories: orderComponentState.histories,
@@ -129,7 +118,7 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>, leaveTrade
                 price: orderComponentState.price,
             }),
         },
-    })(sources, isOrdering$, leaveTrade$);
+    })(sources, isOrdering$, leaveTrade$, withMarketFillPreview(orderViewInputs$));
 
     const actions = intent(sources);
     const reducer$ = model(actions);
@@ -170,3 +159,17 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>, leaveTrade
         storage: Stream.merge(boardComponent.storage, orderComponent.storage),
     };
 };
+
+const orderState = (state: State): OrderComponentState | undefined =>
+    state.orderComponentState && {
+        ...state.orderComponentState,
+        currentPrice: state.currentPrice ?? 0,
+        histories: state.histories,
+        orders: state.orders,
+        orderSigningError: state.orderSigningError,
+        positionCredentialVersion: state.positionCredentialVersion,
+        parentStopOrders: state.parentStopOrders,
+        position: state.position,
+        price: state.price,
+        positionClosePending: !!state.positionClose,
+    };
