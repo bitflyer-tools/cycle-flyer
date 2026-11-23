@@ -81,6 +81,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
 const startTradeSession = (state: State = defaultState): State => ({
     ...state,
+    currentPrice: null,
     lastExecutionPrice: 0,
     summaryComponentState: state.summaryComponentState && { ...state.summaryComponentState, priceAlert: null },
 });
