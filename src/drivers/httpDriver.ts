@@ -87,7 +87,8 @@ const responseStream = (options: RequestOptions, deadlineMs: number) => {
     const method = options.method?.toUpperCase() ?? "GET";
     const isWrite = method === "POST";
     const isPeriodicRead = method === "GET" && periodicReadCategories.has(options.category ?? "");
-    const deadline = isWrite || options.category === "executions" ? deadlineMs
+    const deadline = isWrite || options.category === "executions" || options.category === "recent-trades"
+        ? deadlineMs
         : isPeriodicRead ? pollDeadlineMs : undefined;
     const response$ = deadline === undefined ? createResponse$(options) : responseWithDeadline(options, deadline);
     const remembered$ = Object.assign(response$.remember(), { request: options });

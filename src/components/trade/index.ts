@@ -126,7 +126,7 @@ export const Trade = (
 
     const actions = intent(sources, cancellationOutcome$);
     const reducer$ = model(actions);
-    const marketTrades = recentTrades(sources);
+    const marketTrades = recentTrades(sources, leaveTrade$);
     const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM, executionsComponent.DOM,
         marketTrades.DOM);
     const settledCloseId$ = sources.state.stream
