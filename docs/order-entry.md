@@ -2,17 +2,19 @@
 
 The order form on **Trade** submits orders for `FX_BTC_JPY`. Submitting an
 order requires bitFlyer Lightning API credentials with order permissions.
-Set **Size** in BTC before choosing **Buy** or **Sell** in the order section.
+Set **Size** in BTC-CFD before choosing **Buy** or **Sell** in the order section.
+The [bitFlyer minimum order size](https://bitflyer.com/ja-jp/faq/trade_bitcoin)
+is 0.001 BTC-CFD.
 For **Stop** and **Ranged IFDOCO**, the current price comes from the most
 recent valid trade price received by the app.
 
 | Section | Fields and validation |
 | --- | --- |
-| **Market** | Size must be at least 0.01 BTC. |
-| **Limit** | Size and limit price must both be positive. |
-| **Stop** | Size and trigger price must both be positive. A buy trigger must be above the current price, and a sell trigger must be below it. |
-| **Ranged IFDOCO** | Size and **Price width** must be positive. **Profit / Loss Ratio** must be numeric and is clamped to 0–100. Both calculated exit prices must be positive. |
-| **TWAP** | **Slices** must be a positive whole number. **Interval (sec)** must be greater than 0 and at most 2,147,483.647 seconds. Every slice must be at least 0.01 BTC. |
+| **Market** | Size must be at least 0.001 BTC-CFD. |
+| **Limit** | Size must be at least 0.001 BTC-CFD and the limit price must be positive. |
+| **Stop** | Size must be at least 0.001 BTC-CFD and the trigger price must be positive. A buy trigger must be above the current price, and a sell trigger must be below it. |
+| **Ranged IFDOCO** | Size must be at least 0.001 BTC-CFD and **Price width** must be positive. **Profit / Loss Ratio** must be numeric and is clamped to 0–100. Both calculated exit prices must be positive. |
+| **TWAP** | **Slices** must be a positive whole number. **Interval (sec)** must be greater than 0 and at most 2,147,483.647 seconds. Every slice must be at least 0.001 BTC-CFD. |
 
 ## Ranged IFDOCO
 

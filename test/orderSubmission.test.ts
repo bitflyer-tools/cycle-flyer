@@ -61,6 +61,30 @@ test("shows a clear-orders signing error after returning from Settings", async (
         "Could not sign the request to clear orders. Check your bitFlyer credentials in Settings.");
 });
 
+for (const type of ["stop", "ifdoco"] as const) {
+    for (const side of ["buy", "sell"] as const) {
+        test(`enforces the BTC-CFD minimum for ${type} ${side} orders`, (t) => {
+            const order = setup(t, "10000");
+            const section = type === "ifdoco" ? "ranged-ifdoco" : type;
+            const submit = side === "buy" ? () => order.buy(type)
+                : type === "stop" ? order.sellStop : order.sellIFDOCO;
+            order.enterTriggerPrice(side === "buy" ? "11000000" : "9000000");
+            order.enterSize("0.0009");
+            equal(order.orderDisabled(section, side), true);
+            submit();
+            deepEqual(order.requests, []);
+
+            order.enterSize("0.001");
+            equal(order.orderDisabled(section, side), false);
+            submit();
+            deepEqual(order.requests.map(({ category }) => category), [`${type}-order`]);
+            const payload = JSON.parse(order.requests[0].send as string);
+            deepEqual(payload.parameters.map(({ size }: { size: number }) => size),
+                type === "stop" ? [0.001] : [0.001, 0.001, 0.001]);
+        });
+    }
+}
+
 test("blocks both IFDOCO sides until the first public execution arrives", (t) => {
     const order = setup(t, "10000", { initialPrice: null });
     order.buy("ifdoco");
@@ -494,6 +518,50 @@ test("reports mixed Clear Orders results and stays locked until every request se
     deepEqual(order.requests.slice(3).map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
+
+for (const [outcome, status] of [
+    ["succeed", "success"],
+    ["reject", "failed"],
+    ["disconnect", "unconfirmed"],
+] as const) {
+    test(`reconciles Clear Orders after it settles in Settings (${outcome})`, async (t) => {
+        const order = setup(t, "0.01", { apis: [] });
+        await saveCredentials({ key: "test-key", secret: "test-secret" });
+        t.after(() => saveCredentials(null));
+        const childOrders = [{ price: 100, side: "BUY", outstanding_size: 0.01 }];
+        const parentOrders = [{ parent_order_id: "JCO-stop" }];
+        order.respondTo(order.polls.find(({ category }) => category === "orders")!).succeed(childOrders);
+        order.respondTo(order.polls.find(({ category }) => category === "parent-orders")!).succeed(parentOrders);
+        order.respondTo(order.parentDetails.get("JCO-stop")!).succeed({
+            parent_order_id: "JCO-stop",
+            parameters: [{ condition_type: "STOP", trigger_price: 200 }],
+        });
+        equal(order.clearOrdersDisabled, false);
+
+        order.clearOrders();
+        deepEqual(order.requests.map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
+        const pending = order.requests.map((request) => order.respondTo(request));
+        order.navigate("/setting");
+        await flush();
+        pending.forEach((response) => response[outcome]());
+
+        const pollsBeforeReturn = order.polls.length;
+        order.navigate("/");
+        await flush();
+        equal(order.polls.slice(pollsBeforeReturn).some(({ category }) => category === "orders"), true);
+        const succeeded = outcome === "succeed";
+        equal(order.state.isOrdering, false);
+        equal(order.clearOrdersDisabled, succeeded);
+        deepEqual(order.tradeState.orders.map(({ price }) => price), succeeded ? [] : [100]);
+        deepEqual(flattenStopOrders(order.tradeState.parentStopOrders).map(({ price }) => price),
+            succeeded ? [] : [200]);
+        deepEqual(order.histories.map(({ description, status }) => [description, status]), [
+            ["Parent order JCO-stop", status], ["All child orders", status],
+        ]);
+        const sound = succeeded ? "success" : "failure";
+        deepEqual(order.sounds, [sound, sound]);
+    });
+}
 
 test("coalesces synchronized market depth scans and immediately refreshes on size or synchronization changes", async (t) => {
     await saveCredentials(null);
@@ -1401,9 +1469,14 @@ function setup(t: TestContext, width = "0.01", options: {
         buy: (category: keyof typeof buy$) => buy$[category].shamefullySendNext(null),
         buyTWAP: () => buyTWAP$.shamefullySendNext(null),
         clearPosition: () => clearPosition$.shamefullySendNext(null),
+        orderDisabled(section: string, side: string) {
+            const buttons = findNode(vNode, `div.${section}-order-buttons.order-buttons`);
+            return buttons && findNode(buttons, `button.${side}-button`)?.data?.attrs?.disabled;
+        },
         get clearPositionDisabled() { return findNode(vNode, "button.clear-button")?.data?.attrs?.disabled; },
         get positionRequests() { return polls.filter(({ category }) => category === "positions"); },
         clearOrders: () => clearOrders$.shamefullySendNext(null),
+        get clearOrdersDisabled() { return findNode(vNode, "button.clear-order-button")?.data?.attrs?.disabled; },
         enterSize: (value: string) => sizeInput$.shamefullySendNext({ target: { value } }),
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         rendered: () => JSON.stringify(vNode),

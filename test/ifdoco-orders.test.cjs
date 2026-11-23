@@ -118,27 +118,29 @@ test("IFDOCO requires a positive finite market reference price for both sides", 
     assert.equal(form.requests.length, 2);
 });
 
-test("IFDOCO rejects invalid ratios and restores the preview and both submissions at 50", (t) => {
-    const form = setup(t, "10000");
-    for (const ratio of ["abc", "Infinity", "-Infinity"]) {
+test("IFDOCO rejects invalid ratios and restores the preview and both submissions at zero", (t) => {
+    const form = setup(t, "10000", "0.01", 5000000);
+    assert.deepEqual(form.disabled(), [false, false]);
+    for (const ratio of ["", " \t ", "abc", "Infinity", "-Infinity"]) {
         form.enterRatio(ratio);
         const preview = form.view().children.find(({ sel }) => sel === "div.line");
         const ratioField = form.view().children.find(({ sel }) => sel === "div.ratio").children[1];
         assert.equal(preview.children[0].sel, "p#ratio-error");
+        assert.equal(preview.children[0].text, "Enter a numeric profit / loss ratio.");
         assert.equal(ratioField.data.attrs["aria-invalid"], "true");
         assert.deepEqual(form.disabled(), [true, true]);
         form.clickBoth();
         assert.deepEqual(form.requests, []);
     }
 
-    form.enterRatio("50");
+    form.enterRatio("0");
     const preview = form.view().children.find(({ sel }) => sel === "div.line");
     assert.equal(preview.children[0].sel, "p.line-number");
     const buyPreview = preview.children[0].children[0].children[1];
     assert.deepEqual(
         buyPreview.children.filter(({ sel }) => sel === "span.profit-line" || sel === "span.loss-line")
             .map(({ text }) => text),
-        ["10005000", "9995000"],
+        ["5000000", "4990000"],
     );
     assert.deepEqual(form.disabled(), [false, false]);
     form.clickBoth();
@@ -151,8 +153,8 @@ test("IFDOCO rejects invalid ratios and restores the preview and both submission
         return body.parameters.map(({ condition_type, side, price, trigger_price }) =>
             [condition_type, side, price ?? trigger_price]);
     }), [
-        [["MARKET", "BUY", undefined], ["LIMIT", "SELL", 10005000], ["STOP", "SELL", 9995000]],
-        [["MARKET", "SELL", undefined], ["LIMIT", "BUY", 9995000], ["STOP", "BUY", 10005000]],
+        [["MARKET", "BUY", undefined], ["LIMIT", "SELL", 5000000], ["STOP", "SELL", 4990000]],
+        [["MARKET", "SELL", undefined], ["LIMIT", "BUY", 5000000], ["STOP", "BUY", 5010000]],
     ]);
 });
 

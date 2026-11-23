@@ -18,6 +18,7 @@ import "./index.styl";
 import {intent} from "./intent";
 import {model} from "./model";
 import {OrderComponent, State as OrderComponentState} from "./order";
+import {CancellationOutcome} from "./order/history";
 import {withMarketFillPreview} from "./order/marketFillPreview";
 import {OrderRequestBatch} from "./order/request";
 import {recentTrades} from "./recentTrades";
@@ -63,7 +64,10 @@ export interface State {
     summaryComponentState?: SummaryComponentState;
 }
 
-export const Trade = (sources: Sources, isOrdering$: Stream<boolean>, leaveTrade$?: Stream<void>): Sinks & {
+export const Trade = (
+    sources: Sources, isOrdering$: Stream<boolean>, leaveTrade$?: Stream<void>,
+    cancellationOutcome$?: Stream<CancellationOutcome>,
+): Sinks & {
     orderRequests: Stream<OrderRequestBatch>;
 } => {
     const executionsComponent = isolate(ExecutionsComponent, { state: "executionsComponentState" })({
@@ -120,7 +124,7 @@ export const Trade = (sources: Sources, isOrdering$: Stream<boolean>, leaveTrade
         },
     })(sources, isOrdering$, leaveTrade$, withMarketFillPreview(orderViewInputs$));
 
-    const actions = intent(sources);
+    const actions = intent(sources, cancellationOutcome$);
     const reducer$ = model(actions);
     const marketTrades = recentTrades(sources);
     const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM, executionsComponent.DOM,

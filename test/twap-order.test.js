@@ -33,14 +33,14 @@ before(() => testModule.exports.saveCredentials({ key: 'test-key', secret: 'test
 const twap = { interval: 1, remaining: 0, slices: 29 };
 
 test('previews TWAP slices and enables both sides at the exact minimum', () => {
-  const { children: [, , , , status, buttons] } = twapSection({ size: 0.29, twap }, true);
-  assert.equal(status.text, '0.01 x 29 every 1 sec');
+  const { children: [, , , , status, buttons] } = twapSection({ size: 0.029, twap }, true);
+  assert.equal(status.text, '0.001 x 29 every 1 sec');
   assert.deepEqual(buttons.children.map((button) => button.data.attrs.disabled), [false, false]);
 });
 
 test('keeps both sides disabled one unit below the required total', () => {
-  const { children: [, , , , status, buttons] } = twapSection({ size: 0.28999999, twap }, true);
-  assert.equal(status.text, '0.01 x 28 + 0.00999999 x 1 every 1 sec');
+  const { children: [, , , , status, buttons] } = twapSection({ size: 0.02899999, twap }, true);
+  assert.equal(status.text, '0.001 x 28 + 0.00099999 x 1 every 1 sec');
   assert.deepEqual(buttons.children.map((button) => button.data.attrs.disabled), [true, true]);
 });
 
@@ -58,7 +58,7 @@ test('schedules all 29 requests at the exact minimum size', (t) => {
   const subscription = twapRequest({
     onTwapStarted$: start$,
     onClickTwapCancelButton$: Stream.never(),
-  }, Stream.of({ size: 0.29, twap })).requests$.subscribe({ next: (request) => requests.push(request) });
+  }, Stream.of({ size: 0.029, twap })).requests$.subscribe({ next: (request) => requests.push(request) });
   t.after(() => subscription.unsubscribe());
 
   start$.shamefullySendNext({ id: scheduleId, side: 'BUY' });
@@ -68,7 +68,7 @@ test('schedules all 29 requests at the exact minimum size', (t) => {
   }
   assert.equal(requests.length, 29);
   assert.ok(requests.every(({ category, send, scheduleId: requestScheduleId }) =>
-    category === 'twap-order' && requestScheduleId === scheduleId && JSON.parse(send).size === 0.01));
+    category === 'twap-order' && requestScheduleId === scheduleId && JSON.parse(send).size === 0.001));
 });
 
 function setup(t, savedInterval, interval = defaultTwapOrder.interval) {

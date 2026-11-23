@@ -46,14 +46,6 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
             return { ...state, position, positionCredentialVersion, positionClose: reconciled ? undefined : close };
         });
 
-    const cancelParentOrderReducer$ = actions.onCancelParentOrder$
-        .map(({ id, sequence }) => (state: State) => {
-            const parentStopOrders = { ...state.parentStopOrders };
-            delete parentStopOrders[id];
-            const canceledParentOrderIds = new Map(state.canceledParentOrderIds).set(id, sequence);
-            return { ...state, canceledParentOrderIds, parentStopOrders };
-        });
-
     const parentOrdersReducer$ = actions.onParentOrdersLoaded$
         .map(({ orders, sequence }) => (state: State) => {
             const canceled = state.canceledParentOrderIds;
@@ -78,7 +70,6 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
     return Stream.merge(
         defaultReducer$,
-        cancelParentOrderReducer$,
         currentPriceReducer$,
         myExecutionReducer$,
         ordersReducer$,

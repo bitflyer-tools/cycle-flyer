@@ -9,7 +9,7 @@ import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, s
 import {State} from "./index";
 import {Actions} from "./intent";
 import {isOrderRejection} from "./rejection";
-import {canClearPosition, isValidIFDOCOOrder, isValidLimitOrder, isValidMarketOrder, isValidStopOrder} from "./validation";
+import {canClearPosition, isValidIFDOCOOrder, isValidLimitOrder, isValidOrderSize, isValidStopOrder} from "./validation";
 
 export interface OrderRequestBatch {
     requests: RequestInput[];
@@ -85,8 +85,8 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
             .map(([_, state]) => ({ requests: [toRequest(state)] }));
 
     return Stream.merge(
-        withState(actions.onClickMarketBuyButton$, (state) => marketOrder(state.size, "BUY"), isValidMarketOrder),
-        withState(actions.onClickMarketSellButton$, (state) => marketOrder(state.size, "SELL"), isValidMarketOrder),
+        withState(actions.onClickMarketBuyButton$, (state) => marketOrder(state.size, "BUY"), isValidOrderSize),
+        withState(actions.onClickMarketSellButton$, (state) => marketOrder(state.size, "SELL"), isValidOrderSize),
         withState(actions.onClickLimitBuyButton$, (state) => limitOrder(state.price, state.size, "BUY"), isValidLimitOrder),
         withState(actions.onClickLimitSellButton$, (state) => limitOrder(state.price, state.size, "SELL"), isValidLimitOrder),
         withState(actions.onClickStopBuyButton$, (state) => stopOrder(state.triggerPrice, state.size, "BUY"),
