@@ -13,7 +13,7 @@ import {twapRequest} from "../src/components/trade/order/twapRequest";
 import {Sources} from "../src/components/trade";
 import {hasApiCredentials, initializeCredentials} from "../src/credentials";
 import {TwapSliceRequest} from "../src/http";
-import {minimumMarketOrderSize} from "../src/models/order";
+import {minimumOrderSize} from "../src/models/order";
 import {isRunning} from "../src/models/twapOrder";
 
 before(async () => {
@@ -122,7 +122,7 @@ test("previews and submits every unit of an uneven TWAP split", (context) => {
     context.mock.timers.tick(1000);
     const sizes = twap.requests.map(({ response$ }) => JSON.parse(response$.request.send as string).size);
     deepStrictEqual(sizes, [0.01033334, 0.01033333, 0.01033333]);
-    strictEqual(sizes.every((size) => size >= minimumMarketOrderSize), true);
+    strictEqual(sizes.every((size) => size >= minimumOrderSize), true);
     strictEqual(sizes.reduce((total, size) => total + Math.round(size * 1e8), 0), 3100000);
 });
 
@@ -142,19 +142,19 @@ test("manual market orders and one-slice TWAP share the same minimum", (context)
         .flatMap((node) => (node as VNode).children!)
         .map((button) => (button as VNode).data!.attrs!.disabled);
 
-    twap.setSize("0.009");
+    twap.setSize("0.0009");
     deepStrictEqual(disabled("market-order-buttons"), [true, true]);
     deepStrictEqual(disabled("twap-order-buttons"), [true, true]);
     [twap.marketBuy, twap.marketSell, twap.buy, twap.sell].forEach((click) => click.shamefullySendNext(null));
     strictEqual(manualRequests.length, 0);
     strictEqual(twap.requests.length, 0);
 
-    twap.setSize("0.01");
+    twap.setSize("0.001");
     deepStrictEqual(disabled("market-order-buttons"), [false, false]);
     deepStrictEqual(disabled("twap-order-buttons"), [false, false]);
     [twap.marketBuy, twap.marketSell, twap.buy].forEach((click) => click.shamefullySendNext(null));
-    deepStrictEqual(manualRequests.map(({ send }) => JSON.parse(send as string).size), [0.01, 0.01]);
-    deepStrictEqual(twap.requests.map(({ response$ }) => JSON.parse(response$.request.send as string).size), [0.01]);
+    deepStrictEqual(manualRequests.map(({ send }) => JSON.parse(send as string).size), [0.001, 0.001]);
+    deepStrictEqual(twap.requests.map(({ response$ }) => JSON.parse(response$.request.send as string).size), [0.001]);
 });
 
 const createTwap = (context: TestContext, interval = 1, slices = 2) => {
