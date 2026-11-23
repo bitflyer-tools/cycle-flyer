@@ -60,6 +60,30 @@ test("shows a clear-orders signing error after returning from Settings", async (
         "Could not sign the request to clear orders. Check your bitFlyer credentials in Settings.");
 });
 
+for (const type of ["stop", "ifdoco"] as const) {
+    for (const side of ["buy", "sell"] as const) {
+        test(`enforces the BTC-CFD minimum for ${type} ${side} orders`, (t) => {
+            const order = setup(t, "10000");
+            const section = type === "ifdoco" ? "ranged-ifdoco" : type;
+            const submit = side === "buy" ? () => order.buy(type)
+                : type === "stop" ? order.sellStop : order.sellIFDOCO;
+            order.enterTriggerPrice(side === "buy" ? "11000000" : "9000000");
+            order.enterSize("0.0009");
+            equal(order.orderDisabled(section, side), true);
+            submit();
+            deepEqual(order.requests, []);
+
+            order.enterSize("0.001");
+            equal(order.orderDisabled(section, side), false);
+            submit();
+            deepEqual(order.requests.map(({ category }) => category), [`${type}-order`]);
+            const payload = JSON.parse(order.requests[0].send as string);
+            deepEqual(payload.parameters.map(({ size }: { size: number }) => size),
+                type === "stop" ? [0.001] : [0.001, 0.001, 0.001]);
+        });
+    }
+}
+
 test("blocks both IFDOCO sides until the first public execution arrives", (t) => {
     const order = setup(t, "10000", { initialPrice: null });
     order.buy("ifdoco");
@@ -1396,6 +1420,10 @@ function setup(t: TestContext, width = "0.01", options: {
         buy: (category: keyof typeof buy$) => buy$[category].shamefullySendNext(null),
         buyTWAP: () => buyTWAP$.shamefullySendNext(null),
         clearPosition: () => clearPosition$.shamefullySendNext(null),
+        orderDisabled(section: string, side: string) {
+            const buttons = findNode(vNode, `div.${section}-order-buttons.order-buttons`);
+            return buttons && findNode(buttons, `button.${side}-button`)?.data?.attrs?.disabled;
+        },
         get clearPositionDisabled() { return findNode(vNode, "button.clear-button")?.data?.attrs?.disabled; },
         get positionRequests() { return polls.filter(({ category }) => category === "positions"); },
         clearOrders: () => clearOrders$.shamefullySendNext(null),

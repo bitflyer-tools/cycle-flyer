@@ -1,4 +1,4 @@
-import {isValidMarketOrderSize} from "./order";
+import {isValidOrderSize} from "./order";
 
 export interface TwapOrder {
     error?: string;
@@ -40,7 +40,7 @@ export const canStart = (twap: TwapOrder, size: number): boolean =>
     && Number.isInteger(twap.slices)
     && twap.slices > 0
     && isValidTwapInterval(twap.interval)
-    && isValidMarketOrderSize(allocateSlices(size, twap.slices).baseSize);
+    && isValidOrderSize(allocateSlices(size, twap.slices).baseSize);
 
 const orderPrecision = 8;
 

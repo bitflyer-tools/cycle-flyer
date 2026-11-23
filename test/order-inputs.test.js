@@ -51,8 +51,11 @@ function orderPanel(currentPrice = 0) {
   sinks.state.addListener({ next: (reduce) => state$.shamefullySendNext(state = { ...reduce(state), currentPrice }) });
   return {
     requests,
-    preset: () => events.get('.size-presets .size-preset:click')
-      .shamefullySendNext({ currentTarget: { dataset: { size: '0.01' } } }),
+    preset: () => {
+      const presets = vnode.children[0].children.find((node) => node.sel === 'div.size-presets');
+      const { dataset } = presets.children[0].data;
+      events.get('.size-presets .size-preset:click').shamefullySendNext({ currentTarget: { dataset } });
+    },
     input: (field, value) => events.get(`#${field}-input:input`).shamefullySendNext({ target: { value } }),
     click: (type, side) => events.get(`.${type}-order-buttons .${side}-button:click`).shamefullySendNext({}),
     disabled: (type) => vnode.children.flatMap((section) => section.children || [])
@@ -74,7 +77,7 @@ test('allows market orders after choosing a size preset and disables limit order
 test('rejects invalid numeric inputs without emitting an HTTP request or entering the pending state', () => {
   const panel = orderPanel();
   panel.input('price', '50000');
-  ['abc', '', '-1', 'Infinity'].forEach((size) => {
+  ['abc', '', '-1', 'Infinity', '0.0009'].forEach((size) => {
     panel.input('size', size);
     ['market', 'limit'].forEach((type) => {
       assert.deepEqual(panel.disabled(type), [true, true]);
@@ -108,7 +111,7 @@ test('preserves the HTTP payloads for valid market and limit orders on both side
         child_order_type: type.toUpperCase(),
         product_code: 'FX_BTC_JPY',
         side: side.toUpperCase(),
-        size: 0.01,
+        size: 0.001,
         ...(type === 'limit' ? { price: 50000 } : {}),
       });
       assert.deepEqual(panel.disabled(type), [true, true]);
