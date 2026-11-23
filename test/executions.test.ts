@@ -176,10 +176,11 @@ test("loads on demand, appends older fills and replaces the list on refresh", as
     assert.match(panel.dom, /1e-8/);
     assert.match(panel.dom, /JRF20250322-095740-000001/);
 
+    const loadedRows = panel.state.rows.slice();
     panel.older();
     assert.equal(new URL(panel.requests[1].url).searchParams.get("before"), "10");
-    panel.page([execution(10), execution(8), execution(9)]);
-    assert.deepEqual(panel.state.rows.slice(-3).map((row) => row.id), [10, 9, 8]);
+    panel.page([execution(10), execution(8), execution(100), execution(9), execution(8)]);
+    assert.deepEqual(panel.state.rows, [...loadedRows, execution(9), execution(8)]);
     panel.older();
     assert.equal(panel.requests.length, 2);
 
