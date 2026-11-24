@@ -88,10 +88,10 @@ const createOutcome = (
         }))
         .replaceError((error) => {
             const timedOut = isWriteDeadlineError(error);
-            const statusCode = error?.statusCode;
-            const hasHTTPError = !!error?.response || (statusCode >= 400 && statusCode < 600);
+            const statusCode = error?.response?.status ?? error?.status ?? error?.statusCode;
+            const hasDefinitiveHTTPError = statusCode >= 400 && statusCode < 500 && statusCode !== 408;
             const isClosePosition = (stream$.request as { closePositionSize?: number }).closePositionSize !== undefined;
-            const rejected = isClosePosition ? isOrderRejection(error?.response) : hasHTTPError;
+            const rejected = isClosePosition ? isOrderRejection(error?.response) : hasDefinitiveHTTPError;
             const status: OrderStatus = !timedOut && rejected ? "failed" : "unconfirmed";
             return Stream.of({ status, timedOut });
         })
