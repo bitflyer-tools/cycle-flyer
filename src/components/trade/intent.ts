@@ -1,4 +1,4 @@
-import {RequestOptions} from "@cycle/http";
+import {RequestOptions, Response} from "@cycle/http";
 import {Stream} from "xstream";
 import debounce from "xstream/extra/debounce";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
@@ -13,6 +13,17 @@ import {ActiveParentOrder, parentOrderDetails} from "./parentOrderDetails";
 import {parentOrderPages} from "./parentOrderPages";
 import {pollResponse} from "./pollResponse";
 import {PositionRequest} from "./request";
+
+interface PositionPollResult {
+    position: Position;
+    positionCredentialVersion: number;
+    positionCloseId: symbol | undefined;
+}
+
+interface PositionPollOutcome {
+    result?: PositionPollResult;
+    failed: boolean;
+}
 
 export interface Actions {
     onCancelOrders$: Stream<null>;
@@ -61,29 +72,57 @@ export const intent = (sources: Sources, cancellationOutcome$ = Stream.never<Can
 
     const positionsResponses$ = sources.HTTP.select("positions");
 
-    const onPositionsLoaded$ = pollResponse(positionsResponses$, (json, response) =>
-        isCurrent(response) && isPositionList(json) ? {
-            position: new Position(json),
-            positionCredentialVersion: (response.request as AccountRequest).credentialVersion!,
-            positionCloseId: (response.request as PositionRequest).positionCloseId,
-        } : undefined);
+    const decodePositions = (response: Response): PositionPollOutcome => {
+        let json: unknown;
+        try {
+            json = JSON.parse(response.text);
+        } catch {
+            return { failed: true };
+        }
+        if (!isCurrent(response) || !isPositionList(json)) { return { failed: false }; }
+        return {
+            failed: false,
+            result: {
+                position: new Position(json as object[]),
+                positionCredentialVersion: (response.request as AccountRequest).credentialVersion!,
+                positionCloseId: (response.request as PositionRequest).positionCloseId,
+            },
+        };
+    };
 
-    // Only a transport error or unparsable body means the account's actual position is unknown;
-    // a stale credential or a well-formed-but-unexpected shape is just a response pollResponse
-    // silently ignores, so it must not mark the still-valid snapshot as stale.
-    const onPositionsRefreshFailed$ = positionsResponses$
-        .map((response$) => response$
-            .map((response) => {
-                try {
-                    JSON.parse(response.text);
-                    return false;
-                } catch {
-                    return true;
-                }
-            })
-            .replaceError(() => Stream.of(true)))
+    let nextPositionsRequest = 0;
+    let latestAppliedPositionsRequest = 0;
+
+    // A transport error or unparsable body means the account's actual position is unknown and must
+    // mark the snapshot stale; a stale credential or a well-formed-but-unexpected shape stays
+    // completely invisible here too, exactly like pollResponse, so it never advances the sequence
+    // counter below and can't make a still-valid snapshot look stale or superseded. Sharing one
+    // request/latestApplied sequence between the success and failure signals (instead of polling the
+    // same responses twice, independently) keeps a late failure from an already-superseded poll from
+    // overriding a newer snapshot that was already applied.
+    const positionsPolled$ = positionsResponses$
+        .map((response$) => {
+            const request = ++nextPositionsRequest;
+            return response$
+                .map(decodePositions)
+                .replaceError((): Stream<PositionPollOutcome> => Stream.of({ failed: true }))
+                .filter((outcome) => outcome.failed || outcome.result !== undefined)
+                .map((outcome) => ({ request, outcome }));
+        })
         .compose(flattenConcurrently)
-        .filter(Boolean)
+        .filter(({ request }) => {
+            if (request <= latestAppliedPositionsRequest) { return false; }
+            latestAppliedPositionsRequest = request;
+            return true;
+        })
+        .map(({ outcome }) => outcome);
+
+    const onPositionsLoaded$ = positionsPolled$
+        .map(({ result }) => result)
+        .filter((result): result is PositionPollResult => result !== undefined);
+
+    const onPositionsRefreshFailed$ = positionsPolled$
+        .filter(({ failed }) => failed)
         .mapTo(null);
 
     return {
