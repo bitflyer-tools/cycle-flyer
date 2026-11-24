@@ -57,16 +57,19 @@ const slices = (
     return Stream.create<TwapSliceRequest>({
         start: (listener) => {
             let gateOpen = true;
+            let produced = 0;
             const queue: number[] = [];
             const produce = (tick: number): void => {
                 if (!isTwapActive()) { return; }
                 gateOpen = false;
+                produced += 1;
                 listener.next({
                     ...twapSliceOrder(tick + 1 < largerCount ? largerSize : baseSize, schedule.side, schedule.id),
                     isTwapActive,
                     onDispatched: release,
                     onSigningFailure,
                 });
+                if (produced === state.twap.slices) { listener.complete(); }
             };
             const release = (): void => {
                 gateOpen = true;
@@ -79,7 +82,6 @@ const slices = (
                 .filter(isTwapActive)
                 .subscribe({
                     next: (tick) => { if (gateOpen) { produce(tick); } else { queue.push(tick); } },
-                    complete: () => listener.complete(),
                 });
         },
         stop: () => subscription?.unsubscribe(),
