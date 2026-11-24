@@ -452,6 +452,74 @@ for (const [statusCode, expectedStatus] of [[400, "failed"], [200, "unconfirmed"
     });
 }
 
+for (const [statusCode, expectedStatus] of [[400, "failed"], [408, "unconfirmed"], [504, "unconfirmed"]] as const) {
+    test(`records an HTTP ${statusCode} limit-order response as ${expectedStatus} and settles a single POST`, { timeout: 5_000 }, async (t) => {
+        const paths: string[] = [];
+        const server = createServer((request, response) => {
+            request.resume();
+            paths.push(new URL(request.url!, "http://localhost").pathname);
+            response.writeHead(statusCode, { "Content-Type": "application/json" });
+            response.end(JSON.stringify({ status: -1, error_message: "Gateway error" }));
+        });
+        t.after(() => {
+            server.closeAllConnections();
+            server.close();
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const { port } = server.address() as { port: number };
+        const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${port}`, writeDeadline: 2_000, apis: [] });
+
+        order.buy("limit");
+        await order.waitForHistoryCount(1);
+
+        equal(order.state.isOrdering, false);
+        deepEqual(paths, ["/v1/me/sendchildorder"]);
+        deepEqual(order.sounds, ["failure"]);
+        deepEqual(order.histories.map(({ name, status }) => [name, status]), [["Limit", expectedStatus]]);
+
+        order.buy("limit");
+        await order.waitForHistoryCount(2);
+        deepEqual(paths, ["/v1/me/sendchildorder", "/v1/me/sendchildorder"]);
+    });
+}
+
+for (const [statusCode, expectedStatus] of [[400, "failed"], [504, "unconfirmed"]] as const) {
+    test(`records an HTTP ${statusCode} cancellation response as ${expectedStatus} and settles a single POST`, { timeout: 5_000 }, async (t) => {
+        const paths: string[] = [];
+        const server = createServer((request, response) => {
+            request.resume();
+            paths.push(new URL(request.url!, "http://localhost").pathname);
+            response.writeHead(statusCode, { "Content-Type": "application/json" });
+            response.end(JSON.stringify({ status: -1, error_message: "Gateway error" }));
+        });
+        t.after(() => {
+            server.closeAllConnections();
+            server.close();
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const { port } = server.address() as { port: number };
+        const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${port}`, writeDeadline: 2_000, apis: [] });
+        order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getorders", category: "orders", _namespace: ["trade"] })
+            .succeed([{ side: "BUY", size: 0.1, price: 100 }]);
+
+        order.clearOrders();
+        await order.waitForHistoryCount(1);
+
+        equal(order.state.isOrdering, false);
+        deepEqual(paths, ["/v1/me/cancelallchildorders"]);
+        deepEqual(order.sounds, ["failure"]);
+        deepEqual(order.histories.map(({ description, status }) => [description, status]), [
+            ["All child orders", expectedStatus],
+        ]);
+
+        order.clearOrders();
+        await order.waitForHistoryCount(2);
+        deepEqual(paths, ["/v1/me/cancelallchildorders", "/v1/me/cancelallchildorders"]);
+    });
+}
+
 test("routes account executions without changing session history or reviving stale responses", async (t) => {
     await saveCredentials({ key: "account-a", secret: "secret-a" });
     t.after(() => saveCredentials(null));
@@ -515,6 +583,31 @@ test("records a rejected limit order and permits a retry", (t) => {
     deepEqual(order.requests.map(({ category }) => category), ["limit-order", "limit-order"]);
     equal(order.state.isOrdering, true);
 });
+
+for (const statusCode of [408, 504] as const) {
+    test(`records an unconfirmed limit order after an HTTP ${statusCode} gateway error and permits a resubmission`, (t) => {
+        const order = setup(t, "0.01", { apis: ["Date", "setInterval", "setTimeout"] });
+        order.enterPrice("900");
+
+        order.buy("limit");
+        deepEqual(order.requests.map(({ category }) => category), ["limit-order"]);
+        equal(order.state.isOrdering, true);
+
+        order.respondTo(order.requests[0]).reject(statusCode);
+        equal(order.state.isOrdering, false);
+        deepEqual(order.sounds, ["failure"]);
+        deepEqual(order.histories, [{
+            createdAt: new Date(1000),
+            description: "BUY / 0.03 / 900",
+            name: "Limit",
+            status: "unconfirmed",
+        }]);
+
+        order.buy("limit");
+        deepEqual(order.requests.map(({ category }) => category), ["limit-order", "limit-order"]);
+        equal(order.state.isOrdering, true);
+    });
+}
 
 test("reports mixed Clear Orders results and stays locked until every request settles", async (t) => {
     const order = setup(t);
@@ -704,6 +797,27 @@ test("reports a failed bulk cancellation and keeps the child orders visible", (t
         ["All child orders", "failed"],
     ]);
     deepEqual(order.sounds, ["failure"]);
+});
+
+test("records an unconfirmed bulk cancellation after an HTTP 504 gateway error and permits a resubmission", (t) => {
+    const order = setup(t);
+    order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getorders", category: "orders", _namespace: ["trade"] }).succeed([
+        { price: 100, side: "BUY", outstanding_size: 0.01 },
+    ]);
+    const childOrders = order.tradeState.orders;
+
+    order.clearOrders();
+    order.respondTo(order.requests[0]).reject(504);
+
+    equal(order.state.isOrdering, false);
+    equal(order.tradeState.orders, childOrders);
+    deepEqual(order.histories.map(({ description, status }) => [description, status]), [
+        ["All child orders", "unconfirmed"],
+    ]);
+    deepEqual(order.sounds, ["failure"]);
+
+    order.clearOrders();
+    equal(order.requests.length, 2);
 });
 
 test("keeps a parent order visible when its cancellation times out", async (t) => {
@@ -1233,7 +1347,7 @@ test("leaving Trade cancels a TWAP slice that is still signing", async (t) => {
 });
 
 for (const route of ["/", "/setting"]) {
-    for (const outcome of ["success", "failed", "deadline", "disconnect"] as const) {
+    for (const outcome of ["success", "failed", "deadline", "disconnect", "gatewayTimeout"] as const) {
         test(`records and notifies a TWAP slice once when it settles on ${route} (${outcome})`, async (t) => {
             const order = setup(t, "0.01", { twapSlices: 2 });
             await saveCredentials({ key: "test-key", secret: "test-secret" });
@@ -1258,9 +1372,11 @@ for (const route of ["/", "/setting"]) {
             if (outcome === "success") response.succeed({ child_order_acceptance_id: "JRF-TWAP" });
             else if (outcome === "failed") response.reject();
             else if (outcome === "disconnect") response.disconnect();
+            else if (outcome === "gatewayTimeout") response.reject(504);
             else response.fail(Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }));
 
-            const status = outcome === "deadline" || outcome === "disconnect" ? "unconfirmed" : outcome;
+            const status = outcome === "deadline" || outcome === "disconnect" || outcome === "gatewayTimeout"
+                ? "unconfirmed" : outcome;
 
             const sounds = [status === "success" ? "success" : "failure"];
             deepEqual(order.sounds, sounds);
