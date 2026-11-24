@@ -100,7 +100,7 @@ const createOutcome = (
         });
 
 const isDefinitiveHTTPRejection = (error: any): boolean => {
-    const status = error?.response?.status ?? error?.status;
+    const status = error?.response?.status ?? error?.status ?? error?.statusCode;
     return typeof status === "number" && isDefinitiveClientRejection(status);
 };
 
