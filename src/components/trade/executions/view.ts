@@ -17,7 +17,7 @@ export const view = (state: State, scrollTop: number): VNode => section(".execut
         style: { "--execution-row-height": `${rowHeight}px`, maxHeight: `${viewportHeight}px` },
     }, [
         table({ attrs: { "aria-rowcount": state.rows.length + 1 } }, [
-            thead([tr({ attrs: { "aria-rowindex": 1 } }, ["Exchange time", "Side", "Price (JPY)", "Size (bFX)", "Order acceptance ID"]
+            thead([tr({ attrs: { "aria-rowindex": 1 } }, ["Exchange time", "Side", "Price (JPY)", "Size (BTC-CFD)", "Order acceptance ID"]
                 .map((label) => th({ attrs: { scope: "col" } }, label)))]),
             tbody(windowRows(state.rows, scrollTop)),
         ]),
