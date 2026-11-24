@@ -36,7 +36,10 @@ test("renders valid recent trades from history and live updates once per executi
     t.mock.timers.tick(100);
 
     const scroll = child(rendered, "div.recent-trades-scroll");
-    const rows = child(child(scroll, "table"), "tbody").children as VNode[];
+    const table = child(scroll, "table");
+    const headerRow = (child(table, "thead").children as VNode[])[0];
+    assert.equal((headerRow.children as VNode[])[3].text, "Size (BTC-CFD)");
+    const rows = child(table, "tbody").children as VNode[];
     assert.deepEqual(rows.map((row) => row.key), [12, 10]);
     assert.deepEqual(rows.map((row) => (row.children as VNode[])[1].text), ["—", "BUY"]);
     assert.deepEqual(rows.map((row) => child(child(row, "td"), "time").data?.attrs?.datetime), [

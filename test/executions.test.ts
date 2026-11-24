@@ -170,6 +170,7 @@ test("loads on demand, appends older fills and replaces the list on refresh", as
     panel.page(Array.from({ length: executionPageSize }, (_, index) => execution(10 + index)));
     assert.equal(panel.state.rows[0].id, executionPageSize + 9);
     assert.equal(panel.state.before, 10);
+    assert.match(panel.dom, /Size \(BTC-CFD\)/);
     assert.match(panel.dom, /2025-03-22T09:57:40.397/);
     assert.match(panel.dom, /BUY/);
     assert.match(panel.dom, /12,000,000|12000000/);
