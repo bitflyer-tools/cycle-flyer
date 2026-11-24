@@ -205,6 +205,8 @@ test('retries authentication once after a dropped acknowledgement, subscribing t
   await new Promise(setImmediate);
   assert.equal(authAcks.length, 2);
 
+  authAcks[0]();
+  assert.deepEqual(socket.subscriptions, [boardChannel, executionChannel]);
   authAcks[1]();
   await new Promise(setImmediate);
   assert.deepEqual(socket.subscriptions, [boardChannel, executionChannel, 'child_order_events', 'parent_order_events']);

@@ -6,15 +6,15 @@ export const privateChannelNames = ["child_order_events", "parent_order_events"]
 export const authAckDeadlineMs = 10_000;
 export const authRetryDelaysMs = [1_000, 2_000, 5_000, 10_000];
 
-export const authenticate = (client: Socket, onAuthenticated: () => void): void => {
+export const authenticate = async (client: Socket, onAuthenticated: () => void): Promise<void> => {
     const connectionId = client.id;
     const version = currentCredentialVersion();
     if (version === null) { return; }
     const isCurrent = () => client.connected && client.id === connectionId && version === currentCredentialVersion();
 
-    const attempt = (retryCount: number): void => {
+    const attempt = async (retryCount: number): Promise<void> => {
         if (!isCurrent()) { return; }
-        signRealtime().then((params) => {
+        return signRealtime().then((params) => {
             if (!params || !isCurrent()) { return; }
             let settled = false;
             const deadline = setTimeout(() => {
@@ -45,5 +45,5 @@ export const authenticate = (client: Socket, onAuthenticated: () => void): void 
         setTimeout(() => attempt(retryCount + 1), delay);
     };
 
-    attempt(0);
+    return attempt(0);
 };
