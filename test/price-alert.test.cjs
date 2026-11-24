@@ -64,6 +64,7 @@ function setup(t) {
     return {
         get currentPrice() { return state.trade.currentPrice; },
         get alert() { return state.trade.summaryComponentState.priceAlert; },
+        get summary() { return state.trade.summaryComponentState; },
         dismiss: () => dismiss$.shamefullySendNext({}),
         execute: (...prices) => executionBatch$.shamefullySendNext(prices.map((price) => ({ price, side: "BUY" }))),
         navigate: (pathname) => history$.shamefullySendNext({ pathname }),
@@ -142,6 +143,33 @@ test("a downward alert ignores the first execution and the opposite crossing", (
     trade.execute(97);
     assert.equal(trade.alert, null);
     assert.deepEqual(trade.sounds, ["price-alert"]);
+});
+
+test("a non-crossing batch reuses the summary state object", (t) => {
+    const trade = setup(t);
+    trade.execute(99);
+    trade.set(100, "up");
+    const summaryBefore = trade.summary;
+
+    trade.execute(50, 60, 70);
+    assert.equal(trade.summary, summaryBefore);
+    assert.equal(trade.alert.status, "active");
+});
+
+test("an invalid price in a batch breaks the crossing sequence", (t) => {
+    const trade = setup(t);
+    trade.set(100, "down");
+    trade.execute(101);
+    assert.equal(trade.alert.status, "active");
+
+    trade.execute(0, 98);
+    assert.equal(trade.alert.status, "active");
+    assert.equal(trade.currentPrice, 98);
+
+    trade.execute(102);
+    trade.execute(98);
+    assert.equal(trade.alert.status, "triggered");
+    assert.equal(trade.alert.price, 98);
 });
 
 test("leaving Trade clears the alert and the crossing baseline on return", (t) => {
