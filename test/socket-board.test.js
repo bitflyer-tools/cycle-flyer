@@ -13,6 +13,7 @@ const { outputFiles } = buildSync({
       'export { saveCredentials } from "./src/credentials";',
       'export { SocketIOSource } from "./src/drivers/socketIODriver";',
       'export { BoardComponent } from "./src/components/trade/board";',
+      'export { authAckDeadlineMs, authRetryDelaysMs } from "./src/drivers/privateChannel";',
     ].join('\n'),
     resolveDir: path.join(__dirname, '..'),
   },
@@ -27,13 +28,14 @@ const testModule = { exports: {} };
 runInNewContext(outputFiles[0].text, {
   module: testModule,
   require,
-  setTimeout,
+  setTimeout: (...args) => setTimeout(...args),
+  clearTimeout: (...args) => clearTimeout(...args),
   setInterval: (...args) => setInterval(...args),
   clearInterval: (...args) => clearInterval(...args),
   crypto: webcrypto,
   localStorage: { getItem: () => null, removeItem: () => {} },
 });
-const { SocketIOSource, BoardComponent, saveCredentials } = testModule.exports;
+const { SocketIOSource, BoardComponent, saveCredentials, authAckDeadlineMs, authRetryDelaysMs } = testModule.exports;
 
 const snapshotChannel = 'lightning_board_snapshot_FX_BTC_JPY';
 const boardChannel = 'lightning_board_FX_BTC_JPY';
@@ -172,6 +174,129 @@ test('ignores events from the previous account until the new socket authenticate
 
   assert.deepEqual(authentications.map(({ key }) => key), ['account-a', 'account-b']);
   assert.deepEqual(events, ['a', 'b']);
+});
+
+test('retries authentication once after a dropped acknowledgement, subscribing to private channels only once', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  await saveCredentials({ key: 'test-account', secret: 'test-secret' });
+  t.after(() => saveCredentials(null));
+
+  const socket = makeSocket();
+  const subscribe = socket.emit;
+  const authAcks = [];
+  socket.emit = (event, value, done) => {
+    if (event === 'auth') { authAcks.push(done); } else { subscribe(event, value); }
+  };
+  const source = new SocketIOSource(socket);
+  const events = [];
+  const listener = source.childOrderEvent$.subscribe({ next: (event) => events.push(event.id) });
+  t.after(() => listener.unsubscribe());
+
+  socket.receive('connect');
+  await new Promise(setImmediate);
+  assert.equal(authAcks.length, 1);
+  assert.deepEqual(socket.subscriptions, [boardChannel, executionChannel]);
+
+  t.mock.timers.tick(authAckDeadlineMs);
+  await new Promise(setImmediate);
+  assert.equal(authAcks.length, 1);
+
+  t.mock.timers.tick(authRetryDelaysMs[0]);
+  await new Promise(setImmediate);
+  assert.equal(authAcks.length, 2);
+
+  authAcks[1]();
+  await new Promise(setImmediate);
+  assert.deepEqual(socket.subscriptions, [boardChannel, executionChannel, 'child_order_events', 'parent_order_events']);
+
+  socket.receive('child_order_events', [{ id: 'after-retry' }]);
+  assert.deepEqual(events, ['after-retry']);
+});
+
+test('retries authentication after the acknowledgement reports a transient error', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  await saveCredentials({ key: 'test-account', secret: 'test-secret' });
+  t.after(() => saveCredentials(null));
+
+  const socket = makeSocket();
+  const subscribe = socket.emit;
+  const authAcks = [];
+  socket.emit = (event, value, done) => {
+    if (event === 'auth') { authAcks.push(done); } else { subscribe(event, value); }
+  };
+  new SocketIOSource(socket);
+
+  socket.receive('connect');
+  await new Promise(setImmediate);
+  assert.equal(authAcks.length, 1);
+
+  authAcks[0]({ message: 'temporary error' });
+  await new Promise(setImmediate);
+  assert.equal(authAcks.length, 1);
+
+  t.mock.timers.tick(authRetryDelaysMs[0]);
+  await new Promise(setImmediate);
+  assert.equal(authAcks.length, 2);
+
+  authAcks[1]();
+  await new Promise(setImmediate);
+  assert.deepEqual(socket.subscriptions, [boardChannel, executionChannel, 'child_order_events', 'parent_order_events']);
+});
+
+test('disconnecting cancels a pending authentication retry', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  await saveCredentials({ key: 'test-account', secret: 'test-secret' });
+  t.after(() => saveCredentials(null));
+
+  const socket = makeSocket();
+  const subscribe = socket.emit;
+  const authAcks = [];
+  socket.emit = (event, value, done) => {
+    if (event === 'auth') { authAcks.push(done); } else { subscribe(event, value); }
+  };
+  new SocketIOSource(socket);
+
+  socket.receive('connect');
+  await new Promise(setImmediate);
+  assert.equal(authAcks.length, 1);
+
+  socket.receive('disconnect');
+  t.mock.timers.tick(authAckDeadlineMs + authRetryDelaysMs[0]);
+  await new Promise(setImmediate);
+  assert.equal(authAcks.length, 1);
+});
+
+test('replacing credentials cancels a pending authentication retry for the old session', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  await saveCredentials({ key: 'account-a', secret: 'test-secret' });
+  t.after(() => saveCredentials(null));
+
+  const socket = makeSocket();
+  socket.connected = true;
+  socket.disconnect = () => socket;
+  socket.connect = () => { socket.receive('connect'); return socket; };
+  const subscribe = socket.emit;
+  const authAcks = [];
+  socket.emit = (event, value, done) => {
+    if (event === 'auth') { authAcks.push({ key: value.api_key, done }); } else { subscribe(event, value); }
+  };
+  new SocketIOSource(socket);
+
+  socket.receive('connect');
+  await new Promise(setImmediate);
+  assert.equal(authAcks.length, 1);
+  assert.equal(authAcks[0].key, 'account-a');
+
+  await saveCredentials({ key: 'account-b', secret: 'test-secret' });
+  await new Promise(setImmediate);
+  assert.equal(authAcks.length, 2);
+  assert.equal(authAcks[1].key, 'account-b');
+  authAcks[1].done();
+  await new Promise(setImmediate);
+
+  t.mock.timers.tick(authAckDeadlineMs + authRetryDelaysMs[0]);
+  await new Promise(setImmediate);
+  assert.equal(authAcks.length, 2);
 });
 
 test('polls REST offline and synchronizes previews only from a fresh connected snapshot', async (t) => {
