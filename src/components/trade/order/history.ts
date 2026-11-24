@@ -4,7 +4,7 @@ import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {isCurrentAccountRequest, isWriteDeadlineError} from "../../../drivers/httpDriver";
 import {TwapSliceRequest} from "../../../http";
 import {createOrderHistory, OrderHistory} from "../../../models/orderHistory";
-import {isOrderRejection} from "./rejection";
+import {isDefinitiveClientRejection, isOrderRejection} from "./rejection";
 
 type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 
@@ -88,10 +88,8 @@ const createOutcome = (
         }))
         .replaceError((error) => {
             const timedOut = isWriteDeadlineError(error);
-            const statusCode = error?.statusCode;
-            const hasHTTPError = !!error?.response || (statusCode >= 400 && statusCode < 600);
             const isClosePosition = (stream$.request as { closePositionSize?: number }).closePositionSize !== undefined;
-            const rejected = isClosePosition ? isOrderRejection(error?.response) : hasHTTPError;
+            const rejected = isClosePosition ? isOrderRejection(error?.response) : isDefinitiveHTTPRejection(error);
             const status: OrderStatus = !timedOut && rejected ? "failed" : "unconfirmed";
             return Stream.of({ status, timedOut });
         })
@@ -100,6 +98,11 @@ const createOutcome = (
             const histories = createHistories(stream$.request.send as string, status);
             return { status, histories: timedOut ? histories.map((history) => ({ ...history, timedOut })) : histories };
         });
+
+const isDefinitiveHTTPRejection = (error: any): boolean => {
+    const status = error?.response?.status ?? error?.status;
+    return typeof status === "number" && isDefinitiveClientRejection(status);
+};
 
 const orderNames: { [conditionType: string]: string } = {
     LIMIT: "Limit",

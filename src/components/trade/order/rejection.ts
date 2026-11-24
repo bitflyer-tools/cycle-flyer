@@ -1,9 +1,11 @@
 import {Response} from "@cycle/http";
 
+export const isDefinitiveClientRejection = (status: number): boolean =>
+    status >= 400 && status < 500 && status !== 408;
+
 export const isOrderRejection = (response?: Response): boolean => {
     const status = response?.status ?? 0;
-    const hasDefinitiveStatus = (status >= 200 && status < 300)
-        || (status >= 400 && status < 500 && status !== 408);
+    const hasDefinitiveStatus = (status >= 200 && status < 300) || isDefinitiveClientRejection(status);
     if (!response || !hasDefinitiveStatus) return false;
     try {
         const body = JSON.parse(response.text);

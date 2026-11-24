@@ -516,6 +516,26 @@ test("records a rejected limit order and permits a retry", (t) => {
     equal(order.state.isOrdering, true);
 });
 
+for (const gatewayStatus of [408, 502, 504] as const) {
+    test(`records an unconfirmed limit order after an ambiguous HTTP ${gatewayStatus} and permits a retry without auto-retrying`, (t) => {
+        const order = setup(t, "0.01", { apis: ["Date", "setInterval", "setTimeout"] });
+        order.enterPrice("900");
+
+        order.buy("limit");
+        deepEqual(order.requests.map(({ category }) => category), ["limit-order"]);
+        equal(order.state.isOrdering, true);
+
+        order.respondTo(order.requests[0]).reject(gatewayStatus);
+        equal(order.state.isOrdering, false);
+        deepEqual(order.histories.map(({ status }) => status), ["unconfirmed"]);
+        deepEqual(order.sounds, ["failure"]);
+
+        order.buy("limit");
+        deepEqual(order.requests.map(({ category }) => category), ["limit-order", "limit-order"]);
+        equal(order.state.isOrdering, true);
+    });
+}
+
 test("reports mixed Clear Orders results and stays locked until every request settles", async (t) => {
     const order = setup(t);
     await saveCredentials({ key: "test-key", secret: "test-secret" });
@@ -705,6 +725,29 @@ test("reports a failed bulk cancellation and keeps the child orders visible", (t
     ]);
     deepEqual(order.sounds, ["failure"]);
 });
+
+for (const gatewayStatus of [408, 502, 504] as const) {
+    test(`records an unconfirmed bulk cancellation after an ambiguous HTTP ${gatewayStatus} and keeps the child orders visible`, (t) => {
+        const order = setup(t);
+        order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getorders", category: "orders", _namespace: ["trade"] }).succeed([
+            { price: 100, side: "BUY", outstanding_size: 0.01 },
+        ]);
+        const childOrders = order.tradeState.orders;
+
+        order.clearOrders();
+        order.respondTo(order.requests[0]).reject(gatewayStatus);
+
+        equal(order.state.isOrdering, false);
+        equal(order.tradeState.orders, childOrders);
+        deepEqual(order.histories.map(({ description, status }) => [description, status]), [
+            ["All child orders", "unconfirmed"],
+        ]);
+        deepEqual(order.sounds, ["failure"]);
+
+        order.clearOrders();
+        deepEqual(order.requests.map(({ category }) => category), ["cancel-orders", "cancel-orders"]);
+    });
+}
 
 test("keeps a parent order visible when its cancellation times out", async (t) => {
     const order = setup(t);
