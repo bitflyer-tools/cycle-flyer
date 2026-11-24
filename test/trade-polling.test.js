@@ -179,10 +179,15 @@ for (const { component, category, first, invalid, next, read, expected } of test
         assert.equal(state, lastValidState);
       }
       respond('upstream unavailable');
-      assert.equal(state, lastValidState);
+      // positions also marks positionStale on an unparsable response, so from here on only the
+      // position itself (not the whole state reference) is guaranteed to stay unchanged.
+      const assertUnaffected = () => category === 'positions'
+        ? assert.equal(read(state), expected[0])
+        : assert.equal(state, lastValidState);
+      assertUnaffected();
       for (const value of invalid) {
         respond(JSON.stringify(value));
-        assert.equal(state, lastValidState);
+        assertUnaffected();
       }
 
       respond(JSON.stringify(next));

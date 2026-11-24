@@ -59,18 +59,28 @@ export const intent = (sources: Sources, cancellationOutcome$ = Stream.never<Can
         sources.socket.parentOrderEvent$, sources.socket.reconnect$,
     );
 
-    const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json, response) =>
+    const positionsResponses$ = sources.HTTP.select("positions");
+
+    const onPositionsLoaded$ = pollResponse(positionsResponses$, (json, response) =>
         isCurrent(response) && isPositionList(json) ? {
             position: new Position(json),
             positionCredentialVersion: (response.request as AccountRequest).credentialVersion!,
             positionCloseId: (response.request as PositionRequest).positionCloseId,
         } : undefined);
 
-    // A malformed, mismatched, or errored response never updates onPositionsLoaded$, so Clear Position
-    // would otherwise keep trusting a position snapshot that may no longer reflect the account.
-    const onPositionsRefreshFailed$ = sources.HTTP.select("positions")
+    // Only a transport error or unparsable body means the account's actual position is unknown;
+    // a stale credential or a well-formed-but-unexpected shape is just a response pollResponse
+    // silently ignores, so it must not mark the still-valid snapshot as stale.
+    const onPositionsRefreshFailed$ = positionsResponses$
         .map((response$) => response$
-            .map((response) => !(isCurrent(response) && isPositionList(JSON.parse(response.text))))
+            .map((response) => {
+                try {
+                    JSON.parse(response.text);
+                    return false;
+                } catch {
+                    return true;
+                }
+            })
             .replaceError(() => Stream.of(true)))
         .compose(flattenConcurrently)
         .filter(Boolean)
