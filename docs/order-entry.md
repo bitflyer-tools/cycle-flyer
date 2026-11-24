@@ -15,6 +15,7 @@ recent valid trade price received by the app.
 | **Stop** | Size must be at least 0.001 BTC-CFD and the trigger price must be positive. A buy trigger must be above the current price, and a sell trigger must be below it. |
 | **Ranged IFDOCO** | Size must be at least 0.001 BTC-CFD and **Price width** must be positive. **Profit / Loss Ratio** must be numeric and is clamped to 0–100. Both calculated exit prices must be positive. |
 | **TWAP** | **Slices** must be a positive whole number. **Interval (sec)** must be greater than 0 and at most 2,147,483.647 seconds. Every slice must be at least 0.001 BTC-CFD. |
+| **Clear Position** | The position's absolute size must be at least 0.001 BTC-CFD. A remainder below that minimum cannot be cleared; [bitFlyer requires it to reach the minimum first](https://bitflyer.com/en-jp/faq/4-25). |
 
 ## Ranged IFDOCO
 

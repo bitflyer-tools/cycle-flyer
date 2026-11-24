@@ -982,6 +982,36 @@ test("keeps Clear Position disabled until a full fill is confirmed", async (t) =
     equal(order.requests.length, 1);
 });
 
+test("blocks Clear Position below the minimum order size for a long or short remainder", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    const positions = order.positionRequests[0];
+
+    order.respondTo(positions).succeed([{ side: "BUY", size: 0.0005, price: 40000 }]);
+    equal(order.tradeState.position.size, 0.0005);
+    equal(order.clearPositionDisabled, true);
+    match(order.rendered(), /cannot be cleared/);
+    order.clearPosition();
+    equal(order.requests.length, 0);
+
+    order.respondTo(positions).succeed([{ side: "SELL", size: 0.0005, price: 40000 }]);
+    equal(order.tradeState.position.size, -0.0005);
+    equal(order.clearPositionDisabled, true);
+    match(order.rendered(), /cannot be cleared/);
+    order.clearPosition();
+    equal(order.requests.length, 0);
+
+    order.respondTo(positions).succeed([{ side: "SELL", size: 0.001, price: 40000 }]);
+    equal(order.tradeState.position.size, -0.001);
+    equal(order.clearPositionDisabled, false);
+    doesNotMatch(order.rendered(), /cannot be cleared/);
+    order.clearPosition();
+    equal(order.requests.length, 1);
+    const { side, size, child_order_type } = JSON.parse(order.requests[0].send as string);
+    deepEqual({ side, size, child_order_type }, { side: "BUY", size: 0.001, child_order_type: "MARKET" });
+});
+
 test("closes the new short position after a matching refresh confirms a reversal", async (t) => {
     const order = setup(t);
     await saveCredentials({ key: "test-key", secret: "test-secret" });
