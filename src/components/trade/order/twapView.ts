@@ -36,6 +36,8 @@ const twapButtons = (state: State, canSign: boolean): VNode[] =>
     isRunning(state.twap)
         ? [button(".cancel-button", "Cancel TWAP")]
         : [
-            button(".sell-button", { attrs: { disabled: !canSign || !canStart(state.twap, state.size) } }, "Sell"),
-            button(".buy-button", { attrs: { disabled: !canSign || !canStart(state.twap, state.size) } }, "Buy"),
+            button(".sell-button",
+                { attrs: { disabled: !canSign || !canStart(state.twap, state.size, state.accountType) } }, "Sell"),
+            button(".buy-button",
+                { attrs: { disabled: !canSign || !canStart(state.twap, state.size, state.accountType) } }, "Buy"),
         ];

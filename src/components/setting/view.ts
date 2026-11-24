@@ -1,5 +1,6 @@
-import {button, div, form, h3, input, label, p, VNode} from "@cycle/dom";
+import {button, div, form, h3, input, label, option, p, select, VNode} from "@cycle/dom";
 import Stream from "xstream";
+import {defaultAccountType, maximumOrderSizeByAccountType} from "../../models/order";
 import {State} from "./model";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
@@ -25,6 +26,15 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
             div(".sound-enabled", [
                 label({ attrs: { for: "sound-enabled-input" } }, "Sound"),
                 input("#sound-enabled-input", { props: { type: "checkbox", checked: state.soundEnabled } }),
+            ]),
+            div(".account-type", [
+                label({ attrs: { for: "account-type-input" } }, "Account type"),
+                select("#account-type-input", { props: { value: state.accountType ?? defaultAccountType } }, [
+                    option({ props: { value: "individual" } },
+                        `Individual (max ${maximumOrderSizeByAccountType.individual} BTC-CFD per order)`),
+                    option({ props: { value: "corporate" } },
+                        `Corporate (max ${maximumOrderSizeByAccountType.corporate} BTC-CFD per order)`),
+                ]),
             ]),
         ]),
     );

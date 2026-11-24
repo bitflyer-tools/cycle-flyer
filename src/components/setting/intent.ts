@@ -2,10 +2,14 @@ import {MainDOMSource} from "@cycle/dom";
 import Stream from "xstream";
 import {initializeCredentials, saveCredentials} from "../../credentials";
 import {soundEnabledStorageKey} from "../../drivers/soundDriver";
+import {AccountType, accountTypeStorageKey, defaultAccountType} from "../../models/order";
+import {loadStoredValue} from "../../storage";
 import {Sources} from "./index";
 
 export interface Actions {
     credentialsMessage$: Stream<string>;
+    onAccountTypeChanged$: Stream<AccountType>;
+    onAccountTypeLoaded$: Stream<AccountType>;
     onSoundEnabledLoaded$: Stream<boolean>;
     onSoundToggled$: Stream<boolean>;
 }
@@ -39,9 +43,19 @@ export const intent = (sources: Sources): Actions => {
         .events("change")
         .map((event) => (event.target as HTMLInputElement).checked);
 
+    const onAccountTypeLoaded$ = loadStoredValue(sources.storage, accountTypeStorageKey)
+        .take(1)
+        .map((value) => value === "corporate" ? "corporate" : defaultAccountType);
+
+    const onAccountTypeChanged$ = dom.select("#account-type-input")
+        .events("change")
+        .map((event) => (event.target as HTMLSelectElement).value === "corporate" ? "corporate" : defaultAccountType);
+
     return {
         credentialsMessage$: Stream.merge(migrationMessage$, Stream.merge(saveMessage$, clearMessage$)
             .map((message) => Stream.fromPromise(message)).flatten()),
+        onAccountTypeChanged$,
+        onAccountTypeLoaded$,
         onSoundEnabledLoaded$,
         onSoundToggled$,
     };

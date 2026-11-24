@@ -42,6 +42,6 @@ export const twapIntent = (sources: Sources, state$: Stream<State>): TwapActions
         clicks(sources.DOM, ".twap-order-buttons", ".buy-button").mapTo("BUY" as const),
         clicks(sources.DOM, ".twap-order-buttons", ".sell-button").mapTo("SELL" as const),
     ).compose(sampleCombine(state$))
-        .filter(([_, state]) => hasApiCredentials() && canStart(state.twap, state.size))
+        .filter(([_, state]) => hasApiCredentials() && canStart(state.twap, state.size, state.accountType))
         .map(([side]) => ({ id: Symbol(), side })),
 });

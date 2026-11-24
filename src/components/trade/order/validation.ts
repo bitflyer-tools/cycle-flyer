@@ -7,7 +7,7 @@ export const canClearPosition = (state: State): boolean =>
     && state.positionCredentialVersion === currentCredentialVersion();
 
 export const isValidOrderSize = (state: State): boolean =>
-    meetsOrderSizeMinimum(state.size);
+    meetsOrderSizeMinimum(state.size, state.accountType);
 
 export const isValidLimitOrder = (state: State): boolean =>
     isValidOrderSize(state) && isPositiveFinite(state.price);

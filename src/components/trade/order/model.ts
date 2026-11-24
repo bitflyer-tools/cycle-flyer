@@ -1,6 +1,7 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import {IFDOCOrder} from "../../../models/ifdocoOrder";
+import {defaultAccountType} from "../../../models/order";
 import {Position} from "../../../models/position";
 import {defaultTwapOrder} from "../../../models/twapOrder";
 import {State} from "./index";
@@ -9,6 +10,7 @@ import {twapModel} from "./twapModel";
 import {TwapLifecycle} from "./twapRequest";
 
 const defaultState: State = {
+    accountType: defaultAccountType,
     currentPrice: 0,
     histories: [],
     ifdocoOrder: new IFDOCOrder(10000, 50),
@@ -26,6 +28,9 @@ export const model = (
     actions: Actions, isOrdering$: Stream<boolean>, twapLifecycle$ = Stream.never<TwapLifecycle>(),
 ): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of((state: State) => state || defaultState);
+
+    const accountTypeReducer$ = actions.onAccountTypeLoaded$
+        .map((accountType) => (state: State) => ({ ...state, accountType }));
 
     const isOrderingReducer$ = isOrdering$
         .map((isOrdering) => (state: State) => ({ ...state, isOrdering }));
@@ -47,6 +52,7 @@ export const model = (
 
     return Stream.merge(
         defaultReducer$,
+        accountTypeReducer$,
         isOrderingReducer$,
         priceReducer$,
         priceWidthReducer$,

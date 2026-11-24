@@ -85,6 +85,67 @@ for (const type of ["stop", "ifdoco"] as const) {
     }
 }
 
+for (const type of ["stop", "ifdoco"] as const) {
+    for (const side of ["buy", "sell"] as const) {
+        test(`enforces the BTC-CFD maximum for ${type} ${side} orders`, (t) => {
+            const order = setup(t, "10000");
+            const section = type === "ifdoco" ? "ranged-ifdoco" : type;
+            const submit = side === "buy" ? () => order.buy(type)
+                : type === "stop" ? order.sellStop : order.sellIFDOCO;
+            order.enterTriggerPrice(side === "buy" ? "11000000" : "9000000");
+            order.enterSize("10.00000001");
+            equal(order.orderDisabled(section, side), true);
+            submit();
+            deepEqual(order.requests, []);
+
+            order.enterSize("10");
+            equal(order.orderDisabled(section, side), false);
+            submit();
+            deepEqual(order.requests.map(({ category }) => category), [`${type}-order`]);
+            const payload = JSON.parse(order.requests[0].send as string);
+            deepEqual(payload.parameters.map(({ size }: { size: number }) => size),
+                type === "stop" ? [10] : [10, 10, 10]);
+        });
+    }
+}
+
+test("enforces bitFlyer's per-order maximum for market orders", (t) => {
+    const order = setup(t);
+    order.enterSize("41");
+    equal(order.orderDisabled("market", "buy"), true);
+    order.buy("market");
+    deepEqual(order.requests, []);
+
+    order.enterSize("10");
+    equal(order.orderDisabled("market", "buy"), false);
+    order.buy("market");
+    equal(order.requests.length, 1);
+    equal(JSON.parse(order.requests[0].send as string).size, 10);
+});
+
+test("blocks a one-slice TWAP above the per-order maximum", async (t) => {
+    const order = setup(t, "0.01", { twapSlices: 1 });
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+
+    order.enterSize("41");
+    equal(order.orderDisabled("twap", "buy"), true);
+    order.buyTWAP();
+    equal(order.requests.length, 0);
+});
+
+test("schedules a TWAP whose total exceeds the per-order maximum when every slice is within range", async (t) => {
+    const order = setup(t, "0.01", { twapSlices: 3 });
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+
+    order.enterSize("21");
+    equal(order.orderDisabled("twap", "buy"), false);
+    order.buyTWAP();
+    equal(order.requests.length, 1);
+    equal(JSON.parse(order.requests[0].send as string).size, 7);
+});
+
 test("blocks both IFDOCO sides until the first public execution arrives", (t) => {
     const order = setup(t, "10000", { initialPrice: null });
     order.buy("ifdoco");

@@ -13,8 +13,8 @@ import {twapRequest} from "../src/components/trade/order/twapRequest";
 import {Sources} from "../src/components/trade";
 import {hasApiCredentials, initializeCredentials} from "../src/credentials";
 import {TwapSliceRequest} from "../src/http";
-import {minimumOrderSize} from "../src/models/order";
-import {isRunning} from "../src/models/twapOrder";
+import {maximumOrderSizeByAccountType, minimumOrderSize} from "../src/models/order";
+import {canStart, isRunning} from "../src/models/twapOrder";
 
 before(async () => {
     const storage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
@@ -155,6 +155,56 @@ test("manual market orders and one-slice TWAP share the same minimum", (context)
     [twap.marketBuy, twap.marketSell, twap.buy].forEach((click) => click.shamefullySendNext(null));
     deepStrictEqual(manualRequests.map(({ send }) => JSON.parse(send as string).size), [0.001, 0.001]);
     deepStrictEqual(twap.requests.map(({ response$ }) => JSON.parse(response$.request.send as string).size), [0.001]);
+});
+
+test("manual market orders and one-slice TWAP share the same individual maximum", (context) => {
+    const twap = createTwap(context, 1, 1);
+    const manualRequests: RequestOptions[] = [];
+    const submission = orderRequests(twap.actions, twap.state$).subscribe({
+        next: ({ requests }) => manualRequests.push(...requests as RequestOptions[]),
+    });
+    let orderView: VNode;
+    const rendering = view(twap.state$).subscribe({ next: (node) => { orderView = node; } });
+    context.after(() => { submission.unsubscribe(); rendering.unsubscribe(); });
+
+    const disabled = (selector: string) => orderView.children!
+        .flatMap((section) => (section as VNode).children ?? [])
+        .filter((node) => (node as VNode).sel === `div.${selector}.order-buttons`)
+        .flatMap((node) => (node as VNode).children!)
+        .map((button) => (button as VNode).data!.attrs!.disabled);
+
+    twap.setSize("10.00000001");
+    deepStrictEqual(disabled("market-order-buttons"), [true, true]);
+    deepStrictEqual(disabled("twap-order-buttons"), [true, true]);
+    [twap.marketBuy, twap.marketSell, twap.buy, twap.sell].forEach((click) => click.shamefullySendNext(null));
+    strictEqual(manualRequests.length, 0);
+    strictEqual(twap.requests.length, 0);
+
+    twap.setSize("10");
+    deepStrictEqual(disabled("market-order-buttons"), [false, false]);
+    deepStrictEqual(disabled("twap-order-buttons"), [false, false]);
+    [twap.marketBuy, twap.marketSell, twap.buy].forEach((click) => click.shamefullySendNext(null));
+    deepStrictEqual(manualRequests.map(({ send }) => JSON.parse(send as string).size), [10, 10]);
+    deepStrictEqual(twap.requests.map(({ response$ }) => JSON.parse(response$.request.send as string).size), [10]);
+});
+
+test("a TWAP total above the per-order maximum can still run when every slice is within range", (context) => {
+    const twap = createTwap(context, 1, 3);
+    twap.setSize("21");
+    strictEqual(canStart(twap.state.twap, twap.state.size, twap.state.accountType), true);
+
+    twap.buy.shamefullySendNext(null);
+    context.mock.timers.tick(1000);
+    context.mock.timers.tick(1000);
+    const sizes = twap.requests.map(({ response$ }) => JSON.parse(response$.request.send as string).size);
+    deepStrictEqual(sizes, [7, 7, 7]);
+});
+
+test("canStart applies the corporate maximum when the account type is corporate", () => {
+    const twap = { error: undefined, interval: 1, remaining: 0, slices: 1, totalSlices: 0 };
+    strictEqual(canStart(twap, maximumOrderSizeByAccountType.individual + 1, "individual"), false);
+    strictEqual(canStart(twap, maximumOrderSizeByAccountType.individual + 1, "corporate"), true);
+    strictEqual(canStart(twap, maximumOrderSizeByAccountType.corporate + 1, "corporate"), false);
 });
 
 const createTwap = (context: TestContext, interval = 1, slices = 2) => {

@@ -10,7 +10,21 @@ export class Order {
     }
 }
 
+export type AccountType = "corporate" | "individual";
+
+export const defaultAccountType: AccountType = "individual";
+
+export const accountTypeStorageKey = "account-type";
+
+// https://bitflyer.com/ja-jp/faq/4-27
+export const maximumOrderSizeByAccountType: Record<AccountType, number> = {
+    corporate: 40,
+    individual: 10,
+};
+
 export const minimumOrderSize = 0.001;
 
-export const isValidOrderSize = (size: number): boolean =>
-    Number.isFinite(size) && size >= minimumOrderSize;
+export const isValidOrderSize = (size: number, accountType: AccountType = defaultAccountType): boolean =>
+    Number.isFinite(size)
+    && size >= minimumOrderSize
+    && size <= maximumOrderSizeByAccountType[accountType];

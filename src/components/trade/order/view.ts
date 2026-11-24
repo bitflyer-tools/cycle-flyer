@@ -35,7 +35,8 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
     );
 
 const sameViewInputs = (previous: State, next: State): boolean =>
-    Object.is(previous.currentPrice, next.currentPrice)
+    previous.accountType === next.accountType
+    && Object.is(previous.currentPrice, next.currentPrice)
     && previous.isOrdering === next.isOrdering
     && sameMarketFills(previous.marketFills, next.marketFills)
     && previous.orderSigningError === next.orderSigningError
