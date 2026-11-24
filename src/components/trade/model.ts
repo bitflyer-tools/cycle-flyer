@@ -86,18 +86,26 @@ const startTradeSession = (state: State = defaultState): State => ({
     summaryComponentState: state.summaryComponentState && { ...state.summaryComponentState, priceAlert: null },
 });
 
-const applyExecutions = (state: State, executions: Execution[], time: Date): State =>
-    executions.reduce((next, { price }) => applyExecution(next, price, time), state);
-
-const applyExecution = (state: State, price: number, time: Date): State => {
-    if (!isExecutionPrice(price)) { return { ...state, lastExecutionPrice: 0 }; }
-
+const applyExecutions = (state: State, executions: Execution[], time: Date): State => {
     const summary = state.summaryComponentState;
-    const priceAlert = summary && checkPriceAlert(summary.priceAlert, state.lastExecutionPrice, price, time);
+    let currentPrice = state.currentPrice;
+    let lastExecutionPrice = state.lastExecutionPrice;
+    let priceAlert = summary ? summary.priceAlert : null;
+
+    for (const { price } of executions) {
+        if (!isExecutionPrice(price)) {
+            lastExecutionPrice = 0;
+            continue;
+        }
+        priceAlert = summary ? (checkPriceAlert(priceAlert, lastExecutionPrice, price, time) ?? null) : priceAlert;
+        currentPrice = price;
+        lastExecutionPrice = price;
+    }
+
     return {
         ...state,
-        currentPrice: price,
-        lastExecutionPrice: price,
-        summaryComponentState: summary && { ...summary, priceAlert: priceAlert ?? null },
+        currentPrice,
+        lastExecutionPrice,
+        summaryComponentState: summary && (priceAlert === summary.priceAlert ? summary : { ...summary, priceAlert }),
     };
 };
