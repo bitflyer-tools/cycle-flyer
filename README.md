@@ -38,6 +38,8 @@ You can view the order book without an API key.
 2. Click **Save credentials** and wait for the **Credentials saved.** confirmation.
 3. Return to **Trade** to check your account summary, including collateral and position information. You can verify access without placing an order.
 
+See the [FAQ and troubleshooting](docs/faq.md) guide if credentials won't save or an order shows as unconfirmed.
+
 ## Releases
 
 Prepare a release from an up-to-date `master`. Run `npm version patch -m 'chore: release v%s'` to update both manifests and create the version commit and tag. Use `minor` or `major` for the corresponding version bump. Push the version commit to `master`, then push the matching `vMAJOR.MINOR.PATCH` tag. The tag starts the desktop builds and publishes their artifacts and generated notes to GitHub Releases.
