@@ -7,6 +7,8 @@ The [bitFlyer minimum order size](https://bitflyer.com/ja-jp/faq/trade_bitcoin)
 is 0.001 BTC-CFD.
 For **Stop** and **Ranged IFDOCO**, the current price comes from the most
 recent valid trade price received by the app.
+See [FAQ and troubleshooting](faq.md) for what "Unconfirmed" and "✗" mean in
+the order history.
 
 | Section | Fields and validation |
 | --- | --- |
