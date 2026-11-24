@@ -546,7 +546,7 @@ test('Settings shows both account types with their maximum order size and the sa
     node.sel === selector ? node : node.children?.map((child) => find(child, selector)).find(Boolean);
   const select = find(vnode, 'select#account-type-input');
   assert.equal(select.data.props.value, 'corporate');
-  assert.deepEqual(select.children.map((option) => option.text), [
+  assert.deepEqual(Array.from(select.children, (option) => option.text), [
     'Individual (max 10 BTC-CFD per order)',
     'Corporate (max 40 BTC-CFD per order)',
   ]);
