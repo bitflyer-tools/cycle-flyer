@@ -164,6 +164,7 @@ const resetAccount: Reducer<RootState> = (state) => {
             orderComponentState: trade.orderComponentState && { ...trade.orderComponentState, isOrdering: false },
             position: new Position([]),
             positionCredentialVersion: undefined,
+            positionStale: true,
             positionClose: undefined,
         },
     };

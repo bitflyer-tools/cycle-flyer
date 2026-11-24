@@ -1,6 +1,7 @@
 import {RequestOptions} from "@cycle/http";
 import {Stream} from "xstream";
 import debounce from "xstream/extra/debounce";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {AccountRequest, isCurrentAccountRequest} from "../../drivers/httpDriver";
 import {Execution} from "../../models/execution";
 import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
@@ -24,6 +25,7 @@ export interface Actions {
     onParentOrderListSettled$: Stream<null>;
     parentOrderRequests$: Stream<RequestOptions>;
     onPositionsLoaded$: Stream<{ position: Position; positionCredentialVersion: number; positionCloseId: symbol | undefined }>;
+    onPositionsRefreshFailed$: Stream<null>;
 }
 
 export const intent = (sources: Sources, cancellationOutcome$ = Stream.never<CancellationOutcome>()): Actions => {
@@ -64,6 +66,16 @@ export const intent = (sources: Sources, cancellationOutcome$ = Stream.never<Can
             positionCloseId: (response.request as PositionRequest).positionCloseId,
         } : undefined);
 
+    // A malformed, mismatched, or errored response never updates onPositionsLoaded$, so Clear Position
+    // would otherwise keep trusting a position snapshot that may no longer reflect the account.
+    const onPositionsRefreshFailed$ = sources.HTTP.select("positions")
+        .map((response$) => response$
+            .map((response) => !(isCurrent(response) && isPositionList(JSON.parse(response.text))))
+            .replaceError(() => Stream.of(true)))
+        .compose(flattenConcurrently)
+        .filter(Boolean)
+        .mapTo(null);
+
     return {
         onCancelOrders$: orderLists$.filter((orders) => orders === ordersCanceled).mapTo(null),
         onExecutionBatch$: sources.socket.executionBatch$,
@@ -74,6 +86,7 @@ export const intent = (sources: Sources, cancellationOutcome$ = Stream.never<Can
         onParentOrdersLoaded$,
         onParentOrderListSettled$: pages.settled$,
         onPositionsLoaded$,
+        onPositionsRefreshFailed$,
         parentOrderRequests$: Stream.merge(pages.requests$, details.requests$),
     };
 };

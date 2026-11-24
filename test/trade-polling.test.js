@@ -193,6 +193,43 @@ for (const { component, category, first, invalid, next, read, expected } of test
   });
 }
 
+test('marks the position snapshot stale after a failed refresh and fresh again after a valid one', () => {
+  const responses = Stream.create();
+  const idle = Stream.never();
+  const actions = components.trade_intent({
+    socket: { childOrderEvent$: idle, executionBatch$: idle, parentOrderEvent$: idle, reconnect$: idle },
+    HTTP: { select: (category) => category === 'positions' ? responses : idle },
+  });
+  let state;
+  const subscription = components.trade_model(actions).subscribe({
+    next: (reduce) => { state = reduce(state); },
+    error: (error) => { throw error; },
+  });
+  const respond = (text) => responses.shamefullySendNext(Stream.of({ text, request: { credentialVersion: components.currentCredentialVersion() } }));
+  const fail = () => responses.shamefullySendNext(Stream.throw(new Error('Position poll failed')));
+
+  try {
+    respond(JSON.stringify([{ side: 'BUY', price: 100, size: 0.1 }]));
+    assert.equal(state.positionStale, false);
+
+    fail();
+    assert.equal(state.positionStale, true);
+
+    respond(JSON.stringify([]));
+    assert.equal(state.positionStale, false);
+    assert.equal(state.position.size, 0);
+
+    respond('not json');
+    assert.equal(state.positionStale, true);
+
+    respond(JSON.stringify([{ side: 'SELL', price: 100, size: 0.2 }]));
+    assert.equal(state.positionStale, false);
+    assert.equal(state.position.size, -0.2);
+  } finally {
+    subscription.unsubscribe();
+  }
+});
+
 const positionCloseId = Symbol('position close');
 const accountPolls = [
   ['orders', 'onOrdersLoaded$', (price) => [{ price }], (orders) => orders[0].price],
