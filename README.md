@@ -3,6 +3,7 @@
 Cycle Flyer is a desktop trading client for bitFlyer Lightning users who want to monitor the live `FX_BTC_JPY` order book and place orders.
 
 [![CI](https://github.com/bitflyer-tools/cycle-flyer/actions/workflows/ci.yml/badge.svg)](https://github.com/bitflyer-tools/cycle-flyer/actions/workflows/ci.yml)
+[![GitHub release](https://img.shields.io/github/v/release/bitflyer-tools/cycle-flyer.svg)](https://github.com/bitflyer-tools/cycle-flyer/releases/latest)
 [![Libraries.io dependency status for GitHub repo](https://img.shields.io/librariesio/github/bitflyer-tools/cycle-flyer.svg)](https://libraries.io/github/bitflyer-tools/cycle-flyer)
 ![GitHub](https://img.shields.io/github/license/bitflyer-tools/cycle-flyer.svg)
 
