@@ -1,5 +1,5 @@
 import {button, div, form, input, option, select, VNode} from "@cycle/dom";
-import {PriceAlert} from "../priceAlert";
+import {PriceAlert} from "./priceAlert";
 
 export const priceAlertView = (alert: PriceAlert | null): VNode =>
     div(".price-alert", [

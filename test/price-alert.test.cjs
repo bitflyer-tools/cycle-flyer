@@ -7,7 +7,7 @@ const {routerify} = require("cyclic-router");
 const switchPath = require("switch-path").default;
 const Stream = require("xstream").default;
 const {Root} = require("../src/components");
-const {parsePriceAlertLevel} = require("../src/components/trade/priceAlert");
+const {parsePriceAlertLevel} = require("../src/components/trade/summary/priceAlert");
 const {view} = require("../src/components/trade/summary/view");
 const {Position} = require("../src/models/position");
 

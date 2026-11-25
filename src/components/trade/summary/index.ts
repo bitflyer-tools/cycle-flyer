@@ -1,9 +1,11 @@
 import Stream from "xstream";
+import dropRepeats from "xstream/extra/dropRepeats";
+import {Sound} from "../../../drivers/soundDriver";
 import {OrderHistory} from "../../../models/orderHistory";
 import {Position} from "../../../models/position";
 import {Sinks} from "../../index";
 import {Sources} from "../index";
-import {PriceAlert} from "../priceAlert";
+import {PriceAlert} from "./priceAlert";
 import "./index.styl";
 import {intent} from "./intent";
 import {model} from "./model";
@@ -22,13 +24,21 @@ export interface State {
 export const SummaryComponent = (sources: Sources): Sinks => {
     const actions = intent(sources);
     const reducer$ = model(actions);
-    const view$ = view(sources.state.stream as any);
+    const state$ = sources.state.stream as any as Stream<State>;
+    const view$ = view(state$);
     const request$ = request();
+    const priceAlertTriggeredSound$ = state$
+        .map((state) => state?.priceAlert)
+        .compose(dropRepeats())
+        .drop(1)
+        .filter((alert) => alert?.status === "triggered")
+        .mapTo<Sound>("price-alert");
 
     return {
         DOM: view$,
         HTTP: request$,
         router: Stream.never(),
+        sound: priceAlertTriggeredSound$,
         state: reducer$,
         storage: Stream.never(),
     };
