@@ -18,8 +18,9 @@ Download the latest release from [GitHub Releases](https://github.com/bitflyer-t
 - View collateral, positions, and profit or loss with bitFlyer Lightning API credentials.
 - Place market, limit, stop, and ranged IFDOCO orders.
 - Use TWAP to split a market order into slices submitted at a set interval.
+- Set a one-shot price alert that plays a sound when the price crosses a threshold.
 
-See the [order form reference](docs/order-entry.md) for fields, validation, and TWAP behavior.
+See the [order form reference](docs/order-entry.md) for fields, validation, TWAP behavior, and price alerts.
 
 ## Quick start
 
