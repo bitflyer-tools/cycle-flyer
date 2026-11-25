@@ -94,15 +94,15 @@ test('a credential handler accepts only the main frame of a window it created', 
   );
 
   await assert.rejects(
-    () => handle({ sender: window.webContents, senderFrame: { name: 'iframe' } }),
+    async () => handle({ sender: window.webContents, senderFrame: { name: 'iframe' } }),
     /Invalid credential request sender\./,
   );
   await assert.rejects(
-    () => handle({ sender: {}, senderFrame: window.webContents.mainFrame }),
+    async () => handle({ sender: {}, senderFrame: window.webContents.mainFrame }),
     /Invalid credential request sender\./,
   );
   await assert.rejects(
-    () => handle({ sender: window.webContents, senderFrame: null }),
+    async () => handle({ sender: window.webContents, senderFrame: null }),
     /Invalid credential request sender\./,
   );
 });
