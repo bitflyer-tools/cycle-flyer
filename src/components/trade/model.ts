@@ -83,7 +83,9 @@ const applyExecutions = (state: State, executions: Execution[]): State => {
     let currentPrice = state.currentPrice;
 
     for (const { price } of executions) {
-        if (isExecutionPrice(price)) { currentPrice = price; }
+        if (isExecutionPrice(price)) {
+            currentPrice = price;
+        }
     }
 
     return { ...state, currentPrice };
