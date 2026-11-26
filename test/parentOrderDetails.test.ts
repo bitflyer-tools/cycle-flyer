@@ -324,6 +324,33 @@ test("coalesces periodic and order-event refreshes until all parent order pages 
     strictEqual(trade.listRequests.length, 4);
 });
 
+test("accumulates several full parent order pages into one ordered list once the poll completes", (t) => {
+    t.mock.timers.enable({ apis: ["setInterval"] });
+    const trade = setup(t);
+    const state = observeState(t, trade.actions, trade.cancellations$);
+    trade.list(["old"]);
+    t.mock.timers.tick(10000);
+
+    const page = (highestId: number) => Array.from({ length: parentOrdersPageSize }, (_, index) => ({
+        id: highestId - index, parent_order_id: `parent-${highestId - index}`,
+    }));
+    const firstPage = page(300);
+    const secondPage = page(200);
+    const finalPage = [{ id: 1, parent_order_id: "parent-1" }];
+
+    trade.respond(trade.listRequests[1], firstPage);
+    strictEqual(trade.pageRequests.length, 1);
+    deepStrictEqual(Object.keys(state().parentStopOrders), ["old"]);
+
+    trade.respond(trade.pageRequests[0], secondPage);
+    strictEqual(trade.pageRequests.length, 2);
+    deepStrictEqual(Object.keys(state().parentStopOrders), ["old"]);
+
+    trade.respond(trade.pageRequests[1], finalPage);
+    deepStrictEqual(Object.keys(state().parentStopOrders),
+        [...firstPage, ...secondPage, ...finalPage].map((order) => order.parent_order_id));
+});
+
 [
     { name: "an invalid order", page: [{ id: 1 }] },
     { name: "a repeated cursor", page: Array.from({ length: parentOrdersPageSize }, (_, index) => ({

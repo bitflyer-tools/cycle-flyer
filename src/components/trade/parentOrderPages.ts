@@ -10,7 +10,6 @@ import {ActiveParentOrder} from "./parentOrderDetails";
 const pageTimeoutMs = 15000;
 
 interface ParentOrderList {
-    orders: ActiveParentOrder[];
     sequence: number;
     credentialVersion: number;
 }
@@ -27,19 +26,24 @@ interface PageResult {
 
 export const parentOrderPages = (http: HTTPSource, nextSequence: () => number) => {
     let latestSequence = 0;
+    // One accumulator per poll: pages are pushed in arrival order and flattened only once, when the poll completes.
+    const pagesBySequence = new Map<number, ActiveParentOrder[][]>();
+
     const firstPages$ = http.select("parent-orders")
         .filter((response$) => isCurrentAccountRequest(response$.request))
         .map((response$) => {
+            pagesBySequence.clear();
             latestSequence = nextSequence();
-            return readPage(response$, { orders: [], sequence: latestSequence,
-                credentialVersion: response$.request.credentialVersion! });
+            pagesBySequence.set(latestSequence, []);
+            return readPage(response$, { sequence: latestSequence,
+                credentialVersion: response$.request.credentialVersion! }, pagesBySequence);
         })
         .flatten();
     const nextPages$ = http.select("parent-orders-page")
         .map((response$) => {
             const parentOrderList = (response$.request as PageRequest | undefined)?.parentOrderList;
             return isCurrentAccountRequest(response$.request) && parentOrderList?.sequence === latestSequence
-                ? readPage(response$, parentOrderList)
+                ? readPage(response$, parentOrderList, pagesBySequence)
                 : Stream.empty();
         })
         .compose(flattenConcurrently);
@@ -51,7 +55,12 @@ export const parentOrderPages = (http: HTTPSource, nextSequence: () => number) =
             && (request.category === "parent-orders" || (request.category === "parent-orders-page"
                 && (request as PageRequest).parentOrderList?.sequence === latestSequence)));
     return {
-        loaded$: pages$.filter(({before, failed}) => before === undefined && !failed).map(({list}) => list),
+        loaded$: pages$.filter(({before, failed}) => before === undefined && !failed)
+            .map(({list}) => {
+                const pages = pagesBySequence.get(list.sequence) ?? [];
+                pagesBySequence.delete(list.sequence);
+                return { orders: ([] as ActiveParentOrder[]).concat(...pages), sequence: list.sequence };
+            }),
         settled$: Stream.merge(pages$.filter(({before}) => before === undefined), unsignedPages$,
             credentialsChanging$).mapTo(null),
         requests$: pages$
@@ -62,16 +71,18 @@ export const parentOrderPages = (http: HTTPSource, nextSequence: () => number) =
     };
 };
 
-const readPage = (response$: Stream<Response> & { request?: RequestOptions },
-                  previous: ParentOrderList) => {
+const readPage = (response$: Stream<Response> & { request?: RequestOptions }, previous: ParentOrderList,
+                  pagesBySequence: Map<number, ActiveParentOrder[][]>) => {
     const failure: PageResult = { list: previous, failed: true };
     return Stream.merge(
         Stream.periodic(pageTimeoutMs).mapTo(failure),
-        concat(parsePage(response$, previous).replaceError(() => Stream.empty<PageResult>()), Stream.of(failure)),
+        concat(parsePage(response$, previous, pagesBySequence).replaceError(() => Stream.empty<PageResult>()),
+            Stream.of(failure)),
     ).take(1);
 };
 
-const parsePage = (response$: Stream<Response> & { request?: RequestOptions }, previous: ParentOrderList) =>
+const parsePage = (response$: Stream<Response> & { request?: RequestOptions }, previous: ParentOrderList,
+                   pagesBySequence: Map<number, ActiveParentOrder[][]>) =>
     response$.map((response): PageResult => {
         const page = JSON.parse(response.text) as Array<ActiveParentOrder & { id: number }>;
         if (!Array.isArray(page) || page.some((order) => typeof order?.parent_order_id !== "string")) {
@@ -82,5 +93,6 @@ const parsePage = (response$: Stream<Response> & { request?: RequestOptions }, p
         if (before !== undefined && (!Number.isSafeInteger(before) || (cursor !== null && before >= Number(cursor)))) {
             throw new Error("Invalid active parent order cursor");
         }
-        return { before, list: { ...previous, orders: previous.orders.concat(page) } };
+        pagesBySequence.get(previous.sequence)?.push(page);
+        return { before, list: previous };
     });
