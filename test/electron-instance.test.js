@@ -24,9 +24,10 @@ const launch = (hasLock) => {
   const BrowserWindow = class {
     static getAllWindows() { return windows; }
 
-    constructor() {
+    constructor(options) {
       calls.push('window');
       windows.push(this);
+      this.options = options;
       this.webContents = Object.assign(new EventEmitter(), {
         setWindowOpenHandler() {}, mainFrame: { name: 'main' },
       });
@@ -61,6 +62,23 @@ test('a second process quits before initializing credentials or windows', async 
   markReady();
   await Promise.all(app.listeners('activate').map((listener) => listener()));
   assert.deepEqual(calls, ['lock', 'quit']);
+});
+
+test('creates the window with a hardened, sandboxed renderer and no stray command-line switches', async () => {
+  const { app, markReady, windows } = launch(true);
+  const onSecondInstance = app.listeners('second-instance')[0];
+  const relaunch = onSecondInstance();
+  markReady();
+  await relaunch;
+  assert.equal(windows[0].options.width, 800);
+  assert.equal(windows[0].options.height, 600);
+  assert.deepEqual(windows[0].options.webPreferences, {
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+    preload: path.join(path.dirname(entry), 'preload.js'),
+  });
+  assert.doesNotMatch(readFileSync(entry, 'utf8'), /no-sandbox|disable-sandbox/);
 });
 
 test('a second launch reuses the primary process and restores its window', async () => {
