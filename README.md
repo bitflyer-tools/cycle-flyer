@@ -3,6 +3,7 @@
 Cycle Flyer is a desktop trading client for bitFlyer Lightning users who want to monitor the live `FX_BTC_JPY` order book and place orders.
 
 [![CI](https://github.com/bitflyer-tools/cycle-flyer/actions/workflows/ci.yml/badge.svg)](https://github.com/bitflyer-tools/cycle-flyer/actions/workflows/ci.yml)
+[![GitHub release](https://img.shields.io/github/v/release/bitflyer-tools/cycle-flyer.svg)](https://github.com/bitflyer-tools/cycle-flyer/releases/latest)
 [![Libraries.io dependency status for GitHub repo](https://img.shields.io/librariesio/github/bitflyer-tools/cycle-flyer.svg)](https://libraries.io/github/bitflyer-tools/cycle-flyer)
 ![GitHub](https://img.shields.io/github/license/bitflyer-tools/cycle-flyer.svg)
 
@@ -18,8 +19,9 @@ Download the latest release from [GitHub Releases](https://github.com/bitflyer-t
 - View collateral, positions, and profit or loss with bitFlyer Lightning API credentials.
 - Place market, limit, stop, and ranged IFDOCO orders.
 - Use TWAP to split a market order into slices submitted at a set interval.
+- Set a one-shot price alert that plays a sound when the price crosses a threshold.
 
-See the [order form reference](docs/order-entry.md) for fields, validation, and TWAP behavior.
+See the [order form reference](docs/order-entry.md) for fields, validation, TWAP behavior, and price alerts.
 
 ## Quick start
 
@@ -49,6 +51,10 @@ Prepare a release from an up-to-date `master`. Run `npm version patch -m 'chore:
 Run `npm run lint` to check the TypeScript renderer and Electron JavaScript with ESLint. CI runs the same command and fails on warnings as well as errors.
 
 With Node.js 24, run `npm ci` and then `npm run test:coverage` to run the full test suite and print the coverage report.
+
+## License
+
+[MIT](LICENSE)
 
 ## Author
 
