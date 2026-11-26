@@ -6,7 +6,7 @@ import sampleCombine from "xstream/extra/sampleCombine";
 import {currentCredentialVersion} from "../../../credentials";
 import {AccountRequest, isCurrentAccountRequest, unsignedRequests$} from "../../../drivers/httpDriver";
 import {executionPageSize, getExecutions} from "../../../http";
-import {view} from "./view";
+import {executionColumns, view} from "./view";
 
 export interface Execution {
     id: number;
@@ -80,6 +80,12 @@ export const ExecutionsComponent = ({DOM, HTTP, state}: Sources) => {
         state.stream.filter(({ rows }) => rows.length === 0).mapTo(0),
     ).startWith(0);
 
+    DOM.select(".export-executions-csv").events("click")
+        .compose(sampleCombine(state.stream))
+        .map(([, current]) => current.rows)
+        .filter((rows) => rows.length > 0)
+        .addListener({ next: (rows) => downloadCsv("executions.csv", toCsv(rows)) });
+
     return {
         DOM: Stream.combine(state.stream, scrollTop$).map(([current, scrollTop]) => view(current, scrollTop)),
         HTTP: requests$.filter((request) => request !== null),
@@ -120,6 +126,25 @@ const readPage = (response: Response): Execution[] => {
         throw new Error("Invalid executions response.");
     }
     return page;
+};
+
+export const toCsv = (rows: Execution[]): string => {
+    const lines = [executionColumns, ...rows.map((row) => [
+        row.exec_date, row.side, String(row.price), String(row.size), row.child_order_acceptance_id,
+    ])];
+    return lines.map((line) => line.map(csvField).join(",")).join("\r\n") + "\r\n";
+};
+
+const csvField = (value: string): string =>
+    /[",\r\n]/.test(value) ? `"${value.replace(/"/g, "\"\"")}"` : value;
+
+export const downloadCsv = (filename: string, content: string): void => {
+    const url = URL.createObjectURL(new Blob([content], { type: "text/csv" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
 };
 
 const loadFailed = (error: string): Reducer<State> => (state = initialState) => ({ ...state, error, loading: false });

@@ -7,6 +7,7 @@ import {State} from "../src/components/trade/order";
 import {intent} from "../src/components/trade/order/intent";
 import {model} from "../src/components/trade/order/model";
 import {orderRequests} from "../src/components/trade/order/request";
+import {TwapActions, TwapSchedule} from "../src/components/trade/order/twapIntent";
 import {view} from "../src/components/trade/order/view";
 import {twapSection} from "../src/components/trade/order/twapView";
 import {twapRequest} from "../src/components/trade/order/twapRequest";
@@ -45,6 +46,47 @@ test("settles overlapping slices and returns to idle in either response order", 
             strictEqual(isRunning(twap.state.twap), false);
         }),
     ));
+});
+
+test("withholds a later slice until the earlier slice has been dispatched", (context) => {
+    context.mock.timers.enable({ apis: ["setInterval"] });
+    const start$ = Stream.create<TwapSchedule>();
+    const requests: TwapSliceRequest[] = [];
+    const { requests$ } = twapRequest(
+        { onTwapStarted$: start$, onClickTwapCancelButton$: Stream.never() } as unknown as TwapActions,
+        Stream.of({ size: 0.02, twap: { interval: 1, slices: 2 } } as unknown as State),
+    );
+    const subscription = requests$.subscribe({ next: (request) => requests.push(request) });
+    context.after(() => subscription.unsubscribe());
+
+    start$.shamefullySendNext({ id: Symbol(), side: "BUY" });
+    strictEqual(requests.length, 1);
+
+    context.mock.timers.tick(1000);
+    strictEqual(requests.length, 1);
+
+    requests[0].onDispatched?.();
+    strictEqual(requests.length, 2);
+});
+
+test("discards later slices once an earlier slice fails to sign", (context) => {
+    context.mock.timers.enable({ apis: ["setInterval"] });
+    const start$ = Stream.create<TwapSchedule>();
+    const requests: TwapSliceRequest[] = [];
+    const { requests$ } = twapRequest(
+        { onTwapStarted$: start$, onClickTwapCancelButton$: Stream.never() } as unknown as TwapActions,
+        Stream.of({ size: 0.03, twap: { interval: 1, slices: 3 } } as unknown as State),
+    );
+    const subscription = requests$.subscribe({ next: (request) => requests.push(request) });
+    context.after(() => subscription.unsubscribe());
+
+    start$.shamefullySendNext({ id: Symbol(), side: "BUY" });
+    strictEqual(requests.length, 1);
+
+    requests[0].onSigningFailure?.();
+    requests[0].onDispatched?.();
+    context.mock.timers.tick(2000);
+    strictEqual(requests.length, 1);
 });
 
 test("ignores a canceled schedule's response when tracking replacement progress", (context) => {
@@ -255,6 +297,7 @@ const createTwap = (context: TestContext, interval = 1, slices = 2) => {
             const pending = fakeResponse(input as TwapSliceRequest);
             requests.push(pending);
             responses$.shamefullySendNext(pending.response$);
+            (input as TwapSliceRequest).onDispatched?.();
         },
     });
     context.after(() => { request.unsubscribe(); reducer.unsubscribe(); });
