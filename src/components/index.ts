@@ -26,6 +26,7 @@ export interface Sinks {
     state: Stream<Reducer<any>>;
     router: Stream<any>;
     storage: Stream<StorageRequest>;
+    notification?: Stream<Sound>;
     sound?: Stream<Sound>;
 }
 
@@ -83,6 +84,10 @@ export const Root = (sources: Sources): Sinks => {
         HTTP: Stream.merge(
             routes$.map((sinks) => sinks.HTTP).flatten(),
             orderSubmission.orderRequests$,
+        ),
+        notification: Stream.merge(
+            routes$.map((sinks: Sinks) => sinks.notification || Stream.never()).flatten(),
+            orderSubmission.sound$,
         ),
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
         sound: Stream.merge(
