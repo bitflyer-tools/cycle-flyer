@@ -7,6 +7,8 @@ The [bitFlyer minimum order size](https://bitflyer.com/ja-jp/faq/trade_bitcoin)
 is 0.001 BTC-CFD.
 For **Stop** and **Ranged IFDOCO**, the current price comes from the most
 recent valid trade price received by the app.
+See [FAQ and troubleshooting](faq.md) for what "Unconfirmed" and "✗" mean in
+the order history.
 
 | Section | Fields and validation |
 | --- | --- |
@@ -36,3 +38,16 @@ Edits to the schedule apply to the next run.
 also stops the schedule. If an order request cannot be signed, TWAP stops
 sending the remaining slices, so only some of the planned orders may have been
 sent. Orders already sent to bitFlyer can still execute.
+
+## Price alerts
+
+The account summary panel on **Trade** includes a price alert. Enter a whole
+JPY price and choose **Crosses up** or **Crosses down**, then click
+**Set alert**. The alert fires the first time the price crosses the threshold
+in the chosen direction.
+
+A price alert is one-shot: once it triggers, it disarms and shows the price
+and time it fired until you click **Dismiss alert** or set a new one. Leaving
+**Trade** clears the alert, so you'll need to set it again when you come back.
+Like the execution sound, a triggered alert only plays a sound if **Sound** is
+enabled on **Setting**.

@@ -256,6 +256,37 @@ test("discards an older response when snapshot requests overlap", () => {
     assert.deepEqual(asks(), [[100, 2]]);
 });
 
+test("drops an older response without decoding it once a newer snapshot is installed", () => {
+    const {request, update, asks} = setup();
+    const respondOlder = request();
+    const respondNewer = request();
+
+    respondNewer([{ price: 101, size: 1 }]);
+    update(102, 2);
+
+    const parse = JSON.parse;
+    let decodeCount = 0;
+    JSON.parse = ((text: string) => { decodeCount++; return parse(text); }) as typeof JSON.parse;
+    try {
+        respondOlder([{ price: 100, size: 1 }]);
+    } finally {
+        JSON.parse = parse;
+    }
+
+    assert.equal(decodeCount, 0);
+    assert.deepEqual(asks(), [[101, 1], [102, 2]]);
+});
+
+test("still installs an older response while a newer request is pending", () => {
+    const {request, asks} = setup();
+    const respondOlder = request();
+    request();
+
+    respondOlder([{ price: 100, size: 1 }]);
+
+    assert.deepEqual(asks(), [[100, 1]]);
+});
+
 test("continues with realtime updates and later snapshots after a request fails", () => {
     const {responses$$, request, update, asks} = setup();
     const failed$ = Stream.create<Response>();

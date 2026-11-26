@@ -55,16 +55,19 @@ const snapshotReducers = (
 ): Stream<Reducer<State>> => {
     let nextRequest = 0;
     let latestApplied = 0;
+    const installed$ = Stream.create<number>();
     return responses$$
         .map((response$) => {
             const request = ++nextRequest;
-            return reconcileSnapshot(response$, boardUpdates$, connection$)
+            const supersededBy$ = installed$.filter((installed) => installed > request);
+            return reconcileSnapshot(response$, boardUpdates$, connection$, supersededBy$)
                 .map((snapshot) => ({ request, ...snapshot }));
         })
         .compose(flattenConcurrently)
         .filter(({ request }) => request > latestApplied)
         .map<Reducer<State>>(({ request, board, synchronized }) => {
             latestApplied = request;
+            installed$.shamefullySendNext(request);
             return (state) => state && ({ ...state, board, hasBoardSnapshot: synchronized === true });
         });
 };
@@ -73,6 +76,7 @@ const reconcileSnapshot = (
     response$: Stream<Response>,
     boardUpdates$: Stream<BoardUpdate>,
     connection$: Stream<boolean>,
+    supersededBy$: Stream<number>,
 ): Stream<PendingSnapshot & {board: Board}> => {
     const connectionUpdates$ = connection$.map((connected) => (pending: PendingSnapshot) => ({
         updates: [],
@@ -90,11 +94,11 @@ const reconcileSnapshot = (
     });
 
     return Stream.merge(connectionUpdates$, updates$, snapshot$)
+        .endWhen(Stream.merge(supersededBy$, Stream.periodic(snapshotDeadlineMs).take(1)))
         .fold((pending, update) => update(pending), { updates: [] } as PendingSnapshot)
         .filter((pending) => pending.expired === true || !!pending.board)
         .take(1)
         .filter((pending): pending is PendingSnapshot & {board: Board} => !!pending.board)
-        .endWhen(Stream.periodic(snapshotDeadlineMs).take(1))
         .replaceError(() => Stream.empty());
 };
 
