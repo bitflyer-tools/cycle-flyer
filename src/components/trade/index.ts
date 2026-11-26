@@ -6,23 +6,21 @@ import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
-import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {SocketIOSource} from "../../drivers/socketIODriver";
 import {Sound} from "../../drivers/soundDriver";
 import {Order} from "../../models/order";
-import {OrderHistory, prependOrderHistories} from "../../models/orderHistory";
+import {OrderHistory} from "../../models/orderHistory";
 import {flattenStopOrders, ParentStopOrders} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
 import {BoardComponent, State as BoardComponentState} from "./board/index";
-import {cancellationReducer} from "./cancellation";
 import {ExecutionsComponent, State as ExecutionsComponentState} from "./executions";
 import "./index.styl";
 import {intent} from "./intent";
 import {model} from "./model";
 import {OrderComponent, State as OrderComponentState} from "./order";
-import {cancellationOutcomes, submittedOrderOutcomes, twapOutcomes} from "./order/history";
+import {CancellationOutcome} from "./order/history";
 import {withMarketFillPreview} from "./order/marketFillPreview";
-import {closePositionOutcomes, submissions, unsignedSubmissions$} from "./order/request";
+import {OrderRequestBatch} from "./order/request";
 import {recentTrades} from "./recentTrades";
 import {request} from "./request";
 import {State as SummaryComponentState} from "./summary";
@@ -66,9 +64,10 @@ export interface State {
 }
 
 export const Trade = (
-    sources: Sources, leaveTrade$?: Stream<void>,
+    sources: Sources, isOrdering$: Stream<boolean>, leaveTrade$?: Stream<void>,
+    cancellationOutcome$?: Stream<CancellationOutcome>,
 ): Sinks & {
-    orderRequests: Stream<RequestInput | null>;
+    orderRequests: Stream<OrderRequestBatch>;
 } => {
     const executionsComponent = isolate(ExecutionsComponent, { state: "executionsComponentState" })({
         ...sources,
@@ -111,9 +110,7 @@ export const Trade = (
         order: state && orderState(state),
         book: state?.boardComponentState,
     }));
-    // Deferred to break the cycle: isOrdering$ below is derived from this component's
-    // own orderRequests, so construction must wait until isOrdering$ is assigned.
-    const orderComponent$ = Stream.of(null).map(() => isolate(OrderComponent, {
+    const orderComponent = isolate(OrderComponent, {
         state: {
             get: orderState,
             set: (state: State, orderComponentState: OrderComponentState) => ({
@@ -124,61 +121,12 @@ export const Trade = (
                 price: orderComponentState.price,
             }),
         },
-    })(sources, isOrdering$, leaveTrade$, withMarketFillPreview(orderViewInputs$))).remember();
-
-    const orderComponentDOM$ = orderComponent$.map((orderComponent) => orderComponent.DOM).flatten();
-    const orderComponentHTTP$ = orderComponent$.map((orderComponent) => orderComponent.HTTP).flatten();
-    const orderComponentState$ = orderComponent$.map((orderComponent) => orderComponent.state).flatten();
-    const orderComponentStorage$ = orderComponent$.map((orderComponent) => orderComponent.storage).flatten();
-    const orderRequests$ = orderComponent$.map((orderComponent) => orderComponent.orderRequests).flatten();
-
-    const pending$ = submissions(orderRequests$, sources.orderRequests);
-    const isOrdering$ = pending$.map((pending) => pending !== null);
-
-    const positionCloseReducer$ = pending$.map((pending) => (state: State | undefined) => {
-        if (!state) return state;
-
-        const submission = pending?.find(({ closePositionSize }) => closePositionSize !== undefined);
-        if (submission?.closePositionSize !== undefined) {
-            return { ...state, positionClose: {
-                id: submission.submissionId, size: submission.closePositionSize, settled: false,
-            } };
-        }
-        return state;
-    });
-    const closeOutcomeReducer$ = closePositionOutcomes(sources.orderRequests)
-        .map(({ id, rejected }) => (state: State | undefined) => {
-            const close = state?.positionClose;
-            if (!close || close.id !== id || close.settled) return state;
-            return { ...state, positionClose: { ...close, settled: true, rejected } };
-        });
-    const orderSigningError$ = Stream.merge(
-        pending$.filter((pending) => pending !== null).mapTo(undefined),
-        unsignedSubmissions$.map(({ category }) => (category === "cancel-orders" || category === "cancel-parent-order")
-            ? "Could not sign the request to clear orders. Check your bitFlyer credentials in Settings."
-            : "Could not sign the order. Check your bitFlyer credentials in Settings."),
-    );
-    const orderSigningReducer$ = orderSigningError$.map<Reducer<State>>((orderSigningError) =>
-        (state) => state && { ...state, orderSigningError });
-    const cancellationOutcome$ = cancellationOutcomes(sources.orderRequests);
-    const orderOutcome$ = Stream.merge(
-        submittedOrderOutcomes(sources.orderRequests),
-        twapOutcomes(sources.orderRequests),
-        cancellationOutcome$,
-    );
-    const orderOutcomeReducer$ = orderOutcome$
-        .map<Reducer<State>>((outcome) => {
-            const reconcile = "parentOrderId" in outcome ? cancellationReducer(outcome) : undefined;
-            return (state) => state && {
-                ...(reconcile?.(state) ?? state),
-                histories: prependOrderHistories(state.histories, outcome.histories),
-            };
-        });
+    })(sources, isOrdering$, leaveTrade$, withMarketFillPreview(orderViewInputs$));
 
     const actions = intent(sources, cancellationOutcome$);
     const reducer$ = model(actions);
     const marketTrades = recentTrades(sources, leaveTrade$);
-    const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponentDOM$, executionsComponent.DOM,
+    const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM, executionsComponent.DOM,
         marketTrades.DOM);
     const settledCloseId$ = sources.state.stream
         .map((state) => state?.positionClose?.settled ? state.positionClose.id : undefined)
@@ -186,33 +134,25 @@ export const Trade = (
         .compose(dropRepeats())
         .remember();
     const request$ = request(actions, settledCloseId$);
-    const pendingRequests$ = pending$.filter((pending) => pending !== null)
-        .map((pending) => Stream.fromArray<RequestInput | null>(pending))
-        .compose(flattenConcurrently);
 
     return {
         DOM: view$,
-        HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponentHTTP$,
+        HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP,
             executionsComponent.HTTP, marketTrades.HTTP),
-        orderRequests: pendingRequests$,
+        orderRequests: orderComponent.orderRequests,
         router: Stream.never(),
         sound: Stream.merge(
             actions.onMyExecutionCreated$.mapTo<Sound>("execution"),
             summaryComponent.sound || Stream.never(),
-            orderOutcome$.map(({ status }): Sound => status === "success" ? "success" : "failure"),
         ),
         state: Stream.merge(
             reducer$,
             boardComponent.state,
             executionsComponent.state,
             summaryComponent.state,
-            orderComponentState$,
-            positionCloseReducer$,
-            closeOutcomeReducer$,
-            orderSigningReducer$,
-            orderOutcomeReducer$,
+            orderComponent.state,
         ) as Stream<Reducer<State>>,
-        storage: Stream.merge(boardComponent.storage, orderComponentStorage$),
+        storage: Stream.merge(boardComponent.storage, orderComponent.storage),
     };
 };
 

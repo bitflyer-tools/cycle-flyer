@@ -43,13 +43,13 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
     socket: { connected$: Stream.of(true), board$, executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
-  });
+  }, Stream.of(false));
   let state;
   let tradeNode;
   let orderNode;
   let orderRenders = 0;
   const requests = [];
-  const orderRequestListener = { next: (request) => requests.push(request) };
+  const orderRequestListener = { next: (batch) => requests.push(...batch.requests) };
   const stateListener = { next: (reduce) => state$.shamefullySendNext(state = reduce(state)) };
   const domListener = {
     next: (node) => {
@@ -131,7 +131,7 @@ test('the summary waits for a public execution before valuing an open position',
     socket: { connected$: Stream.of(true), board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
-  });
+  }, Stream.of(false));
   let state;
   let summary;
   const stateSubscription = sinks.state.subscribe({
@@ -186,7 +186,7 @@ test('the Position preset fills the latest size after a position-only poll', (t)
     socket: { connected$: Stream.of(true), board$: never(), executionBatch$: never(), childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
-  });
+  }, Stream.of(false));
   let state;
   let order;
   const stateSubscription = sinks.state.subscribe({
@@ -232,7 +232,7 @@ test('recent market trades seed and refresh without credentials or extra board r
     },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
-  });
+  }, Stream.of(false));
   let state;
   let board;
   let panel;
