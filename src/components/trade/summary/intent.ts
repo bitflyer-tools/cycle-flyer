@@ -1,6 +1,6 @@
 import {MainDOMSource} from "@cycle/dom";
 import {Stream} from "xstream";
-import {isCurrentAccountRequest} from "../../../drivers/httpDriver";
+import {AccountRequest, isCurrentAccountRequest} from "../../../drivers/httpDriver";
 import {Execution} from "../../../models/execution";
 import {Sources} from "../index";
 import {pollResponse} from "../pollResponse";
@@ -16,7 +16,8 @@ export interface Actions {
 
 export const intent = (sources: Sources): Actions => {
     const onCollateralLoaded$ = pollResponse<number>(sources.HTTP.select("collateral"), (json, response) =>
-        isCurrentAccountRequest(response.request) && Number.isFinite(json?.collateral) ? json.collateral : undefined);
+        isCurrentAccountRequest(response.request as AccountRequest) && Number.isFinite(json?.collateral)
+            ? json.collateral : undefined);
 
     const onStateLoaded$ = pollResponse<object>(sources.HTTP.select("status"), (json) =>
         typeof json?.health === "string" && typeof json.state === "string" ? json : undefined);

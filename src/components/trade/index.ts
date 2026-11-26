@@ -144,7 +144,7 @@ export const Trade = (
             actions.onMyExecutionCreated$.mapTo<Sound>("execution"),
             summaryComponent.notification || Stream.never(),
         ),
-        orderRequests: orderComponent.orderRequests,
+        orderRequests: orderComponent.orderRequests as unknown as Stream<OrderRequestBatch>,
         router: Stream.never(),
         sound: Stream.merge(
             actions.onMyExecutionCreated$.mapTo<Sound>("execution"),

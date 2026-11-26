@@ -68,7 +68,9 @@ test("Private executions cap rendered rows and public executions reuse the histo
     const summary$ = Stream.create<SummaryState>();
     const rendered: VNode[] = [];
     view(summary$).addListener({ next: (node) => rendered.push(node) });
-    const render = () => summary$.shamefullySendNext({ ...state(), collateral: 0, marketState: { health: "", state: "" } });
+    const render = () => summary$.shamefullySendNext({
+        ...state(), collateral: 0, marketState: { health: "", state: "" }, priceAlert: null,
+    });
 
     render();
     publicExecutions$.shamefullySendNext([{ side: "BUY", price: 41 }, { side: "SELL", price: 42 }]);
