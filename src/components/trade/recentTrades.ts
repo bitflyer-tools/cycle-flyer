@@ -45,7 +45,7 @@ const render = (rows: MarketExecution[]): VNode => section(".recent-trades",
         h2("Recent Trades"),
         rows.length ? div(".recent-trades-scroll", { attrs: { tabindex: "0", "aria-label": "Trade rows" } }, [
             table([
-                thead([tr(["Time (UTC)", "Side", "Price (JPY)", "Size (bFX)"]
+                thead([tr(["Time (UTC)", "Side", "Price (JPY)", "Size (BTC-CFD)"]
                     .map((label) => th({ attrs: { scope: "col" } }, label)))]),
                 tbody(rows.map(row)),
             ]),

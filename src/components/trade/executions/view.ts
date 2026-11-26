@@ -5,11 +5,14 @@ const rowHeight = 28;
 const viewportHeight = 260;
 const overscan = 4;
 
+export const executionColumns = ["Exchange time", "Side", "Price (JPY)", "Size (BTC-CFD)", "Order acceptance ID"];
+
 export const view = (state: State, scrollTop: number): VNode => section(".executions", { attrs: { "aria-label": "Executions" } }, [
     h2("Executions"),
     button(".refresh-executions", { props: { disabled: state.loading } },
         state.loaded ? "Refresh" : "Load executions"),
     button(".load-older-executions", { props: { disabled: state.loading || state.before === undefined } }, "Load older"),
+    button(".export-executions-csv", { props: { disabled: state.rows.length === 0 } }, "Export CSV"),
     state.error ? p({ attrs: { role: "alert" } }, state.error) : null,
     p(".executions-status", { attrs: { role: "status" } }, status(state)),
     state.rows.length ? div(".executions-scroll", {
@@ -17,7 +20,7 @@ export const view = (state: State, scrollTop: number): VNode => section(".execut
         style: { "--execution-row-height": `${rowHeight}px`, maxHeight: `${viewportHeight}px` },
     }, [
         table({ attrs: { "aria-rowcount": state.rows.length + 1 } }, [
-            thead([tr({ attrs: { "aria-rowindex": 1 } }, ["Exchange time", "Side", "Price (JPY)", "Size (bFX)", "Order acceptance ID"]
+            thead([tr({ attrs: { "aria-rowindex": 1 } }, executionColumns
                 .map((label) => th({ attrs: { scope: "col" } }, label)))]),
             tbody(windowRows(state.rows, scrollTop)),
         ]),

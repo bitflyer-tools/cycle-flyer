@@ -6,6 +6,6 @@ export const numberInput = (selector: string, value: number): VNode =>
         hook: { update: (_: VNode, vnode: VNode) => syncValue(vnode.elm as HTMLInputElement, value) },
     });
 
-const syncValue = (element: HTMLInputElement, value: number) => {
+export const syncValue = (element: HTMLInputElement, value: number) => {
     if (element !== document.activeElement && +element.value !== value) { element.value = value.toString(); }
 };
