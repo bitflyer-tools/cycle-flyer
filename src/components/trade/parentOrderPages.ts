@@ -30,19 +30,19 @@ export const parentOrderPages = (http: HTTPSource, nextSequence: () => number) =
     const pagesBySequence = new Map<number, ActiveParentOrder[][]>();
 
     const firstPages$ = http.select("parent-orders")
-        .filter((response$) => isCurrentAccountRequest(response$.request))
+        .filter((response$) => isCurrentAccountRequest(response$.request as AccountRequest))
         .map((response$) => {
             pagesBySequence.clear();
             latestSequence = nextSequence();
             pagesBySequence.set(latestSequence, []);
             return readPage(response$, { sequence: latestSequence,
-                credentialVersion: response$.request.credentialVersion! }, pagesBySequence);
+                credentialVersion: (response$.request as AccountRequest).credentialVersion! }, pagesBySequence);
         })
         .flatten();
     const nextPages$ = http.select("parent-orders-page")
         .map((response$) => {
             const parentOrderList = (response$.request as PageRequest | undefined)?.parentOrderList;
-            return isCurrentAccountRequest(response$.request) && parentOrderList?.sequence === latestSequence
+            return isCurrentAccountRequest(response$.request as AccountRequest) && parentOrderList?.sequence === latestSequence
                 ? readPage(response$, parentOrderList, pagesBySequence)
                 : Stream.empty();
         })
@@ -51,7 +51,7 @@ export const parentOrderPages = (http: HTTPSource, nextSequence: () => number) =
     const pages$ = Stream.merge(firstPages$, nextPages$)
         .filter(({list}) => list.sequence === latestSequence && isCurrentAccountRequest(list));
     const unsignedPages$ = unsignedRequests$
-        .filter((request) => typeof request !== "string" && isCurrentAccountRequest(request)
+        .filter((request) => typeof request !== "string" && isCurrentAccountRequest(request as AccountRequest)
             && (request.category === "parent-orders" || (request.category === "parent-orders-page"
                 && (request as PageRequest).parentOrderList?.sequence === latestSequence)));
     return {

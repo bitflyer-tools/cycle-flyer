@@ -226,7 +226,7 @@ function cancellationResponse(input: { category?: string; send?: string }) {
 
 function listResponse(orders: object[]) {
     const request = { credentialVersion: currentCredentialVersion()! };
-    return Object.assign(Stream.of({ request, text: JSON.stringify(orders) }), { request });
+    return Object.assign(Stream.of<unknown>({ request, text: JSON.stringify(orders) }), { request });
 }
 
 function childOrderList(price: number) {
