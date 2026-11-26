@@ -1,12 +1,10 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
-import {credentialsChanging$} from "../../credentials";
 import {Execution, isExecutionPrice} from "../../models/execution";
 import {Order} from "../../models/order";
 import {createOrderHistory, prependOrderHistory} from "../../models/orderHistory";
 import {putParentOrder, retainActive} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
-import {initialState as initialExecutionsState} from "./executions";
 import {State} from "./index";
 import {Actions} from "./intent";
 
@@ -69,8 +67,6 @@ export const model = (actions: Actions, connected$ = Stream.never<boolean>()): S
             ? state
             : { ...state, parentStopOrders: putParentOrder(state.parentStopOrders, parentOrder) });
 
-    const resetAccountReducer$ = credentialsChanging$.mapTo(resetAccount);
-
     return Stream.merge(
         defaultReducer$,
         disconnectReducer$,
@@ -80,7 +76,6 @@ export const model = (actions: Actions, connected$ = Stream.never<boolean>()): S
         positionReducer$,
         parentOrderReducer$,
         parentOrdersReducer$,
-        resetAccountReducer$,
     ) as Stream<Reducer<State>>;
 };
 
@@ -88,21 +83,6 @@ const startTradeSession = (state: State = defaultState): State => ({
     ...state,
     currentPrice: null,
 });
-
-const resetAccount: Reducer<State> = (state) => state && {
-    ...state,
-    canceledParentOrderIds: undefined,
-    executionsComponentState: initialExecutionsState,
-    histories: [],
-    orders: [],
-    orderSigningError: undefined,
-    parentStopOrders: {},
-    summaryComponentState: state.summaryComponentState && { ...state.summaryComponentState, collateral: 0 },
-    orderComponentState: state.orderComponentState && { ...state.orderComponentState, isOrdering: false },
-    position: new Position([]),
-    positionCredentialVersion: undefined,
-    positionClose: undefined,
-};
 
 const applyExecutions = (state: State, executions: Execution[]): State => {
     let currentPrice = state.currentPrice;

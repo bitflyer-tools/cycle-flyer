@@ -2,9 +2,12 @@ import {HTTPSource, RequestInput} from "@cycle/http";
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
+import {credentialsChanging$} from "../../credentials";
 import {Sound} from "../../drivers/soundDriver";
 import {prependOrderHistories} from "../../models/orderHistory";
+import {Position} from "../../models/position";
 import {cancellationReducer} from "./cancellation";
+import {initialState as initialExecutionsState} from "./executions";
 import type {State} from "./index";
 import {cancellationOutcomes, submittedOrderOutcomes, twapOutcomes} from "./order/history";
 import {closePositionOutcomes, OrderRequestBatch, submissions, unsignedSubmissions$} from "./order/request";
@@ -71,11 +74,17 @@ export const createOrderSubmissionState = (http: HTTPSource): OrderSubmissionSta
         .map((pending) => Stream.fromArray<RequestInput | null>(pending))
         .compose(flattenConcurrently);
 
+    // Must stay here rather than in Trade's own model: a credential change while on Settings
+    // (Trade unmounted) would otherwise never be observed, leaving the previous account's
+    // executions/position/histories visible when Trade remounts.
+    const resetAccountReducer$ = credentialsChanging$.mapTo(resetAccount);
+
     const reducer$ = Stream.merge(
         positionCloseReducer$,
         closeOutcomeReducer$,
         orderSigningReducer$,
         orderOutcomeReducer$,
+        resetAccountReducer$,
     ) as Stream<Reducer<State>>;
     const sound$ = orderOutcome$.map((outcome): Sound => outcome.status === "success" ? "success" : "failure");
 
@@ -92,4 +101,19 @@ export const createOrderSubmissionState = (http: HTTPSource): OrderSubmissionSta
         sound$,
         submit: (batch) => submissionBatchSignal$.shamefullySendNext(batch),
     };
+};
+
+const resetAccount: Reducer<State> = (state) => state && {
+    ...state,
+    canceledParentOrderIds: undefined,
+    executionsComponentState: initialExecutionsState,
+    histories: [],
+    orders: [],
+    orderSigningError: undefined,
+    parentStopOrders: {},
+    summaryComponentState: state.summaryComponentState && { ...state.summaryComponentState, collateral: 0 },
+    orderComponentState: state.orderComponentState && { ...state.orderComponentState, isOrdering: false },
+    position: new Position([]),
+    positionCredentialVersion: undefined,
+    positionClose: undefined,
 };
