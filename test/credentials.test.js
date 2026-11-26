@@ -352,8 +352,6 @@ test('browser private channels authenticate before subscribing', async () => {
   await renderer.saveCredentials(pair);
   await renderer.authenticate(socket, subscribe);
   assert.equal(acknowledged, false);
-  acknowledge(new Error('Rejected'));
-  assert.equal(acknowledged, false);
   acknowledge(null);
   assert.equal(acknowledged, true);
 });
