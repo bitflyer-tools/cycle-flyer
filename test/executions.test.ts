@@ -7,7 +7,7 @@ import {VNode} from "@cycle/dom";
 import {RequestOptions} from "@cycle/http";
 import {StateSource} from "@cycle/state";
 import Stream from "xstream";
-import {Execution, ExecutionsComponent, State} from "../src/components/trade/executions";
+import {Execution, ExecutionsComponent, State, toCsv} from "../src/components/trade/executions";
 import {saveCredentials} from "../src/credentials";
 import {authorizeRequest, makeHTTPDriver, unsignedRequests$} from "../src/drivers/httpDriver";
 import {executionPageSize, getExecutions} from "../src/http";
@@ -28,6 +28,7 @@ async function setup(t: TestContext, credentials = true, origin?: string) {
     const refresh$ = Stream.create();
     const older$ = Stream.create();
     const scroll$ = Stream.create();
+    const exportCsv$ = Stream.create();
     const responses$ = Stream.create();
     const transport$ = Stream.create<RequestOptions>();
     const state$ = Stream.create<State>().remember();
@@ -37,6 +38,7 @@ async function setup(t: TestContext, credentials = true, origin?: string) {
                 ".refresh-executions": refresh$,
                 ".load-older-executions": older$,
                 ".executions-scroll": scroll$,
+                ".export-executions-csv": exportCsv$,
             })[selector],
         }) } as any,
         HTTP: origin ? makeHTTPDriver(250)(transport$) : { select: (category: string) => {
@@ -72,6 +74,7 @@ async function setup(t: TestContext, credentials = true, origin?: string) {
         failSigning: () => unsignedRequests$.shamefullySendNext(requests.at(-1)!),
         refresh: () => refresh$.shamefullySendNext(null),
         older: () => older$.shamefullySendNext(null),
+        exportCsv: () => exportCsv$.shamefullySendNext(null),
         scroll: (scrollTop: number) => scroll$.shamefullySendNext({ target: { scrollTop } }),
         page: (rows: Execution[]) => respond(Stream.of({ text: JSON.stringify(rows) })),
         fail: (error: object) => respond(Stream.throw(error)),
@@ -264,4 +267,43 @@ test("explains missing credentials without sending a request", async (t) => {
     panel.refresh();
     assert.equal(panel.requests.length, 0);
     assert.match(panel.dom, /Set an API key and secret/);
+});
+
+test("serializes rows to CSV with a header row and escaped fields", () => {
+    const rows: Execution[] = [
+        execution(1),
+        { ...execution(2), child_order_acceptance_id: "JRF,\"2025\"" },
+    ];
+    assert.equal(toCsv(rows), [
+        "Exchange time,Side,Price (JPY),Size (BTC-CFD),Order acceptance ID",
+        "2025-03-22T09:57:40.397,BUY,12000000,1e-8,JRF20250322-095740-000001",
+        "2025-03-22T09:57:40.397,SELL,12000000,1e-8,\"JRF,\"\"2025\"\"\"",
+        "",
+    ].join("\r\n"));
+});
+
+test("disables CSV export until executions have loaded, then downloads a CSV on click", async (t) => {
+    const panel = await setup(t);
+    assert.equal(panel.disabled("button.export-executions-csv"), true);
+
+    panel.exportCsv();
+    panel.refresh();
+    panel.page([execution(2), execution(1)]);
+    assert.equal(panel.disabled("button.export-executions-csv"), false);
+
+    const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+    const link = { href: "", download: "", clicked: 0, click() { this.clicked++; } };
+    Object.defineProperty(globalThis, "document", {
+        configurable: true,
+        value: { createElement: (tag: string) => { assert.equal(tag, "a"); return link; } },
+    });
+    t.after(() => {
+        if (originalDocument) Object.defineProperty(globalThis, "document", originalDocument);
+        else delete (globalThis as any).document;
+    });
+
+    panel.exportCsv();
+    assert.equal(link.clicked, 1);
+    assert.equal(link.download, "executions.csv");
+    assert.match(link.href, /^blob:/);
 });
