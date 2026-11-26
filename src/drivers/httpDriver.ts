@@ -38,13 +38,14 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
         return request;
     }
 
-    const {isTwapActive, onSigningFailure} = request as TwapSliceRequest;
+    const {isTwapActive, onSigningFailure, onDispatched} = request as TwapSliceRequest;
+    const settle = (result: RequestInput | null) => { onDispatched?.(); return result; };
     const version = currentCredentialVersion();
     const expectedVersion = (request as AccountRequest).credentialVersion;
-    if (version === null) { return null; }
+    if (version === null) { return settle(null); }
     const cancelled = () => version !== currentCredentialVersion()
         || (expectedVersion !== undefined && expectedVersion !== version) || isTwapActive?.() === false;
-    if (cancelled()) { return null; }
+    if (cancelled()) { return settle(null); }
 
     try {
         const body = request.send || "";
@@ -57,14 +58,14 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
                 credentialVersion: version,
                 headers: Object.assign({}, request.headers, headers),
             };
-            return authorized;
+            return settle(authorized);
         }
     } catch {
         // eslint-disable-next-line no-console
         console.error("Unable to sign the bitFlyer request.");
     }
     if (!cancelled()) { onSigningFailure?.(); }
-    return null;
+    return settle(null);
 };
 
 const requestDeadlineMs = 10_000;
