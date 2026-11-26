@@ -37,8 +37,8 @@ test("renders valid recent trades from history and live updates once per executi
 
     const scroll = child(rendered, "div.recent-trades-scroll");
     const table = child(scroll, "table");
-    const headerRow = (child(table, "thead").children as VNode[])[0];
-    assert.equal((headerRow.children as VNode[])[3].text, "Size (BTC-CFD)");
+    const headers = (child(table, "thead").children as VNode[])[0].children as VNode[];
+    assert.deepEqual(headers.map((header) => header.text), ["Time (UTC)", "Side", "Price (JPY)", "Size (BTC-CFD)"]);
     const rows = child(table, "tbody").children as VNode[];
     assert.deepEqual(rows.map((row) => row.key), [12, 10]);
     assert.deepEqual(rows.map((row) => (row.children as VNode[])[1].text), ["—", "BUY"]);

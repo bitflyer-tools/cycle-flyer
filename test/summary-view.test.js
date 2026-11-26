@@ -38,18 +38,16 @@ function rowUnit(summaryNode, selector) {
     .children.find((cell) => cell.sel === 'span.unit').text;
 }
 
-test('labels position size as BTC-CFD, matching the order form reference', () => {
+test('labels position size in BTC-CFD', () => {
   const state = {
     collateral: 0,
-    currentPrice: 40000,
+    currentPrice: 100000,
     histories: [],
     marketState: { health: 'NORMAL', state: 'RUNNING' },
-    position: new Position([{ side: 'BUY', size: 1, price: 40000 }]),
+    position: new Position([{ side: 'BUY', price: 100000, size: 1 }]),
   };
-
   let rendered;
   view(Stream.of(state)).addListener({ next: (node) => { rendered = node; } });
-
   assert.equal(rowUnit(rendered, 'div.position-size'), 'BTC-CFD');
 });
 

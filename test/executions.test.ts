@@ -87,6 +87,12 @@ async function setup(t: TestContext, credentials = true, origin?: string) {
             const table = scroll.children![0] as VNode;
             return (table.children![1] as VNode).children as VNode[];
         },
+        get tableHeaders() {
+            const scroll = dom.children?.find((child) => typeof child === "object" && child?.sel === "div.executions-scroll") as VNode;
+            const table = scroll.children![0] as VNode;
+            const headerRow = (table.children![0] as VNode).children![0] as VNode;
+            return (headerRow.children as VNode[]).map((header) => header.text);
+        },
     };
 }
 
@@ -170,7 +176,7 @@ test("loads on demand, appends older fills and replaces the list on refresh", as
     panel.page(Array.from({ length: executionPageSize }, (_, index) => execution(10 + index)));
     assert.equal(panel.state.rows[0].id, executionPageSize + 9);
     assert.equal(panel.state.before, 10);
-    assert.match(panel.dom, /Size \(BTC-CFD\)/);
+    assert.deepEqual(panel.tableHeaders, ["Exchange time", "Side", "Price (JPY)", "Size (BTC-CFD)", "Order acceptance ID"]);
     assert.match(panel.dom, /2025-03-22T09:57:40.397/);
     assert.match(panel.dom, /BUY/);
     assert.match(panel.dom, /12,000,000|12000000/);
