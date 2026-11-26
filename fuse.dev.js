@@ -1,7 +1,5 @@
 const esbuild = require('esbuild');
 const fs = require('fs');
-const http = require('http');
-const path = require('path');
 const stylus = require('stylus');
 
 const stylusPlugin = {
