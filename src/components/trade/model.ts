@@ -7,7 +7,6 @@ import {putParentOrder, retainActive} from "../../models/parentStopOrders";
 import {Position} from "../../models/position";
 import {State} from "./index";
 import {Actions} from "./intent";
-import {checkPriceAlert} from "./priceAlert";
 
 const defaultState: State = {
     currentPrice: null,
@@ -16,7 +15,6 @@ const defaultState: State = {
     parentStopOrders: {},
     position: new Position([]),
     price: 0,
-    lastExecutionPrice: 0,
 };
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
@@ -24,10 +22,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
     const currentPriceReducer$ = actions.onExecutionBatch$
         .filter((executions) => executions.length > 0)
-        .map((executions) => {
-            const time = new Date();
-            return (state: State) => applyExecutions(state, executions, time);
-        });
+        .map((executions) => (state: State) => applyExecutions(state, executions));
 
     const myExecutionReducer$ = actions.onMyExecutionCreated$
         .map((event) => createOrderHistory("Executed", event.side || "", event.size || 0, event.price || 0, "success"))
@@ -82,22 +77,16 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 const startTradeSession = (state: State = defaultState): State => ({
     ...state,
     currentPrice: null,
-    lastExecutionPrice: 0,
-    summaryComponentState: state.summaryComponentState && { ...state.summaryComponentState, priceAlert: null },
 });
 
-const applyExecutions = (state: State, executions: Execution[], time: Date): State =>
-    executions.reduce((next, { price }) => applyExecution(next, price, time), state);
+const applyExecutions = (state: State, executions: Execution[]): State => {
+    let currentPrice = state.currentPrice;
 
-const applyExecution = (state: State, price: number, time: Date): State => {
-    if (!isExecutionPrice(price)) { return { ...state, lastExecutionPrice: 0 }; }
+    for (const { price } of executions) {
+        if (isExecutionPrice(price)) {
+            currentPrice = price;
+        }
+    }
 
-    const summary = state.summaryComponentState;
-    const priceAlert = summary && checkPriceAlert(summary.priceAlert, state.lastExecutionPrice, price, time);
-    return {
-        ...state,
-        currentPrice: price,
-        lastExecutionPrice: price,
-        summaryComponentState: summary && { ...summary, priceAlert: priceAlert ?? null },
-    };
+    return { ...state, currentPrice };
 };
