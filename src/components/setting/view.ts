@@ -36,5 +36,10 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
                         `Corporate (max ${maximumOrderSizeByAccountType.corporate} BTC-CFD per order)`),
                 ]),
             ]),
+            div(".notifications-enabled", [
+                label({ attrs: { for: "notifications-enabled-input" } }, "Desktop notifications"),
+                input("#notifications-enabled-input",
+                    { props: { type: "checkbox", checked: state.notificationsEnabled } }),
+            ]),
         ]),
     );

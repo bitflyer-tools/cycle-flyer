@@ -33,6 +33,7 @@ export interface Sinks {
     state: Stream<Reducer<any>>;
     router: Stream<any>;
     storage: Stream<StorageRequest>;
+    notification?: Stream<Sound>;
     sound?: Stream<Sound>;
 }
 
@@ -126,6 +127,10 @@ export const Root = (sources: Sources): Sinks => {
             pending$.filter((pending) => pending !== null)
                 .map((pending) => Stream.fromArray<RequestInput | null>(pending))
                 .compose(flattenConcurrently),
+        ),
+        notification: Stream.merge(
+            routes$.map((sinks: Sinks) => sinks.notification || Stream.never()).flatten(),
+            orderOutcome$.map(({ status }): Sound => status === "success" ? "success" : "failure"),
         ),
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
         sound: Stream.merge(

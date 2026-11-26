@@ -4,6 +4,7 @@ import {Reducer, StateSource} from "@cycle/state";
 import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
+import {notificationsEnabledStorageKey} from "../../drivers/notificationDriver";
 import {soundEnabledStorageKey} from "../../drivers/soundDriver";
 import {accountTypeStorageKey} from "../../models/order";
 import "./index.styl";
@@ -31,16 +32,20 @@ export const Setting = (sources: Sources): Sinks => {
     const actions = intent(sources);
     const reducer$ = model(actions);
     const view$ = view(sources.state.stream);
-    const soundEnabledStorage$ = actions.onSoundToggled$
-        .map((enabled) => ({ key: soundEnabledStorageKey, value: enabled.toString() }) as StorageRequest);
-    const accountTypeStorage$ = actions.onAccountTypeChanged$
-        .map((accountType) => ({ key: accountTypeStorageKey, value: accountType }) as StorageRequest);
+    const storage$ = Stream.merge(
+        actions.onSoundToggled$
+            .map((enabled) => ({ key: soundEnabledStorageKey, value: enabled.toString() }) as StorageRequest),
+        actions.onNotificationsToggled$
+            .map((enabled) => ({ key: notificationsEnabledStorageKey, value: enabled.toString() }) as StorageRequest),
+        actions.onAccountTypeChanged$
+            .map((accountType) => ({ key: accountTypeStorageKey, value: accountType }) as StorageRequest),
+    );
 
     return {
         DOM: view$,
         HTTP: Stream.never(),
         router: Stream.never(),
         state: reducer$,
-        storage: Stream.merge(soundEnabledStorage$, accountTypeStorage$),
+        storage: storage$,
     };
 };
