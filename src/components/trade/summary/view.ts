@@ -28,7 +28,7 @@ export const view = (state$: Stream<State>) => {
             div(".position-size", [
                 span(".label", "Position size"),
                 span(".number", state.position.toSizeString()),
-                span(".unit", "bFX"),
+                span(".unit", "BTC-CFD"),
             ]),
             div(".profit", [
                 span(".label", "Profit / Loss"),
