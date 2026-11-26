@@ -27,7 +27,7 @@ export const SummaryComponent = (sources: Sources): Sinks => {
     const view$ = view(sources.state.stream as any);
     const request$ = request();
 
-    const sound$ = (sources.state.stream as any)
+    const alertTriggered$ = (sources.state.stream as any)
         .map((state: State | undefined) => state?.priceAlert)
         .compose(dropRepeats())
         .drop(1)
@@ -37,8 +37,9 @@ export const SummaryComponent = (sources: Sources): Sinks => {
     return {
         DOM: view$,
         HTTP: request$,
+        notification: alertTriggered$,
         router: Stream.never(),
-        sound: sound$,
+        sound: alertTriggered$,
         state: reducer$,
         storage: Stream.never(),
     };

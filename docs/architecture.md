@@ -8,7 +8,7 @@ written in TypeScript with Cycle.js and xstream.
 - [`srcElectron/index.js`](../srcElectron/index.js) opens the Electron window and
   loads [`public/index.html`](../public/index.html).
 - [`src/index.ts`](../src/index.ts) starts the renderer and connects the DOM,
-  HTTP, history, socket, sound, and storage drivers.
+  HTTP, history, socket, sound, notification, and storage drivers.
 - [`src/components/index.ts`](../src/components/index.ts) routes between **Trade**
   and **Setting**. The Trade state is scoped under the root, so it can survive
   navigation between screens.
@@ -23,8 +23,8 @@ send HTTP requests also use a `request.ts` module.
 - [Trade](../src/components/trade/index.ts) composes the order book, order form,
   and account summary. It shares the selected price, active orders, and position
   with the panels that need them.
-- [Setting](../src/components/setting/index.ts) writes the sound preference
-  through the storage driver.
+- [Setting](../src/components/setting/index.ts) writes the sound and desktop
+  notification preferences through the storage driver.
 - [`src/http.ts`](../src/http.ts) builds bitFlyer REST requests.
   [The Socket.IO driver](../src/drivers/socketIODriver.ts) provides
   live order book updates, public executions, and authenticated order events.
