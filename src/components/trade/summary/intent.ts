@@ -1,12 +1,14 @@
 import {MainDOMSource} from "@cycle/dom";
 import {Stream} from "xstream";
 import {isCurrentAccountRequest} from "../../../drivers/httpDriver";
+import {Execution} from "../../../models/execution";
 import {Sources} from "../index";
 import {pollResponse} from "../pollResponse";
 import {parsePriceAlertLevel, PriceAlertLevel} from "../priceAlert";
 
 export interface Actions {
     onCollateralLoaded$: Stream<number>;
+    onExecutionBatch$: Stream<Execution[]>;
     onPriceAlertSet$: Stream<PriceAlertLevel>;
     onPriceAlertDismissed$: Stream<null>;
     onStateLoaded$: Stream<object>;
@@ -27,6 +29,7 @@ export const intent = (sources: Sources): Actions => {
     const onPriceAlertDismissed$ = dom.select(".dismiss-price-alert").events("click").mapTo(null);
 
     return {
+        onExecutionBatch$: sources.socket.executionBatch$,
         onPriceAlertDismissed$,
         onPriceAlertSet$,
         onCollateralLoaded$,
