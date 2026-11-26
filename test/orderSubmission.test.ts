@@ -195,7 +195,7 @@ test("requires a fresh execution after the market feed disconnects", (t) => {
     deepEqual(order.disabledSides("stop"), [false, true]);
     deepEqual(order.disabledSides("ranged-ifdoco"), [false, false]);
     order.buy("stop");
-    deepEqual(order.requests, []);
+    deepEqual(order.requests, [] as RequestOptions[]);
 
     order.buy("ifdoco");
     const [, profit, loss] = JSON.parse(order.requests[0].send as string).parameters;
