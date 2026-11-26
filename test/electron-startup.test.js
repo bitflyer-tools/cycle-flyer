@@ -12,6 +12,7 @@ const helper = readFileSync(require.resolve('../srcElectron/squirrelStartup'), '
 
 async function launch(argument, platform = 'win32') {
   const events = [];
+  const windowOptions = [];
   const update = new EventEmitter();
   const app = {
     requestSingleInstanceLock: () => {
@@ -31,6 +32,10 @@ async function launch(argument, platform = 'win32') {
     ipcMain: { handle() {} },
     BrowserWindow: class {
       webContents = Object.assign(new EventEmitter(), { setWindowOpenHandler() {} });
+
+      constructor(options) {
+        windowOptions.push(options);
+      }
 
       loadFile(filename) {
         events.push(filename);
@@ -66,7 +71,7 @@ async function launch(argument, platform = 'win32') {
   };
   compileFunction(entry, ['require', 'process', '__dirname'])(entryRequire, process, path.dirname(entryPath));
   await Promise.resolve();
-  return { events, update };
+  return { events, update, windowOptions };
 }
 
 [
@@ -93,4 +98,23 @@ test('opens the trading window on a normal launch or when Squirrel flags are ina
     assert.deepEqual(events, ['lock', 'whenReady', 'second-instance', 'activate', 'window-all-closed',
       path.resolve(__dirname, '../public/index.html')]);
   }
+});
+
+test('ships a strict Content-Security-Policy with the renderer entry point', () => {
+  const html = readFileSync(path.resolve(__dirname, '../public/index.html'), 'utf8');
+  const [, policy] = html.match(/<meta http-equiv="Content-Security-Policy"\s+content="([^"]+)">/) || [];
+  assert.ok(policy, 'Expected a Content-Security-Policy meta tag in public/index.html');
+  assert.equal(policy, "default-src 'none'; script-src 'self'; style-src 'self'; " +
+    'connect-src https://api.bitflyer.jp wss://io.lightstream.bitflyer.com; ' +
+    "base-uri 'none'; form-action 'none'");
+});
+
+test('creates the trading window with a hardened, sandboxed, context-isolated renderer', async () => {
+  const { windowOptions } = await launch();
+  assert.equal(windowOptions.length, 1);
+  const { webPreferences } = windowOptions[0];
+  assert.equal(webPreferences.contextIsolation, true);
+  assert.equal(webPreferences.nodeIntegration, false);
+  assert.equal(webPreferences.sandbox, true);
+  assert.equal(webPreferences.preload, path.resolve(__dirname, '../srcElectron/preload.js'));
 });

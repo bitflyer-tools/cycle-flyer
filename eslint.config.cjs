@@ -26,7 +26,7 @@ module.exports = defineConfig({
         radix: "error",
     },
 }, {
-    files: ["srcElectron/**/*.js", "fuse.js", "fuse.dev.js"],
+    files: ["srcElectron/**/*.js", "fuse.js", "fuse.dev.js", "forge.config.js"],
     extends: [js.configs.recommended],
     languageOptions: {
         sourceType: "commonjs",

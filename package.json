@@ -7,7 +7,7 @@
     "build": "node fuse",
     "format:check": "npm run format -- --check",
     "format": "prettier --single-quote \".github/**/*.yml\" package.json tsconfig.json now.json",
-    "lint": "eslint --max-warnings 0 \"src/**/*.ts\" \"srcElectron/**/*.js\" fuse.js fuse.dev.js",
+    "lint": "eslint --max-warnings 0 \"src/**/*.ts\" \"srcElectron/**/*.js\" fuse.js fuse.dev.js forge.config.js",
     "test": "npm run test:bundle && node --test \"test/*.test.js\" \"test/*.test.mjs\" test/position.test.cjs \"out/tests/*.test.cjs\" out/tests/boardSynchronization.cjs",
     "test:bundle": "esbuild test/account-polling.test.ts test/board-merge.test.ts test/boardSynchronization.ts test/clearOrders.test.ts test/executions.test.ts test/ifdoco-orders.test.cjs test/ifdocoOrder.test.ts test/order-validation.test.ts test/orderSubmission.test.ts test/parentOrderDetails.test.ts test/price-alert.test.cjs test/recentTrades.test.ts test/trade-stop-orders.test.cjs test/twap.test.ts --bundle --packages=external --sourcemap=inline --platform=node --define:window=undefined --banner:js=\"globalThis.window = undefined;\" --loader:.styl=empty --outdir=out/tests --out-extension:.js=.cjs && esbuild test/board.test.ts test/tradeHistory.test.ts --bundle --packages=external --sourcemap=inline --platform=node --banner:js=\"globalThis.window = {};\" --outdir=out/tests --out-extension:.js=.cjs",
     "test:coverage": "npm run test:bundle && node --enable-source-maps --test --experimental-test-coverage --test-coverage-exclude=\"**/node_modules/**\" --test-coverage-include=\"{src/**/*.ts,out/tests/*.cjs}\" --test-coverage-lines=97 --test-coverage-branches=93 --test-coverage-functions=92 \"test/*.test.js\" \"test/*.test.mjs\" test/position.test.cjs \"out/tests/*.test.cjs\" out/tests/boardSynchronization.cjs",
@@ -40,6 +40,8 @@
     "@electron-forge/maker-rpm": "^8.0.1",
     "@electron-forge/maker-squirrel": "^8.0.1",
     "@electron-forge/maker-zip": "^8.0.1",
+    "@electron-forge/plugin-fuses": "^8.0.1",
+    "@electron/fuses": "^2.1.3",
     "@eslint/js": "^10.0.1",
     "electron": "^45.4.1",
     "esbuild": "^0.28.2",
@@ -62,36 +64,5 @@
     "compression": "^1.8.2",
     "ws@>=8.0.0 <8.21.0": "^8.21.0",
     "glob@>=9.0.0 <=14.0.1": "^14.0.2"
-  },
-  "config": {
-    "forge": {
-      "packagerConfig": {
-        "icon": "public/appIcon",
-        "name": "Cycle Flyer",
-        "executableName": "cycle-flyer"
-      },
-      "makers": [
-        {
-          "name": "@electron-forge/maker-squirrel",
-          "config": {
-            "name": "cycle_flyer"
-          }
-        },
-        {
-          "name": "@electron-forge/maker-zip",
-          "platforms": [
-            "darwin"
-          ]
-        },
-        {
-          "name": "@electron-forge/maker-deb",
-          "config": {}
-        },
-        {
-          "name": "@electron-forge/maker-rpm",
-          "config": {}
-        }
-      ]
-    }
   }
 }
