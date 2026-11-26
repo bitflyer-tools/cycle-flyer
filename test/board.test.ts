@@ -122,6 +122,28 @@ test("reuses marker totals until their order list or group size changes", (conte
     state$.shamefullySendComplete();
 });
 
+test("renders the position marker on only the matching side when both sides share the bucket", () => {
+    const board = new Board({
+        asks: [{ price: 9999500, size: 1 }, { price: 10000100, size: 1 }],
+        bids: [{ price: 10000000, size: 1 }],
+    });
+    const state = { ...boardState(), board, groupedSize: 1000 };
+
+    const long = new Position([{ side: "BUY", price: 10000000, size: 1 }]);
+    view(Stream.of({ ...state, position: long })).addListener({
+        next: (rendered) => deepStrictEqual(positionMarkers(rendered), [
+            ["div.bid", 10000000],
+        ]),
+    });
+
+    const short = new Position([{ side: "SELL", price: 10000000, size: 1 }]);
+    view(Stream.of({ ...state, position: short })).addListener({
+        next: (rendered) => deepStrictEqual(positionMarkers(rendered), [
+            ["div.ask", 10000000],
+        ]),
+    });
+});
+
 function groupingAndPrices(board: VNode) {
     const [header, asks, bids] = board.children as VNode[];
     const grouping = (header.children as VNode[]).find((child) => child.sel === "span.grouped-size");
@@ -153,4 +175,11 @@ function markers(board: VNode) {
             .filter((child) => child?.sel === "span.my-order" || child?.sel === "span.my-stop-order")
             .map((child) => [child.sel, child.text]),
     ]);
+}
+
+function positionMarkers(board: VNode) {
+    const [, asks, bids] = board.children as VNode[];
+    return (asks.children as VNode[]).concat(bids.children as VNode[])
+        .filter((row) => (row.children as VNode[]).some((child) => child?.sel === "span.my-position"))
+        .map((row) => [row.sel, row.data?.dataset?.price]);
 }
