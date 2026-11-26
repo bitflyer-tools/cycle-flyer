@@ -33,6 +33,24 @@ function rowNumber(summaryNode, selector) {
     .children.find((cell) => cell.sel?.startsWith('span.number'));
 }
 
+function rowUnit(summaryNode, selector) {
+  return summaryNode.children.find((row) => row.sel === selector)
+    .children.find((cell) => cell.sel === 'span.unit').text;
+}
+
+test('labels position size in BTC-CFD', () => {
+  const state = {
+    collateral: 0,
+    currentPrice: 100000,
+    histories: [],
+    marketState: { health: 'NORMAL', state: 'RUNNING' },
+    position: new Position([{ side: 'BUY', price: 100000, size: 1 }]),
+  };
+  let rendered;
+  view(Stream.of(state)).addListener({ next: (node) => { rendered = node; } });
+  assert.equal(rowUnit(rendered, 'div.position-size'), 'BTC-CFD');
+});
+
 test('uses the displayed P&L to color gains and keeps zero neutral for both sides', () => {
   const states = [
     { side: 'BUY', currentPrice: 40001 },
