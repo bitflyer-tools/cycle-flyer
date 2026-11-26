@@ -1,6 +1,7 @@
 import {div, h4, input, label, p, span, VNode} from "@cycle/dom";
 import {sideButtons} from "./buttons";
 import {State} from "./index";
+import {syncValue} from "./numberInput";
 import {isValidIFDOCOOrder} from "./validation";
 
 export const ifdocoSection = (state: State): VNode => {
@@ -20,10 +21,15 @@ export const ifdocoSection = (state: State): VNode => {
         ]),
         div(".ratio", [
             label(".label", { attrs: { for: "ratio-input" } }, "Profit / Loss Ratio"),
-            input("#ratio-input", { attrs: hasValidRatio ? { value: state.ifdocoOrder.ratio } : {
-                "aria-invalid": "true",
-                "aria-describedby": "ratio-error",
-            }}),
+            input("#ratio-input", hasValidRatio ? {
+                attrs: { value: state.ifdocoOrder.ratio },
+                hook: { update: (_: VNode, vnode: VNode) => syncValue(vnode.elm as HTMLInputElement, state.ifdocoOrder.ratio) },
+            } : {
+                attrs: {
+                    "aria-invalid": "true",
+                    "aria-describedby": "ratio-error",
+                },
+            }),
         ]),
         div(".ranged-ifdoco-order-buttons.order-buttons", sideButtons(
             ifdocoButtonDisabled(state, "SELL"),

@@ -165,6 +165,44 @@ test("requires a fresh price for Stop and Ranged IFDOCO after returning to Trade
     deepEqual(order.requests.map(({ category }) => category), ["ifdoco-order", "stop-order"]);
 });
 
+test("requires a fresh execution after the market feed disconnects", (t) => {
+    const order = setup(t, "10000");
+    order.enterTriggerPrice("10100000");
+    equal(order.summaryPrice, (10_000_000).toLocaleString());
+    deepEqual(order.disabledSides("stop"), [true, false]);
+    deepEqual(order.disabledSides("ranged-ifdoco"), [false, false]);
+
+    const assertPending = () => {
+        equal(order.summaryPrice, "Pending");
+        deepEqual(order.disabledSides("stop"), [true, true]);
+        deepEqual(order.disabledSides("ranged-ifdoco"), [true, true]);
+        order.buy("stop");
+        order.sellStop();
+        order.buy("ifdoco");
+        order.sellIFDOCO();
+        deepEqual(order.requests, []);
+    };
+
+    order.setConnected(false);
+    assertPending();
+    order.setConnected(true);
+    assertPending();
+    order.publishExecution(0);
+    assertPending();
+
+    order.publishExecution(10_200_000);
+    equal(order.summaryPrice, (10_200_000).toLocaleString());
+    deepEqual(order.disabledSides("stop"), [false, true]);
+    deepEqual(order.disabledSides("ranged-ifdoco"), [false, false]);
+    order.buy("stop");
+    deepEqual(order.requests, []);
+
+    order.buy("ifdoco");
+    const [, profit, loss] = JSON.parse(order.requests[0].send as string).parameters;
+    equal(profit.price, 10_200_001);
+    equal(loss.trigger_price, 10_190_001);
+});
+
 test("submits only the stop side matching the trigger direction and preserves the trigger price", (t) => {
     const order = setup(t, "0.01", { initialPrice: 100000 });
     order.enterTriggerPrice("110000.25");
@@ -1649,6 +1687,10 @@ function setup(t: TestContext, width = "0.01", options: {
         sellStop: () => sellStop$.shamefullySendNext(null),
         sellIFDOCO: () => sellIFDOCO$.shamefullySendNext(null),
         get signingAlert() { return findNode(vNode, "div.order-signing-error"); },
+        get summaryPrice() {
+            const price = findNode(vNode, "div.current-price");
+            return price && findNode(price, "span.number")?.text;
+        },
         get state() { return state!.trade!.orderComponentState!; },
         get tradeState() { return state!.trade!; },
     };
