@@ -5,18 +5,10 @@ import {Reducer, StateSource} from "@cycle/state";
 import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
-import flattenConcurrently from "xstream/extra/flattenConcurrently";
-import {credentialsChanging$} from "../credentials";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
-import {prependOrderHistories} from "../models/orderHistory";
-import {Position} from "../models/position";
 import {Setting} from "./setting";
-import {State as TradeState, Trade} from "./trade";
-import {cancellationReducer} from "./trade/cancellation";
-import {initialState as initialExecutionsState} from "./trade/executions";
-import {cancellationOutcomes, submittedOrderOutcomes, twapOutcomes} from "./trade/order/history";
-import {closePositionOutcomes, OrderRequestBatch, submissions, unsignedSubmissions$} from "./trade/order/request";
+import {Trade} from "./trade";
 
 export interface Sources {
     DOM: DOMSource;
@@ -36,17 +28,12 @@ export interface Sinks {
     sound?: Stream<Sound>;
 }
 
-interface RootState {
-    trade?: TradeState;
-}
-
 const tradeScope = "trade";
 
 export const Root = (sources: Sources): Sinks => {
-    const cancellationOutcome$ = cancellationOutcomes(sources.HTTP);
     const leaveTrade$ = Stream.create<void>();
     const trade = isolate(Trade, { "*": tradeScope });
-    const routes$: Stream<Sinks & { orderRequests?: Stream<OrderRequestBatch> }> = sources.router
+    const routes$: Stream<Sinks & { orderRequests?: Stream<RequestInput | null> }> = sources.router
         .define({
             "/": trade,
             "/setting": isolate(Setting, { "*": "setting" }),
@@ -56,54 +43,12 @@ export const Root = (sources: Sources): Sinks => {
             if (route.value !== trade) { leaveTrade$.shamefullySendNext(undefined); }
             return route.value({
                 ...sources,
-                // Tag order batches with the same HTTP scopes as the other requests.
+                // Tag order submissions with the same HTTP scope as the other requests.
                 orderRequests: sources.HTTP,
                 router: sources.router.path(route.path),
-            }, isOrdering$, leaveTrade$, cancellationOutcome$);
+            }, leaveTrade$);
         })
         .remember();
-
-    const orderRequests$ = routes$.map((sinks) => sinks.orderRequests || Stream.never<OrderRequestBatch>()).flatten();
-    const pending$ = submissions(orderRequests$, sources.HTTP);
-    const positionCloseReducer$ = pending$.map((pending) => (state: TradeState | undefined) => {
-        if (!state) return state;
-
-        const submission = pending?.find(({ closePositionSize }) => closePositionSize !== undefined);
-        if (submission?.closePositionSize !== undefined) {
-            return { ...state, positionClose: {
-                id: submission.submissionId, size: submission.closePositionSize, settled: false,
-            } };
-        }
-        return state;
-    });
-    const closeOutcomeReducer$ = closePositionOutcomes(sources.HTTP)
-        .map(({ id, rejected }) => (state: TradeState | undefined) => {
-            const close = state?.positionClose;
-            if (!close || close.id !== id || close.settled) return state;
-            return { ...state, positionClose: { ...close, settled: true, rejected } };
-        });
-    const isOrdering$ = pending$.map((pending) => pending !== null);
-    const orderSigningError$ = Stream.merge(
-        pending$.filter((pending) => pending !== null).mapTo(undefined),
-        unsignedSubmissions$.map(({ category }) => (category === "cancel-orders" || category === "cancel-parent-order")
-            ? "Could not sign the request to clear orders. Check your bitFlyer credentials in Settings."
-            : "Could not sign the order. Check your bitFlyer credentials in Settings."),
-    );
-    const orderSigningReducer$ = orderSigningError$.map<Reducer<TradeState>>((orderSigningError) =>
-        (state) => state && { ...state, orderSigningError });
-    const orderOutcome$ = Stream.merge(
-        submittedOrderOutcomes(sources.HTTP),
-        twapOutcomes(sources.HTTP),
-        cancellationOutcome$,
-    );
-    const orderOutcomeReducer$ = orderOutcome$
-        .map<Reducer<TradeState>>((outcome) => {
-            const reconcile = "parentOrderId" in outcome ? cancellationReducer(outcome) : undefined;
-            return (state) => state && {
-                ...(reconcile?.(state) ?? state),
-                histories: prependOrderHistories(state.histories, outcome.histories),
-            };
-        });
 
     const view$ = routes$.map((sinks: Sinks) => sinks.DOM).flatten()
         .map((contentDOM: any) =>
@@ -123,48 +68,11 @@ export const Root = (sources: Sources): Sinks => {
         DOM: view$,
         HTTP: Stream.merge(
             routes$.map((sinks) => sinks.HTTP).flatten(),
-            pending$.filter((pending) => pending !== null)
-                .map((pending) => Stream.fromArray<RequestInput | null>(pending))
-                .compose(flattenConcurrently),
+            routes$.map((sinks) => sinks.orderRequests || Stream.never<RequestInput | null>()).flatten(),
         ),
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
-        sound: Stream.merge(
-            routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
-            orderOutcome$.map(({ status }): Sound => status === "success" ? "success" : "failure"),
-        ),
-        state: Stream.merge(
-            routes$.map((sinks: Sinks) => sinks.state).flatten(),
-            credentialsChanging$.mapTo(resetAccount),
-            sources.state.isolateSink(positionCloseReducer$, tradeScope),
-            sources.state.isolateSink(closeOutcomeReducer$, tradeScope),
-            sources.state.isolateSink(orderOutcomeReducer$, tradeScope),
-            sources.state.isolateSink(orderSigningReducer$, tradeScope),
-        ),
+        sound: routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
+        state: routes$.map((sinks: Sinks) => sinks.state).flatten(),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
-    };
-};
-
-const resetAccount: Reducer<RootState> = (state) => {
-    if (!state?.trade) { return state; }
-    const {trade} = state;
-    return {
-        ...state,
-        trade: {
-            ...trade,
-            canceledParentOrderIds: undefined,
-            executionsComponentState: initialExecutionsState,
-            histories: [],
-            orders: [],
-            orderSigningError: undefined,
-            parentStopOrders: {},
-            summaryComponentState: trade.summaryComponentState && {
-                ...trade.summaryComponentState,
-                collateral: 0,
-            },
-            orderComponentState: trade.orderComponentState && { ...trade.orderComponentState, isOrdering: false },
-            position: new Position([]),
-            positionCredentialVersion: undefined,
-            positionClose: undefined,
-        },
     };
 };
