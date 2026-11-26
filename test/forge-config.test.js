@@ -35,6 +35,7 @@ function loadConfig() {
 test('keeps the existing packager and maker configuration', () => {
   const { config } = loadConfig();
   assert.deepEqual(config.packagerConfig, {
+    asar: true,
     icon: 'public/appIcon',
     name: 'Cycle Flyer',
     executableName: 'cycle-flyer',

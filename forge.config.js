@@ -3,6 +3,7 @@ const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 
 module.exports = {
   packagerConfig: {
+    asar: true,
     icon: 'public/appIcon',
     name: 'Cycle Flyer',
     executableName: 'cycle-flyer',
