@@ -4,7 +4,7 @@ import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {isCurrentAccountRequest, isWriteDeadlineError} from "../../../drivers/httpDriver";
 import {TwapSliceRequest} from "../../../http";
 import {createOrderHistory, OrderHistory} from "../../../models/orderHistory";
-import {isOrderRejection} from "./rejection";
+import {AcceptanceIdField, hasOrderAcceptanceId, isOrderRejection} from "./rejection";
 
 type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 
@@ -43,11 +43,12 @@ export const createChildOrderOutcome = (name: string, stream$: HTTPResponse$): S
     createOutcome(stream$, (body, status) => {
         const send = JSON.parse(body);
         return [createOrderHistory(name, send.side, send.size, send.price, status)];
-    });
+    }, "child_order_acceptance_id");
 
 const createParentOrderOutcome = (stream$: HTTPResponse$): Stream<OrderOutcome> =>
-    createOutcome(stream$, (body, status) =>
-        JSON.parse(body).parameters.map((order: any) =>
+    createOutcome(
+        stream$,
+        (body, status) => JSON.parse(body).parameters.map((order: any) =>
             createOrderHistory(
                 orderName(order.condition_type),
                 order.side,
@@ -56,6 +57,7 @@ const createParentOrderOutcome = (stream$: HTTPResponse$): Stream<OrderOutcome> 
                 status,
             ),
         ),
+        "parent_order_acceptance_id",
     );
 
 export const cancellationOutcomes = (http: HTTPSource): Stream<CancellationOutcome> =>
@@ -79,11 +81,12 @@ const createCancellationOutcome = (stream$: HTTPResponse$): Stream<CancellationO
 const createOutcome = (
     stream$: HTTPResponse$,
     createHistories: (body: string, status: OrderStatus) => OrderHistory[],
+    acceptanceIdField?: AcceptanceIdField,
 ): Stream<OrderOutcome> =>
     stream$
         .last()
         .map<{ status: OrderStatus; timedOut: boolean }>((response) => ({
-            status: isOrderRejection(response) ? "failed" : "success",
+            status: responseStatus(response, acceptanceIdField),
             timedOut: false,
         }))
         .replaceError((error) => {
@@ -100,6 +103,12 @@ const createOutcome = (
             const histories = createHistories(stream$.request.send as string, status);
             return { status, histories: timedOut ? histories.map((history) => ({ ...history, timedOut })) : histories };
         });
+
+const responseStatus = (response: Response, acceptanceIdField?: AcceptanceIdField): OrderStatus => {
+    if (isOrderRejection(response)) return "failed";
+    if (acceptanceIdField && !hasOrderAcceptanceId(response, acceptanceIdField)) return "unconfirmed";
+    return "success";
+};
 
 const orderNames: { [conditionType: string]: string } = {
     LIMIT: "Limit",
