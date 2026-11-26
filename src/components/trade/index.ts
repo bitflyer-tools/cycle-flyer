@@ -124,7 +124,7 @@ export const Trade = (
     })(sources, isOrdering$, leaveTrade$, withMarketFillPreview(orderViewInputs$));
 
     const actions = intent(sources, cancellationOutcome$);
-    const reducer$ = model(actions);
+    const reducer$ = model(actions, sources.socket.connected$);
     const marketTrades = recentTrades(sources, leaveTrade$);
     const view$ = view(boardComponent.DOM, summaryComponent.DOM, orderComponent.DOM, executionsComponent.DOM,
         marketTrades.DOM);
