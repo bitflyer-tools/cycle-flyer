@@ -43,6 +43,7 @@ export interface Sinks {
     state: Stream<Reducer<State>>;
     router: Stream<void>;
     storage: Stream<StorageRequest>;
+    notification?: Stream<Sound>;
     sound?: Stream<Sound>;
 }
 
@@ -139,6 +140,10 @@ export const Trade = (
         DOM: view$,
         HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP,
             executionsComponent.HTTP, marketTrades.HTTP),
+        notification: Stream.merge(
+            actions.onMyExecutionCreated$.mapTo<Sound>("execution"),
+            summaryComponent.notification || Stream.never(),
+        ),
         orderRequests: orderComponent.orderRequests,
         router: Stream.never(),
         sound: Stream.merge(
