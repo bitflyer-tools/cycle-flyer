@@ -96,7 +96,7 @@ const createOutcome = (
             const isClosePosition = (stream$.request as { closePositionSize?: number }).closePositionSize !== undefined;
             const rejected = isClosePosition ? isOrderRejection(error?.response) : hasHTTPError;
             const status: OrderStatus = !timedOut && rejected ? "failed" : "unconfirmed";
-            return Stream.of({ status, timedOut });
+            return Stream.of<{ status: OrderStatus; timedOut: boolean }>({ status, timedOut });
         })
         .filter(() => isCurrentAccountRequest(stream$.request as AccountRequest))
         .map(({ status, timedOut }) => {

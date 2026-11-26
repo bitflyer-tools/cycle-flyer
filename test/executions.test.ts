@@ -218,7 +218,7 @@ test("windows 5,000 retained fills across the scroll range and only formats moun
         assert.ok(rows.length <= 21);
         rows.filter(({ sel }) => sel === "tr").forEach(({ key }) => seen.add(key));
         const spacerHeight = (spacer: VNode) => Number.parseInt(
-            (spacer.children![0] as VNode).data!.style!.height, 10);
+            (spacer.children![0] as VNode).data!.style!.height!, 10);
         assert.equal(spacerHeight(rows[0]) + spacerHeight(rows.at(-1)!) + (rows.length - 2) * 28, total * 28);
     }
     assert.equal(seen.size, total);

@@ -26,8 +26,7 @@ export const makeSignedHTTPDriver = () => {
                 if (request && (!authorized || stale)) { unsignedRequests$.shamefullySendNext(request); }
                 return stale ? null : authorized;
             })))
-            .compose(flattenConcurrently)
-            .filter((request) => request !== null),
+            .compose(flattenConcurrently),
         name,
     );
 };

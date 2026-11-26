@@ -4,6 +4,7 @@ import {Reducer, StateSource} from "@cycle/state";
 import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
+import {notificationsEnabledStorageKey} from "../../drivers/notificationDriver";
 import {soundEnabledStorageKey} from "../../drivers/soundDriver";
 import "./index.styl";
 import {intent} from "./intent";
@@ -30,8 +31,12 @@ export const Setting = (sources: Sources): Sinks => {
     const actions = intent(sources);
     const reducer$ = model(actions);
     const view$ = view(sources.state.stream);
-    const storage$ = actions.onSoundToggled$
-        .map((enabled) => ({ key: soundEnabledStorageKey, value: enabled.toString() }) as StorageRequest);
+    const storage$ = Stream.merge(
+        actions.onSoundToggled$
+            .map((enabled) => ({ key: soundEnabledStorageKey, value: enabled.toString() }) as StorageRequest),
+        actions.onNotificationsToggled$
+            .map((enabled) => ({ key: notificationsEnabledStorageKey, value: enabled.toString() }) as StorageRequest),
+    );
 
     return {
         DOM: view$,

@@ -9,7 +9,7 @@ export const request = (connected$: Stream<boolean>): Stream<RequestInput | null
         .map(() => Stream.fromPromise(Promise.resolve(getBoard())))
         .flatten();
     return Stream.merge(
-        connectionRequests$.map<RequestInput | null>((request) => request),
+        connectionRequests$.map<RequestInput | null>((req) => req),
         Stream.periodic(15000).map<RequestInput | null>(getBoard),
     );
 };

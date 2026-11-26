@@ -18,12 +18,12 @@ export const intent = (sources: Sources): Actions => {
     const onClickAsk$ = dom.select(".ask")
         .events("click")
         .map((event) => event.currentTarget as HTMLElement)
-        .map((target) => +target.dataset.price);
+        .map((target) => Number(target.dataset.price));
 
     const onClickBid$ = dom.select(".bid")
         .events("click")
         .map((event) => event.currentTarget as HTMLElement)
-        .map((target) => +target.dataset.price);
+        .map((target) => Number(target.dataset.price));
 
     const onClickGroupSizePlusButton$ = dom.select(".board-header").select(".plus")
         .events("click")
