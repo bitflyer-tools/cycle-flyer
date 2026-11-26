@@ -29,7 +29,7 @@ export const view = (state$: Stream<State>) => {
                 div(".asks", state.board.groupedAsks(state.groupedSize).map((ask: BoardOrder) =>
                     div(".ask", { dataset: { price: ask.price } }, [
                         span(".bar", { style: barStyle(ask.size) }),
-                        myPosition(state, ask),
+                        myPosition(state, ask, "SELL"),
                         marker(".my-order", orders.asks.get(ask.price)),
                         marker(".my-stop-order", stops.asks.get(ask.price)),
                         span(padWithZero(ask.size)),
@@ -43,7 +43,7 @@ export const view = (state$: Stream<State>) => {
                         span(padWithZero(bid.size)),
                         marker(".my-order", orders.bids.get(bid.price)),
                         marker(".my-stop-order", stops.bids.get(bid.price)),
-                        myPosition(state, bid),
+                        myPosition(state, bid, "BUY"),
                     ]),
                 )),
             ]);
@@ -58,9 +58,10 @@ const barStyle = (size: number): object => {
     return { width: `${width}%` };
 };
 
-const myPosition = (state: State, order: BoardOrder): VNode | null => {
+const myPosition = (state: State, order: BoardOrder, side: "BUY" | "SELL"): VNode | null => {
+    if (state.position.side !== side) { return null; }
     const price = state.position.displayPrice;
-    if (state.position.side === "SELL") {
+    if (side === "SELL") {
         if (price === 0 || ceilBy(price, state.groupedSize) !== order.price) { return null; }
     } else {
         if (price === 0 || floorBy(price, state.groupedSize) !== order.price) { return null; }
