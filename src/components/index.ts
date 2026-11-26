@@ -8,7 +8,8 @@ import Stream from "xstream";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
-import {Trade} from "./trade";
+import {Trade, type State as TradeState} from "./trade";
+import {createOrderSubmissionState} from "./trade/orderSubmissionState";
 
 export interface Sources {
     DOM: DOMSource;
@@ -30,10 +31,22 @@ export interface Sinks {
 
 const tradeScope = "trade";
 
+// Trade's own state/sound/HTTP sinks only flow while "/" is the active route (routes$ switches
+// away from them while on Settings), but order submissions must keep being tracked regardless of
+// the current route. So the persistent order-submission orchestration (kept in trade/, see
+// orderSubmissionState.ts) is merged in here unconditionally rather than through routes$.
+const isolateTradeReducer = (reducer: Reducer<TradeState>): Reducer<any> => (outer: any) => {
+    const prevInner = outer === undefined ? undefined : outer[tradeScope];
+    const nextInner = reducer(prevInner);
+    if (prevInner === nextInner) { return outer; }
+    return outer === undefined ? { [tradeScope]: nextInner } : { ...outer, [tradeScope]: nextInner };
+};
+
 export const Root = (sources: Sources): Sinks => {
     const leaveTrade$ = Stream.create<void>();
     const trade = isolate(Trade, { "*": tradeScope });
-    const routes$: Stream<Sinks & { orderRequests?: Stream<RequestInput | null> }> = sources.router
+    const orderSubmission = createOrderSubmissionState(sources.HTTP);
+    const routes$: Stream<Sinks> = sources.router
         .define({
             "/": trade,
             "/setting": isolate(Setting, { "*": "setting" }),
@@ -45,6 +58,7 @@ export const Root = (sources: Sources): Sinks => {
                 ...sources,
                 // Tag order submissions with the same HTTP scope as the other requests.
                 orderRequests: sources.HTTP,
+                orderSubmission,
                 router: sources.router.path(route.path),
             }, leaveTrade$);
         })
@@ -68,11 +82,17 @@ export const Root = (sources: Sources): Sinks => {
         DOM: view$,
         HTTP: Stream.merge(
             routes$.map((sinks) => sinks.HTTP).flatten(),
-            routes$.map((sinks) => sinks.orderRequests || Stream.never<RequestInput | null>()).flatten(),
+            orderSubmission.orderRequests$,
         ),
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
-        sound: routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
-        state: routes$.map((sinks: Sinks) => sinks.state).flatten(),
+        sound: Stream.merge(
+            routes$.map((sinks: Sinks) => sinks.sound || Stream.never()).flatten(),
+            orderSubmission.sound$,
+        ),
+        state: Stream.merge(
+            routes$.map((sinks: Sinks) => sinks.state).flatten(),
+            orderSubmission.reducer$.map(isolateTradeReducer),
+        ),
         storage: routes$.map((sinks: Sinks) => sinks.storage).flatten(),
     };
 };
