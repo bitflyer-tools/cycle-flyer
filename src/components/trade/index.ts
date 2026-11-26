@@ -139,7 +139,7 @@ export const Trade = (
         DOM: view$,
         HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP,
             executionsComponent.HTTP, marketTrades.HTTP),
-        orderRequests: orderComponent.orderRequests,
+        orderRequests: orderComponent.orderRequests as unknown as Stream<OrderRequestBatch>,
         router: Stream.never(),
         sound: Stream.merge(
             actions.onMyExecutionCreated$.mapTo<Sound>("execution"),

@@ -4,7 +4,7 @@ import {once} from "node:events";
 import {createServer, ServerResponse} from "node:http";
 import {test, TestContext} from "node:test";
 import {VNode} from "@cycle/dom";
-import {RequestOptions} from "@cycle/http";
+import {RequestInput, RequestOptions} from "@cycle/http";
 import {StateSource} from "@cycle/state";
 import Stream from "xstream";
 import {Execution, ExecutionsComponent, State, toCsv} from "../src/components/trade/executions";
@@ -30,7 +30,7 @@ async function setup(t: TestContext, credentials = true, origin?: string) {
     const scroll$ = Stream.create();
     const exportCsv$ = Stream.create();
     const responses$ = Stream.create();
-    const transport$ = Stream.create<RequestOptions>();
+    const transport$ = Stream.create<RequestInput | null>();
     const state$ = Stream.create<State>().remember();
     const sinks = ExecutionsComponent({
         DOM: { select: (selector: string) => ({
@@ -188,7 +188,7 @@ test("loads on demand, appends older fills and replaces the list on refresh", as
 
     const loadedRows = panel.state.rows.slice();
     panel.older();
-    assert.equal(new URL(panel.requests[1].url).searchParams.get("before"), "10");
+    assert.equal(new URL(panel.requests[1].url!).searchParams.get("before"), "10");
     panel.page([execution(10), execution(8), execution(100), execution(9), execution(8)]);
     assert.deepEqual(panel.state.rows, [...loadedRows, execution(9), execution(8)]);
     panel.older();

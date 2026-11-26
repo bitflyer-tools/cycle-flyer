@@ -27,7 +27,7 @@ export const makeSignedHTTPDriver = () => {
                 return stale ? null : authorized;
             })))
             .compose(flattenConcurrently)
-            .filter((request): request is RequestInput => request !== null),
+            .filter((request) => request !== null),
         name,
     );
 };

@@ -32,7 +32,7 @@ export const SummaryComponent = (sources: Sources): Sinks => {
         .compose(dropRepeats())
         .drop(1)
         .filter((alert: PriceAlert | null | undefined) => alert?.status === "triggered")
-        .mapTo<Sound>("price-alert");
+        .mapTo("price-alert" as Sound);
 
     return {
         DOM: view$,
