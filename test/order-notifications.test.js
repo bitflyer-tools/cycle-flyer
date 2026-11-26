@@ -63,14 +63,18 @@ function appHarness(t) {
   });
   const sounds = [];
   const soundSubscription = app.sound.subscribe({ next: (sound) => sounds.push(sound) });
+  const notifications = [];
+  const notificationSubscription = app.notification.subscribe({ next: (notification) => notifications.push(notification) });
   t.after(() => {
     soundSubscription.unsubscribe();
+    notificationSubscription.unsubscribe();
     stateSubscription.unsubscribe();
   });
 
   return {
     executionBatch$,
     childOrderEvent$,
+    notifications,
     sounds,
     histories: () => state.trade.histories,
     submit(input) {
@@ -103,6 +107,7 @@ test('notifies for submissions, TWAP slices, and private executions', (t) => {
   app.childOrderEvent$.shamefullySendNext(execution);
   app.childOrderEvent$.shamefullySendNext(execution);
   assert.deepEqual(app.sounds, ['failure', 'success', 'success', 'failure', 'execution', 'execution']);
+  assert.deepEqual(app.notifications, app.sounds);
   assert.deepEqual(app.histories().map(({ name }) => name), [
     'Executed', 'Executed', 'TWAP', 'Stop', 'Limit', 'Market',
   ]);
