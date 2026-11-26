@@ -15,3 +15,15 @@ export const isOrderRejection = (response?: Response): boolean => {
         return false;
     }
 };
+
+export type AcceptanceIdField = "child_order_acceptance_id" | "parent_order_acceptance_id";
+
+export const hasOrderAcceptanceId = (response: Response, field: AcceptanceIdField): boolean => {
+    if (!(response.status >= 200 && response.status < 300)) return false;
+    try {
+        const id = JSON.parse(response.text)?.[field];
+        return typeof id === "string" && id.trim().length > 0;
+    } catch {
+        return false;
+    }
+};

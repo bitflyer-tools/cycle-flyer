@@ -274,6 +274,8 @@ test("releases a failed IFDOCO and keeps a later market order locked through sta
     equal(order.requests.length, 3);
 });
 
+const acceptanceId = "JRF20150707-050237-639234";
+
 for (const outcome of ["succeed", "reject", "disconnect"] as const) {
     const status = { succeed: "success", reject: "failed", disconnect: "unconfirmed" }[outcome];
     const sound = outcome === "succeed" ? "success" : "failure";
@@ -335,6 +337,40 @@ for (const outcome of ["succeed", "reject", "disconnect"] as const) {
     }
 }
 
+for (const [category, name, field, otherField] of [
+    ["limit", "Limit", "child_order_acceptance_id", "parent_order_acceptance_id"],
+    ["stop", "Stop", "parent_order_acceptance_id", "child_order_acceptance_id"],
+] as const) {
+    for (const [label, body] of [
+        ["an empty body", ""],
+        ["HTML", "<html>Bad gateway</html>"],
+        ["malformed JSON", "{"],
+        ["a missing ID", "{}"],
+        ["the other endpoint's ID", JSON.stringify({ [otherField]: acceptanceId })],
+        ["a blank ID", JSON.stringify({ [field]: "   " })],
+        ["a numeric ID", JSON.stringify({ [field]: 42 })],
+    ] as const) {
+        test(`records an unconfirmed ${category} order after HTTP 200 with ${label}`, (t) => {
+            const order = setup(t);
+            order.buy(category);
+            order.respondTo(order.requests[0]).respondOK(body);
+
+            deepEqual(order.histories.map(({ name, status }) => [name, status]), [[name, "unconfirmed"]]);
+            deepEqual(order.sounds, ["failure"]);
+            equal(order.state.isOrdering, false);
+        });
+    }
+
+    test(`records a failed ${category} order after HTTP 200 with an explicit rejection`, (t) => {
+        const order = setup(t);
+        order.buy(category);
+        order.respondTo(order.requests[0]).succeed({ status: -1, error_message: "Order rejected" });
+
+        deepEqual(order.histories.map(({ name, status }) => [name, status]), [[name, "failed"]]);
+        deepEqual(order.sounds, ["failure"]);
+    });
+}
+
 const disconnectedOrders = [
     ["market", [["Market", "BUY / 0.03 / MARKET"]]],
     ["stop", [["Stop", "BUY / 0.03 / 11,000,000"]]],
@@ -382,7 +418,11 @@ for (const [category, entries] of disconnectedOrders) {
             request.resume();
             const path = new URL(request.url!, "http://localhost").pathname;
             writes.push(`${request.method} ${path}`);
-            if (writes.length > 1) response.end();
+            if (writes.length > 1) {
+                response.setHeader("Content-Type", "application/json");
+                const field = category === "market" ? "child_order_acceptance_id" : "parent_order_acceptance_id";
+                response.end(JSON.stringify({ [field]: acceptanceId }));
+            }
         });
         t.after(() => {
             server.closeAllConnections();
@@ -1595,6 +1635,10 @@ function setup(t: TestContext, width = "0.01", options: {
             const request = { credentialVersion: currentCredentialVersion() ?? undefined, ...input };
             const response$ = Object.assign(Stream.createWithMemory<Response>(), { request });
             responses$.shamefullySendNext(response$);
+            const respondOK = (text: string) => {
+                response$.shamefullySendNext({ request, status: 200, text } as Response);
+                response$.shamefullySendComplete();
+            };
             return {
                 fail: (error: Error) => response$.shamefullySendError(error),
                 disconnect: () => response$.shamefullySendError(new Error("Disconnected")),
@@ -1602,10 +1646,8 @@ function setup(t: TestContext, width = "0.01", options: {
                     response: { request, status, text: JSON.stringify({ status: -1, error_message: "Order rejected" }) },
                 }),
                 progress: () => response$.shamefullySendNext({ request } as Response),
-                succeed: (body?: unknown) => {
-                    response$.shamefullySendNext({ request, status: 200, text: JSON.stringify(body) } as Response);
-                    response$.shamefullySendComplete();
-                },
+                respondOK,
+                succeed: (body = acceptedOrderBody(request.url)) => respondOK(body === undefined ? "" : JSON.stringify(body)),
             };
         },
         sellStop: () => sellStop$.shamefullySendNext(null),
@@ -1614,4 +1656,12 @@ function setup(t: TestContext, width = "0.01", options: {
         get state() { return state!.trade!.orderComponentState!; },
         get tradeState() { return state!.trade!; },
     };
+}
+
+
+function acceptedOrderBody(url: string): unknown {
+    const path = new URL(url).pathname;
+    if (path === "/v1/me/sendchildorder") return { child_order_acceptance_id: acceptanceId };
+    if (path === "/v1/me/sendparentorder") return { parent_order_acceptance_id: acceptanceId };
+    return undefined;
 }
