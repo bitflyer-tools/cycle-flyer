@@ -145,7 +145,7 @@ const main = async (executable) => {
     await waitFor(() => evaluate(
       "window.cspViolations.some(([directive, uri]) => directive === 'script-src' && uri === 'eval')"
     ), 'CSP to block dynamic evaluation');
-    assert.deepEqual(await evaluate('[window.inlineScriptRan, window.evalRan]'), [undefined, undefined]);
+    assert.deepEqual(await evaluate('[typeof window.inlineScriptRan, typeof window.evalRan]'), ['undefined', 'undefined']);
 
     const visible = (selector) => evaluate(`Boolean(document.querySelector(${JSON.stringify(selector)}))`);
     const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
