@@ -52,6 +52,10 @@ Run `npm run lint` to check the TypeScript renderer and Electron JavaScript with
 
 With Node.js 24, run `npm ci` and then `npm run test:coverage` to run the full test suite and print the coverage report.
 
+## License
+
+[MIT](LICENSE)
+
 ## Author
 
 [@unhappychoice](https://unhappychoice.com)
