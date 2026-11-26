@@ -20,6 +20,7 @@ import {model} from "./model";
 import {OrderComponent, State as OrderComponentState} from "./order";
 import {cancellationOutcomes} from "./order/history";
 import {withMarketFillPreview} from "./order/marketFillPreview";
+import {OrderRequestBatch} from "./order/request";
 import type {OrderSubmissionState} from "./orderSubmissionState";
 import {recentTrades} from "./recentTrades";
 import {request} from "./request";
@@ -122,7 +123,7 @@ export const Trade = (
             }),
         },
     })(sources, submission.isOrdering$, leaveTrade$, withMarketFillPreview(orderViewInputs$));
-    orderComponent.orderRequests.addListener({ next: submission.submit });
+    (orderComponent.orderRequests as unknown as Stream<OrderRequestBatch>).addListener({ next: submission.submit });
 
     const cancellationOutcome$ = cancellationOutcomes(sources.orderRequests);
     const actions = intent(sources, cancellationOutcome$);
