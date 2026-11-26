@@ -226,6 +226,33 @@ test("IFDOCO rejects exit prices that overflow", (t) => {
     assert.deepEqual(form.requests, []);
 });
 
+for (const [typed, effective] of [["150", "100"], ["-10", "0"]]) {
+    test(`IFDOCO syncs the ratio input's live value to ${effective} once the field loses focus after typing ${typed}`, (t) => {
+        const form = setup(t, "10000", "1", 5000000);
+        form.enterRatio(typed);
+
+        const ratioField = () => form.view().children.find(({ sel }) => sel === "div.ratio").children[1];
+        const vnode = ratioField();
+        assert.equal(vnode.data.attrs.value, +effective);
+
+        const element = { value: typed };
+        vnode.elm = element;
+        const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+        Object.defineProperty(globalThis, "document", { configurable: true, value: { activeElement: element } });
+        t.after(() => {
+            if (originalDocument) Object.defineProperty(globalThis, "document", originalDocument);
+            else delete globalThis.document;
+        });
+
+        vnode.data.hook.update(vnode, vnode);
+        assert.equal(element.value, typed, "focused input keeps the typed value");
+
+        globalThis.document.activeElement = null;
+        vnode.data.hook.update(vnode, vnode);
+        assert.equal(element.value, effective, "blurred input snaps to the effective ratio");
+    });
+}
+
 for (const [ratio, side, disabled] of [
     ["25", "SELL", [false, true]],
     ["75", "BUY", [true, false]],

@@ -1,4 +1,6 @@
 import Stream from "xstream";
+import dropRepeats from "xstream/extra/dropRepeats";
+import {Sound} from "../../../drivers/soundDriver";
 import {OrderHistory} from "../../../models/orderHistory";
 import {Position} from "../../../models/position";
 import {Sinks} from "../../index";
@@ -25,10 +27,18 @@ export const SummaryComponent = (sources: Sources): Sinks => {
     const view$ = view(sources.state.stream as any);
     const request$ = request();
 
+    const sound$ = (sources.state.stream as any)
+        .map((state: State | undefined) => state?.priceAlert)
+        .compose(dropRepeats())
+        .drop(1)
+        .filter((alert: PriceAlert | null | undefined) => alert?.status === "triggered")
+        .mapTo<Sound>("price-alert");
+
     return {
         DOM: view$,
         HTTP: request$,
         router: Stream.never(),
+        sound: sound$,
         state: reducer$,
         storage: Stream.never(),
     };
