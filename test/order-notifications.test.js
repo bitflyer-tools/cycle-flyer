@@ -79,8 +79,8 @@ function appHarness(t) {
       response$.request = request;
       select(request.category).shamefullySendNext(response$);
       return {
-        accept: () => {
-          response$.shamefullySendNext({ request });
+        accept: (body) => {
+          response$.shamefullySendNext({ request, status: 200, text: JSON.stringify(body) });
           response$.shamefullySendComplete();
         },
         reject: () => response$.shamefullySendError({ response: { request } }),
@@ -93,8 +93,8 @@ function appHarness(t) {
 test('notifies for submissions, TWAP slices, and private executions', (t) => {
   const app = appHarness(t);
   app.submit(marketOrder(0.01, 'BUY')).disconnect();
-  app.submit(limitOrder(100, 0.01, 'BUY')).accept();
-  app.submit(stopOrder(90, 0.01, 'SELL')).accept();
+  app.submit(limitOrder(100, 0.01, 'BUY')).accept({ child_order_acceptance_id: 'JRF-child' });
+  app.submit(stopOrder(90, 0.01, 'SELL')).accept({ parent_order_acceptance_id: 'JRF-parent' });
   app.submit(twapSliceOrder(0.01, 'SELL', Symbol())).reject();
   app.executionBatch$.shamefullySendNext([{ price: 100, size: 0.01, side: 'BUY' }]);
   app.childOrderEvent$.shamefullySendNext({ event_type: 'ORDER' });
