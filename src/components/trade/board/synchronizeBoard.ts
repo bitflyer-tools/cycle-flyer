@@ -41,7 +41,9 @@ export const synchronizeBoard = <T extends Stream<Response>>(
     });
     const connection$ = connected$.compose(dropRepeats()).remember();
     const invalidation$ = connection$.mapTo(invalidateSnapshot);
-    const snapshotReducer$ = snapshotReducers(responses$$, boardUpdates$, connection$);
+    const snapshotReducer$ = snapshotReducers(
+        responses$$.map<Stream<Response>>((response$) => response$), boardUpdates$, connection$,
+    );
 
     return Stream.merge(liveReducer$, invalidation$, snapshotReducer$);
 };

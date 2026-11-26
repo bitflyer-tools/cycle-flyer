@@ -72,7 +72,7 @@ for (const type of ["stop", "ifdoco"] as const) {
             order.enterSize("0.0009");
             equal(order.orderDisabled(section, side), true);
             submit();
-            deepEqual(order.requests, []);
+            deepEqual(order.requests, [] as RequestOptions[]);
 
             order.enterSize("0.001");
             equal(order.orderDisabled(section, side), false);
@@ -89,7 +89,7 @@ test("blocks both IFDOCO sides until the first public execution arrives", (t) =>
     const order = setup(t, "10000", { initialPrice: null });
     order.buy("ifdoco");
     order.sellIFDOCO();
-    deepEqual(order.requests, []);
+    deepEqual(order.requests, [] as RequestOptions[]);
     equal(order.state.isOrdering, false);
 
     order.publishExecution(10000000);
@@ -151,7 +151,7 @@ test("requires a fresh price for Stop and Ranged IFDOCO after returning to Trade
     deepEqual(order.disabledSides("stop"), [false, true]);
     deepEqual(order.disabledSides("ranged-ifdoco"), [false, false]);
     order.buy("stop");
-    deepEqual(order.requests, []);
+    deepEqual(order.requests, [] as RequestOptions[]);
 
     order.buy("ifdoco");
     const [, profit, loss] = JSON.parse(order.requests[0].send as string).parameters;
@@ -195,7 +195,7 @@ test("requires a fresh execution after the market feed disconnects", (t) => {
     deepEqual(order.disabledSides("stop"), [false, true]);
     deepEqual(order.disabledSides("ranged-ifdoco"), [false, false]);
     order.buy("stop");
-    deepEqual(order.requests, []);
+    deepEqual(order.requests, [] as RequestOptions[]);
 
     order.buy("ifdoco");
     const [, profit, loss] = JSON.parse(order.requests[0].send as string).parameters;
@@ -550,7 +550,7 @@ test("routes account executions without changing session history or reviving sta
     trade.navigate("/setting");
     trade.navigate("/");
     pending.succeed(page);
-    deepEqual(trade.executions.rows, []);
+    deepEqual(trade.executions.rows, [] as Execution[]);
     equal(trade.executions.loading, false);
 
     trade.refreshExecutions();
@@ -560,12 +560,12 @@ test("routes account executions without changing session history or reviving sta
 
     trade.navigate("/setting");
     await saveCredentials({ key: "account-b", secret: "secret-b" });
-    deepEqual(trade.executions.rows, []);
+    deepEqual(trade.executions.rows, [] as Execution[]);
     trade.navigate("/");
     trade.refreshExecutions();
     const accountB = trade.requests.at(-1)!;
     trade.respondTo(accountA).succeed(page);
-    deepEqual(trade.executions.rows, []);
+    deepEqual(trade.executions.rows, [] as Execution[]);
     equal(trade.executions.loading, true);
     trade.respondTo(accountB).succeed([{ ...page[0], id: 2 }]);
     equal(trade.executions.rows[0].id, 2);
@@ -1061,7 +1061,7 @@ test("a pending IFDOCO from the previous account cannot lock or update the new a
 function rejectUnsigned(request: RequestOptions) {
     return new Promise<void>((resolve, reject) => {
         unsignedRequests$.filter((unsigned) => unsigned === request).take(1).addListener({ next: () => resolve() });
-        makeSignedHTTPDriver()(Stream.of(request)).select().addListener({
+        makeSignedHTTPDriver()(Stream.of<RequestInput | null>(request)).select().addListener({
             next: () => reject(new Error("An unsigned request reached the HTTP driver")),
         });
     });
@@ -1477,7 +1477,7 @@ test("ignores write deadlines from the previous account", async (t) => {
         stopOrder(110000, 0.01, "BUY"),
         twapSliceOrder(0.01, "BUY", Symbol()),
     ]
-        .map((request) => trade.respondTo({ ...request, _namespace: ["trade"] }));
+        .map((request) => trade.respondTo({ ...request as RequestOptions, _namespace: ["trade"] }));
 
     trade.navigate("/setting");
     await saveCredentials({ key: "account-b", secret: "secret-b" });
@@ -1674,7 +1674,7 @@ function setup(t: TestContext, width = "0.01", options: {
             const response$ = Object.assign(Stream.createWithMemory<Response>(), { request });
             responses$.shamefullySendNext(response$);
             const respondOK = (text: string) => {
-                response$.shamefullySendNext({ request, status: 200, text } as Response);
+                response$.shamefullySendNext({ request, status: 200, text } as unknown as Response);
                 response$.shamefullySendComplete();
             };
             return {
@@ -1683,7 +1683,7 @@ function setup(t: TestContext, width = "0.01", options: {
                 reject: (status = 400) => response$.shamefullySendError({
                     response: { request, status, text: JSON.stringify({ status: -1, error_message: "Order rejected" }) },
                 }),
-                progress: () => response$.shamefullySendNext({ request } as Response),
+                progress: () => response$.shamefullySendNext({ request } as unknown as Response),
                 respondOK,
                 succeed: (body = acceptedOrderBody(request.url)) => respondOK(body === undefined ? "" : JSON.stringify(body)),
             };
