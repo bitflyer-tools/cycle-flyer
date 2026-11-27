@@ -51,7 +51,7 @@
     "prettier": "^3.10.1",
     "serve": "latest",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.73.0"
+    "typescript-eslint": "^8.74.0"
   },
   "overrides": {
     "form-data": "^2.5.6",
