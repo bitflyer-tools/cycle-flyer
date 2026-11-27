@@ -8,6 +8,7 @@ import {currentCredentialVersion, signRest} from "../credentials";
 
 export interface AccountRequest extends RequestOptions {
     credentialVersion?: number;
+    cancelled?: () => boolean;
 }
 
 export const isCurrentAccountRequest = (request: Pick<AccountRequest, "credentialVersion"> | undefined): boolean =>
@@ -40,7 +41,8 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
     const expectedVersion = (request as AccountRequest).credentialVersion;
     if (version === null) { return null; }
     const cancelled = () => version !== currentCredentialVersion()
-        || (expectedVersion !== undefined && expectedVersion !== version);
+        || (expectedVersion !== undefined && expectedVersion !== version)
+        || (request as AccountRequest).cancelled?.() === true;
     if (cancelled()) { return null; }
 
     try {

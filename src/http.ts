@@ -58,6 +58,7 @@ export const marketOrder = (size: number, side: string): RequestInput => {
 
 export interface TwapSliceRequest extends RequestOptions {
     scheduleId: symbol;
+    cancelled?: () => boolean;
 }
 
 export const twapSliceOrder = (size: number, side: string, scheduleId: symbol): TwapSliceRequest =>

@@ -78,7 +78,10 @@ const slices = (
                 if (!isTwapActive()) { return; }
                 gateOpen = false;
                 produced += 1;
-                listener.next(twapSliceOrder(tick + 1 < largerCount ? largerSize : baseSize, schedule.side, schedule.id));
+                listener.next({
+                    ...twapSliceOrder(tick + 1 < largerCount ? largerSize : baseSize, schedule.side, schedule.id),
+                    cancelled: () => !isTwapActive(),
+                });
                 if (produced === state.twap.slices) { listener.complete(); }
             };
             const release = (): void => {

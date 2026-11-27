@@ -911,6 +911,7 @@ test("stops TWAP on signing failure and ignores old slices after a restart", asy
     t.mock.timers.tick(1000);
 
     equal(await authorizeRequest({ ...order.requests[1], send: {} }), null);
+    unsignedRequests$.shamefullySendNext(order.requests[1]);
     equal(order.state.twap.remaining, 0);
     equal(order.state.twap.error, "TWAP stopped because an order could not be signed.");
     t.mock.timers.tick(3000);

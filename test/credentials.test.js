@@ -302,6 +302,7 @@ test('starting, canceling, and failing a TWAP leave another scheduler signing in
 
   second.start();
   second.cancel();
+  assert.equal(await renderer.authorizeRequest(second.requests[0]), null);
   second.start();
   assert.equal(await renderer.authorizeRequest({ ...second.requests[1], send: {} }), null);
 
