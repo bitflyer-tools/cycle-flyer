@@ -44,7 +44,7 @@ export const OrderComponent = (
 } => {
     const state$ = sources.state.stream as any as Stream<State>;
     const actions = intent(sources, state$);
-    const twap = twapRequest(actions, state$, leaveTrade$);
+    const twap = twapRequest(actions, state$, sources.HTTP, leaveTrade$);
     const reducer$ = model(actions, isOrdering$, twap.lifecycle$);
     const view$ = view(viewState$ ?? state$);
 
