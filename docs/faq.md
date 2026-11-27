@@ -50,6 +50,22 @@ bitFlyer before that point can still execute even though later slices never
 go out. Use **Cancel TWAP** to stop a schedule deliberately; see
 [TWAP](order-entry.md#twap) for the full behavior.
 
+## Desktop notifications don't appear
+
+Checking **Desktop notifications** on **Setting** requests OS or browser
+notification permission at that moment, tied to the click so the prompt
+isn't treated as an unrelated gesture and silently denied. The
+[notification driver](../src/drivers/notificationDriver.ts) only shows a
+notification when that permission is granted; it doesn't ask again the next
+time you check the box, since it only prompts while permission is still
+undecided. If you dismissed or denied the prompt, notifications stay silent
+until you grant permission outside the app: in a standalone browser, allow
+notifications for the page from the browser's site settings, then reload; in
+the Electron app, allow notifications for Cycle Flyer in your OS notification
+settings (for example macOS System Settings → Notifications, Windows
+Settings → Notifications, or a running notification service on Linux). Once
+permission is granted, notifications work without re-checking the box.
+
 ## The order book looks frozen or out of date
 
 The board resynchronizes from a REST snapshot whenever the socket connects or
