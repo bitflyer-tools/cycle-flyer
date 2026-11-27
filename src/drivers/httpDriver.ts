@@ -5,7 +5,6 @@ import type {SuperAgentRequest} from "superagent";
 import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {currentCredentialVersion, signRest} from "../credentials";
-import {TwapSliceRequest} from "../http";
 
 export interface AccountRequest extends RequestOptions {
     credentialVersion?: number;
@@ -37,14 +36,12 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
         return request;
     }
 
-    const {isTwapActive, onSigningFailure, onDispatched} = request as TwapSliceRequest;
-    const settle = (result: RequestInput | null) => { onDispatched?.(); return result; };
     const version = currentCredentialVersion();
     const expectedVersion = (request as AccountRequest).credentialVersion;
-    if (version === null) { return settle(null); }
+    if (version === null) { return null; }
     const cancelled = () => version !== currentCredentialVersion()
-        || (expectedVersion !== undefined && expectedVersion !== version) || isTwapActive?.() === false;
-    if (cancelled()) { return settle(null); }
+        || (expectedVersion !== undefined && expectedVersion !== version);
+    if (cancelled()) { return null; }
 
     try {
         const body = request.send || "";
@@ -57,14 +54,13 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
                 credentialVersion: version,
                 headers: Object.assign({}, request.headers, headers),
             };
-            return settle(authorized);
+            return authorized;
         }
     } catch {
         // eslint-disable-next-line no-console
         console.error("Unable to sign the bitFlyer request.");
     }
-    if (!cancelled()) { onSigningFailure?.(); }
-    return settle(null);
+    return null;
 };
 
 const requestDeadlineMs = 10_000;

@@ -57,9 +57,6 @@ export const marketOrder = (size: number, side: string): RequestInput => {
 };
 
 export interface TwapSliceRequest extends RequestOptions {
-    isTwapActive?: () => boolean;
-    onSigningFailure?: () => void;
-    onDispatched?: () => void;
     scheduleId: symbol;
 }
 

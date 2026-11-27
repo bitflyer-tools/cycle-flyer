@@ -1,5 +1,5 @@
 import type {VNode} from "@cycle/dom";
-import type {RequestOptions} from "@cycle/http";
+import type {HTTPSource, RequestOptions} from "@cycle/http";
 import {deepStrictEqual, strictEqual} from "node:assert";
 import {before, test, TestContext} from "node:test";
 import Stream from "xstream";
@@ -13,6 +13,7 @@ import {twapSection} from "../src/components/trade/order/twapView";
 import {twapRequest} from "../src/components/trade/order/twapRequest";
 import {Sources} from "../src/components/trade";
 import {hasApiCredentials, initializeCredentials} from "../src/credentials";
+import {unsignedRequests$} from "../src/drivers/httpDriver";
 import {TwapSliceRequest} from "../src/http";
 import {minimumOrderSize} from "../src/models/order";
 import {isRunning} from "../src/models/twapOrder";
@@ -51,10 +52,13 @@ test("settles overlapping slices and returns to idle in either response order", 
 test("withholds a later slice until the earlier slice has been dispatched", (context) => {
     context.mock.timers.enable({ apis: ["setInterval"] });
     const start$ = Stream.create<TwapSchedule>();
+    const dispatched$ = Stream.create<{ request: TwapSliceRequest }>();
+    const http = { select: (category: string) => category === "twap-order" ? dispatched$ : Stream.never() } as unknown as HTTPSource;
     const requests: TwapSliceRequest[] = [];
     const { requests$ } = twapRequest(
         { onTwapStarted$: start$, onClickTwapCancelButton$: Stream.never() } as unknown as TwapActions,
         Stream.of({ size: 0.02, twap: { interval: 1, slices: 2 } } as unknown as State),
+        http,
     );
     const subscription = requests$.subscribe({ next: (request) => requests.push(request) });
     context.after(() => subscription.unsubscribe());
@@ -65,17 +69,19 @@ test("withholds a later slice until the earlier slice has been dispatched", (con
     context.mock.timers.tick(1000);
     strictEqual(requests.length, 1);
 
-    requests[0].onDispatched?.();
+    dispatched$.shamefullySendNext({ request: requests[0] });
     strictEqual(requests.length, 2);
 });
 
 test("discards later slices once an earlier slice fails to sign", (context) => {
     context.mock.timers.enable({ apis: ["setInterval"] });
     const start$ = Stream.create<TwapSchedule>();
+    const http = { select: () => Stream.never() } as unknown as HTTPSource;
     const requests: TwapSliceRequest[] = [];
     const { requests$ } = twapRequest(
         { onTwapStarted$: start$, onClickTwapCancelButton$: Stream.never() } as unknown as TwapActions,
         Stream.of({ size: 0.03, twap: { interval: 1, slices: 3 } } as unknown as State),
+        http,
     );
     const subscription = requests$.subscribe({ next: (request) => requests.push(request) });
     context.after(() => subscription.unsubscribe());
@@ -83,8 +89,7 @@ test("discards later slices once an earlier slice fails to sign", (context) => {
     start$.shamefullySendNext({ id: Symbol(), side: "BUY" });
     strictEqual(requests.length, 1);
 
-    requests[0].onSigningFailure?.();
-    requests[0].onDispatched?.();
+    unsignedRequests$.shamefullySendNext(requests[0]);
     context.mock.timers.tick(2000);
     strictEqual(requests.length, 1);
 });
@@ -231,7 +236,7 @@ const createTwap = (context: TestContext, interval = 1, slices = 2) => {
     const state$ = Stream.createWithMemory<State>();
     const actions = intent(sources, state$);
     let state: State | undefined;
-    const scheduler = twapRequest(actions, state$);
+    const scheduler = twapRequest(actions, state$, sources.HTTP);
     const reducer = model(actions, Stream.never(), scheduler.lifecycle$).subscribe({
         next: (reduce) => {
             state = reduce(state);
@@ -247,7 +252,6 @@ const createTwap = (context: TestContext, interval = 1, slices = 2) => {
             const pending = fakeResponse(input as TwapSliceRequest);
             requests.push(pending);
             responses$.shamefullySendNext(pending.response$);
-            (input as TwapSliceRequest).onDispatched?.();
         },
     });
     context.after(() => { request.unsubscribe(); reducer.unsubscribe(); });
