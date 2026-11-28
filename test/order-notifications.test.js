@@ -95,7 +95,9 @@ function appHarness(t) {
           response$.shamefullySendNext({ request, status: 200, text: JSON.stringify(body) });
           response$.shamefullySendComplete();
         },
-        reject: () => response$.shamefullySendError({ response: { request } }),
+        fail: (status, body) => response$.shamefullySendError({
+          response: { request, status, text: JSON.stringify(body) },
+        }),
         timeOut: () => response$.shamefullySendError({ code: 'ECONNABORTED', errno: 'ETIME' }),
       };
     },
@@ -108,9 +110,9 @@ test('desktop notifications distinguish order outcomes from private executions',
   app.submit(marketOrder(0.01, 'BUY')).timeOut();
   app.submit(limitOrder(100, 0.01, 'BUY')).accept({ child_order_acceptance_id: 'JRF-child' });
   app.submit(stopOrder(90, 0.01, 'SELL')).accept({ parent_order_acceptance_id: 'JRF-parent' });
-  app.submit(twapSliceOrder(0.01, 'SELL', Symbol())).reject();
+  app.submit(twapSliceOrder(0.01, 'SELL', Symbol())).fail(400, { status: -1, error_message: 'Order rejected' });
   app.submit(cancelOrders()).accept({});
-  app.submit(cancelParentOrder('JRF-parent')).reject();
+  app.submit(cancelParentOrder('JRF-parent')).fail(400, { status: -1, error_message: 'Cancellation rejected' });
   app.submit(cancelOrders()).timeOut();
   app.executionBatch$.shamefullySendNext([{ price: 100, size: 0.01, side: 'BUY' }]);
   app.childOrderEvent$.shamefullySendNext({ event_type: 'ORDER' });
@@ -134,3 +136,24 @@ test('desktop notifications distinguish order outcomes from private executions',
   assert.equal(app.histories().at(-1).status, 'unconfirmed');
   assert.equal(app.histories().at(-1).timedOut, true);
 });
+
+for (const status of [502, 503]) {
+  test(`desktop notifications report HTTP ${status} order and cancellation outcomes as unconfirmed`, (t) => {
+    const app = appHarness(t);
+    const { cancelOrders, cancelParentOrder, marketOrder, stopOrder, twapSliceOrder } = app.orders;
+    const requests = [
+      marketOrder(0.01, 'BUY'),
+      stopOrder(90, 0.01, 'SELL'),
+      twapSliceOrder(0.01, 'SELL', Symbol()),
+      cancelOrders(),
+      cancelParentOrder('JRF-parent'),
+    ];
+    requests.forEach((request) => app.submit(request).fail(status, { status: -1, error_message: 'Upstream error' }));
+
+    assert.deepEqual(app.notifications, [
+      'Order unconfirmed', 'Order unconfirmed', 'Order unconfirmed',
+      'Cancellation unconfirmed', 'Cancellation unconfirmed',
+    ]);
+    assert.deepEqual(app.histories().map(({ status }) => status), Array(requests.length).fill('unconfirmed'));
+  });
+}
