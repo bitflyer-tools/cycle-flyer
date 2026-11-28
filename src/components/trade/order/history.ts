@@ -8,7 +8,7 @@ import {AcceptanceIdField, hasOrderAcceptanceId, isOrderRejection} from "./rejec
 
 type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 
-type OrderStatus = "success" | "failed" | "unconfirmed";
+export type OrderStatus = "success" | "failed" | "unconfirmed";
 
 export interface OrderOutcome {
     status: OrderStatus;

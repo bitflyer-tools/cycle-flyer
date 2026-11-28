@@ -3,6 +3,7 @@ import {Reducer} from "@cycle/state";
 import Stream from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {credentialsChanging$} from "../../credentials";
+import type {NotificationEvent} from "../../drivers/notificationDriver";
 import {Sound} from "../../drivers/soundDriver";
 import {prependOrderHistories} from "../../models/orderHistory";
 import {Position} from "../../models/position";
@@ -16,6 +17,7 @@ export interface OrderSubmissionState {
     isOrdering$: Stream<boolean>;
     orderRequests$: Stream<RequestInput | null>;
     reducer$: Stream<Reducer<State>>;
+    notification$: Stream<NotificationEvent>;
     sound$: Stream<Sound>;
     submit: (batch: OrderRequestBatch) => void;
 }
@@ -86,6 +88,10 @@ export const createOrderSubmissionState = (http: HTTPSource): OrderSubmissionSta
         orderOutcomeReducer$,
         resetAccountReducer$,
     ) as Stream<Reducer<State>>;
+    const notification$ = orderOutcome$.map<NotificationEvent>((outcome) => ({
+        operation: "parentOrderId" in outcome ? "cancellation" : "submission",
+        status: outcome.status,
+    }));
     const sound$ = orderOutcome$.map((outcome): Sound => outcome.status === "success" ? "success" : "failure");
 
     // Keep every stage hot forever, independent of whether Trade (or Root) currently has a
@@ -98,6 +104,7 @@ export const createOrderSubmissionState = (http: HTTPSource): OrderSubmissionSta
         isOrdering$,
         orderRequests$,
         reducer$,
+        notification$,
         sound$,
         submit: (batch) => submissionBatchSignal$.shamefullySendNext(batch),
     };

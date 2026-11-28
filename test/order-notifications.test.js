@@ -27,7 +27,7 @@ const app = { exports: {} };
 compileFunction(bundle.text, ['require', 'module', 'localStorage'])(
   require, app, { 'api-key': 'test', 'api-secret': 'test' },
 );
-const { Root, limitOrder, marketOrder, stopOrder, twapSliceOrder } = app.exports;
+const { Root, cancelOrders, limitOrder, marketOrder, stopOrder, twapSliceOrder } = app.exports;
 
 function appHarness(t) {
   const responses = new Map();
@@ -88,28 +88,40 @@ function appHarness(t) {
           response$.shamefullySendComplete();
         },
         reject: () => response$.shamefullySendError({ response: { request } }),
-        disconnect: () => response$.shamefullySendError(new Error('Connection lost')),
+        timeout: () => response$.shamefullySendError(
+          Object.assign(new Error('Deadline exceeded'), { code: 'ECONNABORTED', errno: 'ETIME' }),
+        ),
       };
     },
   };
 }
 
-test('notifies for submissions, TWAP slices, and private executions', (t) => {
+test('notifies for submissions, TWAP slices, cancellations, and private executions', (t) => {
   const app = appHarness(t);
-  app.submit(marketOrder(0.01, 'BUY')).disconnect();
+  app.submit(marketOrder(0.01, 'BUY')).timeout();
   app.submit(limitOrder(100, 0.01, 'BUY')).accept({ child_order_acceptance_id: 'JRF-child' });
   app.submit(stopOrder(90, 0.01, 'SELL')).accept({ parent_order_acceptance_id: 'JRF-parent' });
   app.submit(twapSliceOrder(0.01, 'SELL', Symbol())).reject();
+  app.submit(cancelOrders()).accept({});
   app.executionBatch$.shamefullySendNext([{ price: 100, size: 0.01, side: 'BUY' }]);
   app.childOrderEvent$.shamefullySendNext({ event_type: 'ORDER' });
 
   const execution = { event_type: 'EXECUTION', side: 'BUY', price: 100, size: 0.01 };
   app.childOrderEvent$.shamefullySendNext(execution);
   app.childOrderEvent$.shamefullySendNext(execution);
-  assert.deepEqual(app.sounds, ['failure', 'success', 'success', 'failure', 'execution', 'execution']);
-  assert.deepEqual(app.notifications, app.sounds);
+  assert.deepEqual(app.sounds, ['failure', 'success', 'success', 'failure', 'success', 'execution', 'execution']);
+  assert.deepEqual(app.notifications, [
+    { operation: 'submission', status: 'unconfirmed' },
+    { operation: 'submission', status: 'success' },
+    { operation: 'submission', status: 'success' },
+    { operation: 'submission', status: 'failed' },
+    { operation: 'cancellation', status: 'success' },
+    'execution',
+    'execution',
+  ]);
   assert.deepEqual(app.histories().map(({ name }) => name), [
-    'Executed', 'Executed', 'TWAP', 'Stop', 'Limit', 'Market',
+    'Executed', 'Executed', 'Cancel', 'TWAP', 'Stop', 'Limit', 'Market',
   ]);
   assert.equal(app.histories().at(-1).status, 'unconfirmed');
+  assert.equal(app.histories().at(-1).timedOut, true);
 });
