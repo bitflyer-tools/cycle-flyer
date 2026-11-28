@@ -282,6 +282,25 @@ test("serializes rows to CSV with a header row and escaped fields", () => {
     ].join("\r\n"));
 });
 
+test("exports formula-leading execution text as literal CSV cells", () => {
+    const rows: Execution[] = [
+        { ...execution(1), exec_date: "=1+1", side: "+2", price: -12000000, child_order_acceptance_id: "-3" },
+        { ...execution(2), exec_date: '=SUM(1,2)', side: '@SUM("2")', child_order_acceptance_id: "  +1\r\n2" },
+        { ...execution(3), exec_date: "\tdate", side: "\rBUY", child_order_acceptance_id: "\norder" },
+        { ...execution(4), exec_date: "＝1", side: "＋2", child_order_acceptance_id: "－3" },
+        { ...execution(5), side: "＠SUM(1)", child_order_acceptance_id: " JRF-2025" },
+    ];
+    assert.equal(toCsv(rows), [
+        "Exchange time,Side,Price (JPY),Size (BTC-CFD),Order acceptance ID",
+        "'=1+1,'+2,-12000000,1e-8,'-3",
+        `"'=SUM(1,2)","'@SUM(""2"")",12000000,1e-8,"'  +1\r\n2"`,
+        `'\tdate,"'\rBUY",12000000,1e-8,"'\norder"`,
+        "'＝1,'＋2,12000000,1e-8,'－3",
+        "2025-03-22T09:57:40.397,'＠SUM(1),12000000,1e-8, JRF-2025",
+        "",
+    ].join("\r\n"));
+});
+
 test("disables CSV export until executions have loaded, then downloads a CSV on click", async (t) => {
     const panel = await setup(t);
     assert.equal(panel.disabled("button.export-executions-csv"), true);
