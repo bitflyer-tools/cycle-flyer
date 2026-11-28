@@ -41,7 +41,18 @@ You can view the order book without an API key.
 2. Click **Save credentials** and wait for the **Credentials saved.** confirmation.
 3. Return to **Trade** to check your account summary, including collateral and position information. You can verify access without placing an order.
 
-See the [FAQ and troubleshooting](docs/faq.md) guide if credentials won't save or an order shows as unconfirmed.
+## Configuration
+
+Open **Setting** in the app to manage credentials and alerts.
+
+| Setting | What it does |
+| --- | --- |
+| **API Key** and **API Secret** | Use **Save credentials** to store the pair in the desktop app's OS-backed credential store. Use **Clear credentials** to remove the saved pair. |
+| **Sound** | On by default. Controls tones for order outcomes, executions, and price alerts. |
+| **Desktop notifications** | Off by default. Turn it on and grant notification permission when prompted to receive desktop alerts for the same events. |
+
+Sound and desktop notification preferences are saved locally and can be set independently.
+See the [FAQ and troubleshooting](docs/faq.md) guide for credential storage, notification permissions, and unconfirmed orders.
 
 ## Releases
 
