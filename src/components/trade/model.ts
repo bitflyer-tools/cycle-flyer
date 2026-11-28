@@ -8,12 +8,15 @@ import {Position} from "../../models/position";
 import {State} from "./index";
 import {Actions} from "./intent";
 
+const positionSnapshotMaxAgeMs = 15_000;
+
 const defaultState: State = {
     currentPrice: null,
     histories: [],
     orders: [],
     parentStopOrders: {},
     position: new Position([]),
+    positionStale: true,
     price: 0,
 };
 
@@ -42,8 +45,15 @@ export const model = (actions: Actions, connected$ = Stream.never<boolean>()): S
             const reconciled = close?.settled && close.id === positionCloseId
                 && (close.rejected || position.size === 0 || position.size * close.size < 0
                     || Math.abs(position.size) < Math.abs(close.size));
-            return { ...state, position, positionCredentialVersion, positionClose: reconciled ? undefined : close };
+            return {
+                ...state, position, positionCredentialVersion, positionStale: false,
+                positionExpiresAt: Date.now() + positionSnapshotMaxAgeMs,
+                positionClose: reconciled ? undefined : close,
+            };
         });
+
+    const positionStaleReducer$ = actions.onPositionsRefreshFailed$
+        .map(() => (state: State) => ({ ...state, positionStale: true }));
 
     const parentOrdersReducer$ = actions.onParentOrdersLoaded$
         .map(({ orders, sequence }) => (state: State) => {
@@ -74,6 +84,7 @@ export const model = (actions: Actions, connected$ = Stream.never<boolean>()): S
         myExecutionReducer$,
         ordersReducer$,
         positionReducer$,
+        positionStaleReducer$,
         parentOrderReducer$,
         parentOrdersReducer$,
     ) as Stream<Reducer<State>>;

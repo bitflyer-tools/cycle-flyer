@@ -24,6 +24,7 @@ function setup(t) {
         onParentOrderLoaded$: parentOrder$,
         onParentOrdersLoaded$: parentOrders$.map((orders) => ({ orders, sequence: 0 })),
         onPositionsLoaded$: Stream.never(),
+        onPositionsRefreshFailed$: Stream.never(),
     }).subscribe({
         next: (reducer) => {
             state = reducer(state);

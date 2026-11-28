@@ -284,10 +284,15 @@ for (const { component, category, first, invalid, next, read, expected } of test
         assert.equal(state, lastValidState);
       }
       respond('upstream unavailable');
-      assert.equal(state, lastValidState);
+      // positions also marks positionStale on an unparsable response, so from here on only the
+      // position itself (not the whole state reference) is guaranteed to stay unchanged.
+      const assertUnaffected = () => category === 'positions'
+        ? assert.equal(read(state), expected[0])
+        : assert.equal(state, lastValidState);
+      assertUnaffected();
       for (const value of invalid) {
         respond(JSON.stringify(value));
-        assert.equal(state, lastValidState);
+        assertUnaffected();
       }
 
       respond(JSON.stringify(next));
@@ -297,6 +302,78 @@ for (const { component, category, first, invalid, next, read, expected } of test
     }
   });
 }
+
+test('marks the position snapshot stale after a failed refresh and fresh again after a valid one', () => {
+  const responses = Stream.create();
+  const idle = Stream.never();
+  const actions = components.trade_intent({
+    socket: { childOrderEvent$: idle, executionBatch$: idle, parentOrderEvent$: idle, reconnect$: idle },
+    HTTP: { select: (category) => category === 'positions' ? responses : idle },
+  });
+  let state;
+  const subscription = components.trade_model(actions).subscribe({
+    next: (reduce) => { state = reduce(state); },
+    error: (error) => { throw error; },
+  });
+  const respond = (text) => responses.shamefullySendNext(Stream.of({ text, request: { credentialVersion: components.currentCredentialVersion() } }));
+  const failedPoll = (credentialVersion = components.currentCredentialVersion()) =>
+    Object.assign(Stream.throw(new Error('Position poll failed')), { request: { credentialVersion } });
+
+  try {
+    respond(JSON.stringify([{ side: 'BUY', price: 100, size: 0.1 }]));
+    assert.equal(state.positionStale, false);
+
+    responses.shamefullySendNext(failedPoll());
+    assert.equal(state.positionStale, true);
+
+    respond(JSON.stringify([]));
+    assert.equal(state.positionStale, false);
+    assert.equal(state.position.size, 0);
+
+    respond('not json');
+    assert.equal(state.positionStale, true);
+
+    respond(JSON.stringify([{ side: 'SELL', price: 100, size: 0.2 }]));
+    assert.equal(state.positionStale, false);
+    assert.equal(state.position.size, -0.2);
+  } finally {
+    subscription.unsubscribe();
+  }
+});
+
+test('keeps the new position fresh when a poll from the previous credentials fails', async (t) => {
+  const responses = Stream.create();
+  const idle = Stream.never();
+  const actions = components.trade_intent({
+    socket: { childOrderEvent$: idle, executionBatch$: idle, parentOrderEvent$: idle, reconnect$: idle },
+    HTTP: { select: (category) => category === 'positions' ? responses : idle },
+  });
+  let state;
+  const subscription = components.trade_model(actions).subscribe({
+    next: (reduce) => { state = reduce(state); },
+    error: (error) => { throw error; },
+  });
+  t.after(() => subscription.unsubscribe());
+
+  const oldRequest = { credentialVersion: components.currentCredentialVersion() };
+  const oldResponse = Object.assign(Stream.create(), { request: oldRequest });
+  responses.shamefullySendNext(oldResponse);
+  await components.saveCredentials({ key: 'new-key', secret: 'new-secret' });
+
+  const request = { credentialVersion: components.currentCredentialVersion() };
+  responses.shamefullySendNext(Stream.of({ text: '[{"side":"BUY","price":100,"size":1}]', request }));
+  assert.equal(state.position.size, 1);
+  assert.equal(state.positionStale, false);
+  const freshState = state;
+
+  oldResponse.shamefullySendError(new Error('Position poll failed'));
+  assert.equal(state, freshState);
+
+  // Deliver another old response stream late so its sequence cannot mask the version check.
+  const lateResponse = Object.assign(Stream.throw(new Error('Position poll failed')), { request: oldRequest });
+  responses.shamefullySendNext(lateResponse);
+  assert.equal(state, freshState);
+});
 
 const positionCloseId = Symbol('position close');
 const accountPolls = [

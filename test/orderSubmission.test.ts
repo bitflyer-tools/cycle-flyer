@@ -912,7 +912,7 @@ test("ignores Clear Orders results from the previous account", async (t) => {
     deepEqual(order.sounds, []);
 });
 
-test("clears collateral and child orders and ignores late responses after switching credentials", async (t) => {
+test("resets account snapshots and ignores late responses after switching credentials", async (t) => {
     const trade = setup(t);
     await saveCredentials({ key: "account-a", secret: "secret-a" });
     t.after(() => saveCredentials(null));
@@ -922,12 +922,15 @@ test("clears collateral and child orders and ignores late responses after switch
     const oldOrders = [{ side: "BUY", size: 0.1, price: 100 }];
     trade.respondTo(orders).succeed(oldOrders);
     trade.respondTo(collateral).succeed({ collateral: 1000 });
+    trade.respondTo(trade.positionRequests[0]).succeed(oldOrders);
     equal(trade.tradeState.orders.length, 1);
     equal(trade.tradeState.summaryComponentState!.collateral, 1000);
+    equal(trade.tradeState.positionStale, false);
 
     await saveCredentials({ key: "account-b", secret: "secret-b" });
     deepEqual(trade.tradeState.orders, []);
     equal(trade.tradeState.summaryComponentState!.collateral, 0);
+    equal(trade.tradeState.positionStale, true);
 
     const current = trade.respondTo(orders);
     trade.respondTo({ ...orders, credentialVersion: oldVersion }).succeed(oldOrders);
@@ -1224,6 +1227,95 @@ test("unlocks an unsigned Clear Position after refreshing the current position",
     equal(order.clearPositionDisabled, false);
     order.clearPosition();
     equal(order.requests.length, 2);
+});
+
+test("disables Clear Position once a position refresh fails and re-enables after a fresh nonzero snapshot", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    const position = [{ side: "BUY", size: 0.1, price: 100 }];
+    const poll = order.positionRequests[0];
+    order.respondTo(poll).succeed(position);
+    equal(order.clearPositionDisabled, false);
+
+    order.respondTo(poll).disconnect();
+    equal(order.clearPositionDisabled, true);
+    order.clearPosition();
+    equal(order.requests.length, 0);
+
+    order.respondTo(poll).reject();
+    equal(order.clearPositionDisabled, true);
+    order.clearPosition();
+    equal(order.requests.length, 0);
+
+    order.respondTo(poll).succeed([]);
+    equal(order.clearPositionDisabled, true);
+    order.clearPosition();
+    equal(order.requests.length, 0);
+
+    order.respondTo(poll).succeed(position);
+    equal(order.clearPositionDisabled, false);
+    order.clearPosition();
+    equal(order.requests.length, 1);
+});
+
+test("expires Clear Position while refreshes are pending and restores it after a fresh snapshot", async (t) => {
+    const order = setup(t, "0.01", { apis: ["Date", "setInterval", "setTimeout"] });
+    const timeout = t.mock.method(globalThis, "setTimeout");
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    const position = [{ side: "BUY", size: 0.1, price: 100 }];
+    order.respondTo(order.positionRequests[0]).succeed(position);
+    equal(order.clearPositionDisabled, false);
+
+    t.mock.timers.tick(10_000);
+    order.respondTo(order.positionRequests[1]).succeed(position);
+    t.mock.timers.tick(5_000);
+    equal(order.clearPositionDisabled, false);
+
+    t.mock.timers.tick(5_000);
+    t.mock.timers.setTime(Date.now() + 5_000);
+    order.clearPosition();
+    equal(order.requests.length, 0);
+    const snapshotExpirations = timeout.mock.calls.filter(({ arguments: [, delay] }) => delay === 15_000);
+    equal(snapshotExpirations.length, 2);
+    snapshotExpirations[1].arguments[0]();
+    equal(order.clearPositionDisabled, true);
+    equal(order.tradeState.position.size, 0.1);
+    order.clearPosition();
+    equal(order.requests.length, 0);
+
+    order.respondTo(order.positionRequests[2]).succeed(position);
+    equal(order.clearPositionDisabled, false);
+    order.clearPosition();
+    equal(order.requests.length, 1);
+});
+
+test("blocks Clear Position after malformed position responses for the current account", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    const position = [{ side: "BUY", size: 0.1, price: 100 }];
+    const poll = order.positionRequests[0];
+    order.respondTo(poll).succeed(position);
+    equal(order.clearPositionDisabled, false);
+
+    order.respondTo({ ...poll, credentialVersion: -1 }).succeed({ error_message: "Position unavailable" });
+    equal(order.clearPositionDisabled, false);
+
+    for (const malformed of [{ error_message: "Position unavailable" }, [{ ...position[0], size: "0.1" }]]) {
+        order.respondTo(poll).succeed(malformed);
+        equal(order.tradeState.position.size, 0.1);
+        equal(order.clearPositionDisabled, true);
+        order.clearPosition();
+        equal(order.requests.length, 0);
+
+        order.respondTo(poll).succeed(position);
+        equal(order.clearPositionDisabled, false);
+    }
+
+    order.clearPosition();
+    equal(order.requests.length, 1);
 });
 
 test("allows retry after a definite rejection and a fresh unchanged position", async (t) => {

@@ -13,7 +13,7 @@ import {twapSection} from "./twapView";
 import {canClearPosition, isValidLimitOrder, isValidOrderSize} from "./validation";
 
 export const view = (state$: Stream<State>): Stream<VNode> =>
-    Stream.combine(state$.compose(dropRepeats(sameViewInputs)), credentialAvailability()).map(([state, canSign]) =>
+    orderViewState(state$).map(({ state, canClear, canSign }) =>
         div(".order", [
             ...(state.orderSigningError
                 ? [div(".order-signing-error", { attrs: { role: "alert" } }, state.orderSigningError)]
@@ -28,11 +28,39 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
             hr(),
             twapSection(state, canSign),
             hr(),
-            clearSection(state),
+            clearSection(state, canClear),
             hr(),
             ifdocoSection(state),
         ]),
     );
+
+const orderViewState = (state$: Stream<State>) => {
+    const snapshotExpiry$ = state$
+        .map(({ positionExpiresAt, positionStale }) => positionStale ? undefined : positionExpiresAt)
+        .compose(dropRepeats())
+        .map((expiresAt) => expiresAt === undefined ? Stream.empty<undefined>() : snapshotExpiry(expiresAt))
+        .flatten()
+        .startWith(undefined);
+
+    return Stream.combine(state$, snapshotExpiry$, credentialAvailability())
+        .map(([state, , canSign]) => ({ state, canSign, canClear: canClearPosition(state) }))
+        .compose(dropRepeats((previous, next) =>
+            previous.canClear === next.canClear && previous.canSign === next.canSign
+            && sameViewInputs(previous.state, next.state)));
+};
+
+const snapshotExpiry = (expiresAt: number): Stream<undefined> => {
+    let timer: ReturnType<typeof setTimeout>;
+    return Stream.create({
+        start(listener) {
+            timer = setTimeout(() => {
+                listener.next(undefined);
+                listener.complete();
+            }, Math.max(0, expiresAt - Date.now()));
+        },
+        stop() { clearTimeout(timer); },
+    });
+};
 
 const sameViewInputs = (previous: State, next: State): boolean =>
     Object.is(previous.currentPrice, next.currentPrice)
@@ -40,7 +68,6 @@ const sameViewInputs = (previous: State, next: State): boolean =>
     && sameMarketFills(previous.marketFills, next.marketFills)
     && previous.orderSigningError === next.orderSigningError
     && previous.positionCredentialVersion === next.positionCredentialVersion
-    && canClearPosition(previous) === canClearPosition(next)
     && Object.is(Math.abs(previous.position.size), Math.abs(next.position.size))
     && Object.is(previous.price, next.price)
     && Object.is(previous.size, next.size)
@@ -70,13 +97,13 @@ const limitSection = (state: State): VNode =>
         ]),
     ]);
 
-const clearSection = (state: State): VNode =>
+const clearSection = (state: State, canClear: boolean): VNode =>
     div([
         h4(".sub-title", "Clear position"),
         div(".order-buttons", [
             button(
                 ".clear-button",
-                { attrs: { disabled: !canClearPosition(state) } },
+                { attrs: { disabled: !canClear } },
                 "Clear Position",
             ),
             button(".clear-order-button", { attrs: { disabled: clearOrderButtonDisabled(state) } }, "Clear Orders"),

@@ -1,6 +1,7 @@
-import {RequestOptions} from "@cycle/http";
+import {RequestOptions, Response} from "@cycle/http";
 import {Stream} from "xstream";
 import debounce from "xstream/extra/debounce";
+import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {AccountRequest, isCurrentAccountRequest} from "../../drivers/httpDriver";
 import {Execution} from "../../models/execution";
 import {ChildOrderEvent, isExecution} from "../../models/orderEvent";
@@ -13,6 +14,17 @@ import {parentOrderPages} from "./parentOrderPages";
 import {pollResponse} from "./pollResponse";
 import {PositionRequest} from "./request";
 
+interface PositionPollResult {
+    position: Position;
+    positionCredentialVersion: number;
+    positionCloseId: symbol | undefined;
+}
+
+interface PositionPollOutcome {
+    result?: PositionPollResult;
+    failed: boolean;
+}
+
 export interface Actions {
     onCancelOrders$: Stream<null>;
     onExecutionBatch$: Stream<Execution[]>;
@@ -24,6 +36,7 @@ export interface Actions {
     onParentOrderListSettled$: Stream<null>;
     parentOrderRequests$: Stream<RequestOptions>;
     onPositionsLoaded$: Stream<{ position: Position; positionCredentialVersion: number; positionCloseId: symbol | undefined }>;
+    onPositionsRefreshFailed$: Stream<null>;
 }
 
 export const intent = (sources: Sources, cancellationOutcome$ = Stream.never<CancellationOutcome>()): Actions => {
@@ -57,12 +70,58 @@ export const intent = (sources: Sources, cancellationOutcome$ = Stream.never<Can
         sources.socket.parentOrderEvent$, sources.socket.reconnect$,
     );
 
-    const onPositionsLoaded$ = pollResponse(sources.HTTP.select("positions"), (json, response) =>
-        isCurrent(response) && isPositionList(json) ? {
-            position: new Position(json),
-            positionCredentialVersion: (response.request as AccountRequest).credentialVersion!,
-            positionCloseId: (response.request as PositionRequest).positionCloseId,
-        } : undefined);
+    const positionsResponses$ = sources.HTTP.select("positions");
+
+    const decodePositions = (response: Response): PositionPollOutcome => {
+        if (!isCurrent(response)) { return { failed: false }; }
+        let json: unknown;
+        try {
+            json = JSON.parse(response.text);
+        } catch {
+            return { failed: true };
+        }
+        if (!isPositionList(json)) { return { failed: true }; }
+        return {
+            failed: false,
+            result: {
+                position: new Position(json as object[]),
+                positionCredentialVersion: (response.request as AccountRequest).credentialVersion!,
+                positionCloseId: (response.request as PositionRequest).positionCloseId,
+            },
+        };
+    };
+
+    let nextPositionsRequest = 0;
+    let latestAppliedPositionsRequest = 0;
+
+    // Sequence successful and failed polls together so a late failure cannot supersede a newer
+    // snapshot. Responses from stale credentials are filtered out before advancing the sequence.
+    const positionsPolled$ = positionsResponses$
+        .map((response$) => {
+            const request = ++nextPositionsRequest;
+            return response$
+                .map(decodePositions)
+                .replaceError(() => isCurrentAccountRequest(response$.request as AccountRequest)
+                    ? Stream.of<PositionPollOutcome>({ failed: true })
+                    : Stream.empty<PositionPollOutcome>())
+                .filter((outcome) => outcome.failed || outcome.result !== undefined)
+                .map((outcome) => ({ request, outcome }));
+        })
+        .compose(flattenConcurrently)
+        .filter(({ request }) => {
+            if (request <= latestAppliedPositionsRequest) { return false; }
+            latestAppliedPositionsRequest = request;
+            return true;
+        })
+        .map(({ outcome }) => outcome);
+
+    const onPositionsLoaded$ = positionsPolled$
+        .map(({ result }) => result)
+        .filter((result): result is PositionPollResult => result !== undefined);
+
+    const onPositionsRefreshFailed$ = positionsPolled$
+        .filter(({ failed }) => failed)
+        .mapTo(null);
 
     return {
         onCancelOrders$: orderLists$.filter((orders) => orders === ordersCanceled).mapTo(null),
@@ -74,6 +133,7 @@ export const intent = (sources: Sources, cancellationOutcome$ = Stream.never<Can
         onParentOrdersLoaded$,
         onParentOrderListSettled$: pages.settled$,
         onPositionsLoaded$,
+        onPositionsRefreshFailed$,
         parentOrderRequests$: Stream.merge(pages.requests$, details.requests$),
     };
 };

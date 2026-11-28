@@ -58,13 +58,18 @@ test("isValidIFDOCOOrder requires a valid width and ratio and positive exit pric
     strictEqual(isValidIFDOCOOrder(lossAboveCurrent, "BUY"), false);
 });
 
-test("canClearPosition requires an open position, no pending close, and a fresh credential version", () => {
+test("canClearPosition requires an open position, no pending close, and a fresh snapshot for the current credentials", (t) => {
+    t.mock.method(Date, "now", () => 1000);
     const position = new Position([{ price: 100, side: "BUY", size: 1 }]);
-    const openPosition = baseState({ position, positionCredentialVersion: currentCredentialVersion()! });
+    const positionCredentialVersion = currentCredentialVersion()!;
+    const openPosition = baseState({ position, positionCredentialVersion, positionExpiresAt: 1001 });
     strictEqual(canClearPosition(openPosition), true);
 
-    strictEqual(canClearPosition(baseState({ position, isOrdering: true, positionCredentialVersion: currentCredentialVersion()! })), false);
-    strictEqual(canClearPosition(baseState({ position, positionClosePending: true, positionCredentialVersion: currentCredentialVersion()! })), false);
-    strictEqual(canClearPosition(baseState({ position: new Position([]), positionCredentialVersion: currentCredentialVersion()! })), false);
-    strictEqual(canClearPosition(baseState({ position, positionCredentialVersion: currentCredentialVersion()! + 1 })), false);
+    strictEqual(canClearPosition({ ...openPosition, isOrdering: true }), false);
+    strictEqual(canClearPosition({ ...openPosition, positionClosePending: true }), false);
+    strictEqual(canClearPosition({ ...openPosition, positionStale: true }), false);
+    strictEqual(canClearPosition({ ...openPosition, position: new Position([]) }), false);
+    strictEqual(canClearPosition({ ...openPosition, positionCredentialVersion: positionCredentialVersion + 1 }), false);
+    strictEqual(canClearPosition({ ...openPosition, positionExpiresAt: undefined }), false);
+    strictEqual(canClearPosition({ ...openPosition, positionExpiresAt: 1000 }), false);
 });

@@ -18,6 +18,7 @@ const pollers = [
             onOrdersLoaded$: Stream.never(),
             onParentOrderLoaded$: Stream.never(),
             onPositionsLoaded$: Stream.never(),
+            onPositionsRefreshFailed$: Stream.never(),
             onMyOrderChanged$: Stream.never(),
             onParentOrdersLoaded$: Stream.never(),
             onParentOrderListSettled$: settled$,

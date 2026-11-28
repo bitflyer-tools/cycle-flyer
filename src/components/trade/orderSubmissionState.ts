@@ -115,5 +115,7 @@ const resetAccount: Reducer<State> = (state) => state && {
     orderComponentState: state.orderComponentState && { ...state.orderComponentState, isOrdering: false },
     position: new Position([]),
     positionCredentialVersion: undefined,
+    positionExpiresAt: undefined,
+    positionStale: true,
     positionClose: undefined,
 };
