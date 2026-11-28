@@ -7,6 +7,7 @@ import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
 import {SocketIOSource} from "../../drivers/socketIODriver";
+import type {NotificationEvent} from "../../drivers/notificationDriver";
 import {Sound} from "../../drivers/soundDriver";
 import {Order} from "../../models/order";
 import {OrderHistory} from "../../models/orderHistory";
@@ -45,7 +46,7 @@ export interface Sinks {
     state: Stream<Reducer<State>>;
     router: Stream<void>;
     storage: Stream<StorageRequest>;
-    notification?: Stream<Sound>;
+    notification?: Stream<NotificationEvent>;
     sound?: Stream<Sound>;
 }
 
@@ -143,7 +144,7 @@ export const Trade = (
         HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP,
             executionsComponent.HTTP, marketTrades.HTTP),
         notification: Stream.merge(
-            actions.onMyExecutionCreated$.mapTo<Sound>("execution"),
+            actions.onMyExecutionCreated$.mapTo<NotificationEvent>("execution"),
             summaryComponent.notification || Stream.never(),
         ),
         router: Stream.never(),

@@ -12,7 +12,7 @@ const { default: Stream } = require('xstream');
 
 const { outputFiles: [bundle] } = buildSync({
   stdin: {
-    contents: "export { Root } from './src/components'; export * from './src/http';",
+    contents: "export { Root } from './src/components'; export * from './src/http'; export { makeNotificationDriver } from './src/drivers/notificationDriver';",
     resolveDir: require('node:path').join(__dirname, '..'),
   },
   bundle: true,
@@ -23,13 +23,17 @@ const { outputFiles: [bundle] } = buildSync({
   write: false,
 });
 
-const app = { exports: {} };
-compileFunction(bundle.text, ['require', 'module', 'localStorage'])(
-  require, app, { 'api-key': 'test', 'api-secret': 'test' },
-);
-const { Root, limitOrder, marketOrder, stopOrder, twapSliceOrder } = app.exports;
-
 function appHarness(t) {
+  const notifications = [];
+  class Notification {
+    static permission = 'granted';
+    constructor(title) { notifications.push(title); }
+  }
+  const module = { exports: {} };
+  compileFunction(bundle.text, ['require', 'module', 'localStorage', 'Notification'])(
+    require, module, { 'api-key': 'test', 'api-secret': 'test', 'notifications-enabled': 'true' }, Notification,
+  );
+  const { Root, makeNotificationDriver, ...orders } = module.exports;
   const responses = new Map();
   const select = (category) => {
     if (!responses.has(category)) responses.set(category, Stream.create());
@@ -63,8 +67,11 @@ function appHarness(t) {
   });
   const sounds = [];
   const soundSubscription = app.sound.subscribe({ next: (sound) => sounds.push(sound) });
-  const notifications = [];
-  const notificationSubscription = app.notification.subscribe({ next: (notification) => notifications.push(notification) });
+  const notification$ = Stream.create();
+  makeNotificationDriver()(notification$);
+  const notificationSubscription = app.notification.subscribe({
+    next: (event) => notification$.shamefullySendNext(event),
+  });
   t.after(() => {
     soundSubscription.unsubscribe();
     notificationSubscription.unsubscribe();
@@ -75,6 +82,7 @@ function appHarness(t) {
     executionBatch$,
     childOrderEvent$,
     notifications,
+    orders,
     sounds,
     histories: () => state.trade.histories,
     submit(input) {
@@ -87,29 +95,65 @@ function appHarness(t) {
           response$.shamefullySendNext({ request, status: 200, text: JSON.stringify(body) });
           response$.shamefullySendComplete();
         },
-        reject: () => response$.shamefullySendError({ response: { request } }),
-        disconnect: () => response$.shamefullySendError(new Error('Connection lost')),
+        fail: (status, body) => response$.shamefullySendError({
+          response: { request, status, text: JSON.stringify(body) },
+        }),
+        timeOut: () => response$.shamefullySendError({ code: 'ECONNABORTED', errno: 'ETIME' }),
       };
     },
   };
 }
 
-test('notifies for submissions, TWAP slices, and private executions', (t) => {
+test('desktop notifications distinguish order outcomes from private executions', (t) => {
   const app = appHarness(t);
-  app.submit(marketOrder(0.01, 'BUY')).disconnect();
+  const { cancelOrders, cancelParentOrder, limitOrder, marketOrder, stopOrder, twapSliceOrder } = app.orders;
+  app.submit(marketOrder(0.01, 'BUY')).timeOut();
   app.submit(limitOrder(100, 0.01, 'BUY')).accept({ child_order_acceptance_id: 'JRF-child' });
   app.submit(stopOrder(90, 0.01, 'SELL')).accept({ parent_order_acceptance_id: 'JRF-parent' });
-  app.submit(twapSliceOrder(0.01, 'SELL', Symbol())).reject();
+  app.submit(twapSliceOrder(0.01, 'SELL', Symbol())).fail(400, { status: -1, error_message: 'Order rejected' });
+  app.submit(cancelOrders()).accept({});
+  app.submit(cancelParentOrder('JRF-parent')).fail(400, { status: -1, error_message: 'Cancellation rejected' });
+  app.submit(cancelOrders()).timeOut();
   app.executionBatch$.shamefullySendNext([{ price: 100, size: 0.01, side: 'BUY' }]);
   app.childOrderEvent$.shamefullySendNext({ event_type: 'ORDER' });
+
+  const outcomeTitles = [
+    'Order unconfirmed', 'Order accepted', 'Order accepted', 'Order rejected',
+    'Cancellation confirmed', 'Cancellation rejected', 'Cancellation unconfirmed',
+  ];
+  assert.deepEqual(app.notifications, outcomeTitles);
 
   const execution = { event_type: 'EXECUTION', side: 'BUY', price: 100, size: 0.01 };
   app.childOrderEvent$.shamefullySendNext(execution);
   app.childOrderEvent$.shamefullySendNext(execution);
-  assert.deepEqual(app.sounds, ['failure', 'success', 'success', 'failure', 'execution', 'execution']);
-  assert.deepEqual(app.notifications, app.sounds);
+  assert.deepEqual(app.sounds, [
+    'failure', 'success', 'success', 'failure', 'success', 'failure', 'failure', 'execution', 'execution',
+  ]);
+  assert.deepEqual(app.notifications, [...outcomeTitles, 'Execution', 'Execution']);
   assert.deepEqual(app.histories().map(({ name }) => name), [
-    'Executed', 'Executed', 'TWAP', 'Stop', 'Limit', 'Market',
+    'Executed', 'Executed', 'Cancel', 'Cancel', 'Cancel', 'TWAP', 'Stop', 'Limit', 'Market',
   ]);
   assert.equal(app.histories().at(-1).status, 'unconfirmed');
+  assert.equal(app.histories().at(-1).timedOut, true);
 });
+
+for (const status of [502, 503]) {
+  test(`desktop notifications report HTTP ${status} order and cancellation outcomes as unconfirmed`, (t) => {
+    const app = appHarness(t);
+    const { cancelOrders, cancelParentOrder, marketOrder, stopOrder, twapSliceOrder } = app.orders;
+    const requests = [
+      marketOrder(0.01, 'BUY'),
+      stopOrder(90, 0.01, 'SELL'),
+      twapSliceOrder(0.01, 'SELL', Symbol()),
+      cancelOrders(),
+      cancelParentOrder('JRF-parent'),
+    ];
+    requests.forEach((request) => app.submit(request).fail(status, { status: -1, error_message: 'Upstream error' }));
+
+    assert.deepEqual(app.notifications, [
+      'Order unconfirmed', 'Order unconfirmed', 'Order unconfirmed',
+      'Cancellation unconfirmed', 'Cancellation unconfirmed',
+    ]);
+    assert.deepEqual(app.histories().map(({ status }) => status), Array(requests.length).fill('unconfirmed'));
+  });
+}
