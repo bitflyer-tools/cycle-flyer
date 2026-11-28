@@ -30,8 +30,8 @@ the loss trigger is below or at it. For a sell entry, the directions reverse.
 ## TWAP
 
 **Size** is the total amount to split. The first market slice is scheduled
-immediately, and subsequent slices are scheduled at the configured interval.
-Edits to the schedule apply to the next run.
+immediately. Each subsequent slice is scheduled one configured interval after
+the previous slice is sent. Edits to the schedule apply to the next run.
 
 **Cancel TWAP** stops future slices. Leaving **Trade** or changing credentials
 also stops the schedule. If an order request cannot be signed, TWAP stops

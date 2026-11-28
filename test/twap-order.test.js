@@ -51,7 +51,7 @@ test('discards fractional units and supports scientific notation', () => {
 });
 
 test('schedules all 29 requests at the exact minimum size', (t) => {
-  t.mock.timers.enable({ apis: ['setInterval'] });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const start$ = Stream.create();
   const scheduleId = Symbol();
   const requests = [];
@@ -142,7 +142,7 @@ test("TWAP rejects invalid intervals supplied directly in state", (t) => {
 });
 
 test("a valid saved interval submits the first slice immediately and spaces the rest", (t) => {
-  t.mock.timers.enable({ apis: ["setInterval"] });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const { buy$, requests, getState } = setup(t, "2.5");
   assert.equal(getState().twap.interval, 2.5);
 

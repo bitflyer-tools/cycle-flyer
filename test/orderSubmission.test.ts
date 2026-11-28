@@ -967,12 +967,14 @@ test("blocks TWAP with missing credentials and immediately after clearing them",
 });
 
 test("stops TWAP on signing failure and ignores old slices after a restart", async (t) => {
-    const order = setup(t, "0.01", { apis: ["setInterval"] });
+    const order = setup(t);
     await saveCredentials({ key: "test-key", secret: "test-secret" });
     t.after(() => saveCredentials(null));
 
     order.buyTWAP();
     const signed = await authorizeRequest(order.requests[0]) as RequestOptions;
+    // Flush deferred stream cleanup before starting the dispatch timer.
+    t.mock.timers.tick(1);
     const previousResponse = order.respondTo(signed);
     t.mock.timers.tick(1000);
 
