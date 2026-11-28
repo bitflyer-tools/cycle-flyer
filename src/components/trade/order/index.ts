@@ -2,7 +2,7 @@ import {RequestInput} from "@cycle/http";
 import Stream from "xstream";
 import {IFDOCOrder} from "../../../models/ifdocoOrder";
 import {MarketFills} from "../../../models/marketFill";
-import {Order} from "../../../models/order";
+import {AccountType, Order} from "../../../models/order";
 import {OrderHistory} from "../../../models/orderHistory";
 import {ParentStopOrders} from "../../../models/parentStopOrders";
 import {Position} from "../../../models/position";
@@ -17,6 +17,7 @@ import {twapRequest} from "./twapRequest";
 import {view} from "./view";
 
 export interface State {
+    accountType: AccountType;
     currentPrice: number;
     histories: readonly OrderHistory[];
     ifdocoOrder: IFDOCOrder;

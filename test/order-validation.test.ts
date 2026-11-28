@@ -4,10 +4,12 @@ import {State} from "../src/components/trade/order";
 import {canClearPosition, isValidIFDOCOOrder, isValidLimitOrder, isValidOrderSize, isValidStopOrder} from "../src/components/trade/order/validation";
 import {currentCredentialVersion} from "../src/credentials";
 import {IFDOCOrder} from "../src/models/ifdocoOrder";
+import {defaultAccountType} from "../src/models/order";
 import {Position} from "../src/models/position";
 import {defaultTwapOrder} from "../src/models/twapOrder";
 
 const baseState = (overrides: Partial<State> = {}): State => ({
+    accountType: defaultAccountType,
     currentPrice: 0,
     histories: [],
     ifdocoOrder: new IFDOCOrder(10000, 50),

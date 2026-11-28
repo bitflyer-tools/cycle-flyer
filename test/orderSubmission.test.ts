@@ -21,6 +21,7 @@ import {stopSection} from "../src/components/trade/order/stopView";
 import {storageKeys} from "../src/components/trade/order/intent";
 import {BoardLevels} from "../src/models/board";
 import {Execution} from "../src/models/execution";
+import {AccountType, accountTypeStorageKey} from "../src/models/order";
 import {HISTORY_LIMIT} from "../src/models/orderHistory";
 import type {State as SummaryState} from "../src/components/trade/summary";
 import {view as summaryView} from "../src/components/trade/summary/view";
@@ -112,6 +113,67 @@ for (const type of ["stop", "ifdoco"] as const) {
         });
     }
 }
+
+for (const type of ["stop", "ifdoco"] as const) {
+    for (const side of ["buy", "sell"] as const) {
+        test(`enforces the BTC-CFD maximum for ${type} ${side} orders`, (t) => {
+            const order = setup(t, "10000");
+            const section = type === "ifdoco" ? "ranged-ifdoco" : type;
+            const submit = side === "buy" ? () => order.buy(type)
+                : type === "stop" ? order.sellStop : order.sellIFDOCO;
+            order.enterTriggerPrice(side === "buy" ? "11000000" : "9000000");
+            order.enterSize("10.00000001");
+            equal(order.orderDisabled(section, side), true);
+            submit();
+            equal(order.requests.length, 0);
+
+            order.enterSize("10");
+            equal(order.orderDisabled(section, side), false);
+            submit();
+            deepEqual(order.requests.map(({ category }) => category), [`${type}-order`]);
+            const payload = JSON.parse(order.requests[0].send as string);
+            deepEqual(payload.parameters.map(({ size }: { size: number }) => size),
+                type === "stop" ? [10] : [10, 10, 10]);
+        });
+    }
+}
+
+test("enforces bitFlyer's per-order maximum for market orders", (t) => {
+    const order = setup(t);
+    order.enterSize("41");
+    equal(order.orderDisabled("market", "buy"), true);
+    order.buy("market");
+    equal(order.requests.length, 0);
+
+    order.enterSize("10");
+    equal(order.orderDisabled("market", "buy"), false);
+    order.buy("market");
+    equal(order.requests.length, 1);
+    equal(JSON.parse(order.requests[0].send as string).size, 10);
+});
+
+test("blocks a one-slice TWAP above the per-order maximum", async (t) => {
+    const order = setup(t, "0.01", { twapSlices: 1 });
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+
+    order.enterSize("41");
+    equal(order.orderDisabled("twap", "buy"), true);
+    order.buyTWAP();
+    equal(order.requests.length, 0);
+});
+
+test("schedules a TWAP whose total exceeds the per-order maximum when every slice is within range", async (t) => {
+    const order = setup(t, "0.01", { twapSlices: 3 });
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+
+    order.enterSize("21");
+    equal(order.orderDisabled("twap", "buy"), false);
+    order.buyTWAP();
+    equal(order.requests.length, 1);
+    equal(JSON.parse(order.requests[0].send as string).size, 7);
+});
 
 test("blocks both IFDOCO sides until the first public execution arrives", (t) => {
     const order = setup(t, "10000", { initialPrice: null });
@@ -1004,6 +1066,30 @@ test("stops TWAP on signing failure and ignores old slices after a restart", asy
     equal(order.histories[0].name, "TWAP");
 });
 
+for (const [accountType, maximum] of [["individual", 10], ["corporate", 40]] as const) {
+    for (const side of ["BUY", "SELL"] as const) {
+        test(`enforces the ${accountType} maximum when closing a ${side} position`, async (t) => {
+            const order = setup(t, "0.01", { accountType });
+            await saveCredentials({ key: "test-key", secret: "test-secret" });
+            t.after(() => saveCredentials(null));
+
+            const positions = { url: "https://api.bitflyer.jp/v1/me/getpositions", category: "positions", _namespace: ["trade"] };
+            order.respondTo(positions).succeed([{ side, size: maximum + 0.00000001, price: 100 }]);
+            equal(order.clearPositionDisabled, true);
+            order.clearPosition();
+            equal(order.requests.length, 0);
+
+            order.respondTo(positions).succeed([{ side, size: maximum, price: 100 }]);
+            equal(order.clearPositionDisabled, false);
+            order.clearPosition();
+            deepEqual(order.requests.map(({ category }) => category), ["market-order"]);
+            const payload = JSON.parse(order.requests[0].send as string);
+            equal(payload.side, side === "BUY" ? "SELL" : "BUY");
+            equal(payload.size, maximum);
+        });
+    }
+}
+
 test("clears the previous account position and only closes a position from the current account", async (t) => {
     const order = setup(t);
     await saveCredentials({ key: "first-key", secret: "first-secret" });
@@ -1528,6 +1614,7 @@ test("ignores write deadlines from the previous account", async (t) => {
 });
 
 function setup(t: TestContext, width = "0.01", options: {
+    accountType?: AccountType;
     initialPrice?: number | null;
     writeDeadline?: number;
     twapSlices?: number;
@@ -1601,6 +1688,7 @@ function setup(t: TestContext, width = "0.01", options: {
         },
     };
     const storedValues: Record<string, string> = {
+        [accountTypeStorageKey]: options.accountType ?? "",
         [groupSizeStorageKey]: "100",
         [storageKeys.priceWidth]: width,
         [twapStorageKeys.interval]: "1",

@@ -1,11 +1,13 @@
 import {Stream} from "xstream";
-import {loadNumber} from "../../../storage";
+import {AccountType, accountTypeStorageKey, defaultAccountType} from "../../../models/order";
+import {loadNumber, loadStoredValue} from "../../../storage";
 import {Sources} from "../index";
 import {State} from "./index";
 import {clicks, numberInputs, sizePresetClicks, textInputs} from "./events";
 import {TwapActions, twapIntent} from "./twapIntent";
 
 export interface Actions extends TwapActions {
+    onAccountTypeLoaded$: Stream<AccountType>;
     onClickClearButton$: Stream<null>;
     onClickClearOrderButton$: Stream<null>;
     onClickIFDOCOBuyButton$: Stream<null>;
@@ -36,6 +38,9 @@ export const storageKeys = {
 export const intent = (sources: Sources, state$: Stream<State>): Actions => {
     return {
         ...twapIntent(sources, state$),
+        onAccountTypeLoaded$: loadStoredValue(sources.storage, accountTypeStorageKey)
+            .take(1)
+            .map((value) => value === "corporate" ? "corporate" : defaultAccountType),
         onClickClearButton$: clicks(sources.DOM, ".order-buttons", ".clear-button"),
         onClickClearOrderButton$: clicks(sources.DOM, ".order-buttons", ".clear-order-button"),
         onClickIFDOCOBuyButton$: clicks(sources.DOM, ".ranged-ifdoco-order-buttons", ".buy-button"),

@@ -6,6 +6,7 @@ import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
 import {notificationsEnabledStorageKey} from "../../drivers/notificationDriver";
 import {soundEnabledStorageKey} from "../../drivers/soundDriver";
+import {accountTypeStorageKey} from "../../models/order";
 import "./index.styl";
 import {intent} from "./intent";
 import {model, State} from "./model";
@@ -36,6 +37,8 @@ export const Setting = (sources: Sources): Sinks => {
             .map((enabled) => ({ key: soundEnabledStorageKey, value: enabled.toString() }) as StorageRequest),
         actions.onNotificationsToggled$
             .map((enabled) => ({ key: notificationsEnabledStorageKey, value: enabled.toString() }) as StorageRequest),
+        actions.onAccountTypeChanged$
+            .map((accountType) => ({ key: accountTypeStorageKey, value: accountType }) as StorageRequest),
     );
 
     return {

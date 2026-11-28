@@ -1,14 +1,17 @@
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
+import {AccountType, defaultAccountType} from "../../models/order";
 import {Actions} from "./intent";
 
 export interface State {
+    accountType: AccountType;
     credentialsMessage: string;
     notificationsEnabled: boolean;
     soundEnabled: boolean;
 }
 
 const defaultState: State = {
+    accountType: defaultAccountType,
     credentialsMessage: "",
     notificationsEnabled: false,
     soundEnabled: true,
@@ -16,6 +19,9 @@ const defaultState: State = {
 
 export const model = (actions: Actions): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of<Reducer<State>>((state = defaultState) => state);
+
+    const accountTypeReducer$ = Stream.merge(actions.onAccountTypeLoaded$, actions.onAccountTypeChanged$)
+        .map<Reducer<State>>((accountType) => (state = defaultState) => ({ ...state, accountType }));
 
     const credentialsMessageReducer$ = actions.credentialsMessage$
         .startWith("")
@@ -28,5 +34,8 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
         actions.onNotificationsEnabledLoaded$, actions.onNotificationsToggled$,
     ).map<Reducer<State>>((notificationsEnabled) => (state = defaultState) => ({ ...state, notificationsEnabled }));
 
-    return Stream.merge(defaultReducer$, credentialsMessageReducer$, soundEnabledReducer$, notificationsEnabledReducer$);
+    return Stream.merge(
+        defaultReducer$, accountTypeReducer$, credentialsMessageReducer$, soundEnabledReducer$,
+        notificationsEnabledReducer$,
+    );
 };

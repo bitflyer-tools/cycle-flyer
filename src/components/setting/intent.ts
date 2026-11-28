@@ -3,10 +3,14 @@ import Stream from "xstream";
 import {initializeCredentials, saveCredentials} from "../../credentials";
 import {notificationsEnabledStorageKey} from "../../drivers/notificationDriver";
 import {soundEnabledStorageKey} from "../../drivers/soundDriver";
+import {AccountType, accountTypeStorageKey, defaultAccountType} from "../../models/order";
+import {loadStoredValue} from "../../storage";
 import {Sources} from "./index";
 
 export interface Actions {
     credentialsMessage$: Stream<string>;
+    onAccountTypeChanged$: Stream<AccountType>;
+    onAccountTypeLoaded$: Stream<AccountType>;
     onNotificationsEnabledLoaded$: Stream<boolean>;
     onNotificationsToggled$: Stream<boolean>;
     onSoundEnabledLoaded$: Stream<boolean>;
@@ -42,6 +46,14 @@ export const intent = (sources: Sources): Actions => {
         .events("change")
         .map((event) => (event.target as HTMLInputElement).checked);
 
+    const onAccountTypeLoaded$ = loadStoredValue(sources.storage, accountTypeStorageKey)
+        .take(1)
+        .map((value) => value === "corporate" ? "corporate" : defaultAccountType);
+
+    const onAccountTypeChanged$ = dom.select("#account-type-input")
+        .events("change")
+        .map((event) => (event.target as HTMLSelectElement).value === "corporate" ? "corporate" : defaultAccountType);
+
     const onNotificationsEnabledLoaded$ = (sources.storage as any).local.getItem(notificationsEnabledStorageKey)
         .take(1)
         .map((value: string | null) => value === "true");
@@ -57,6 +69,8 @@ export const intent = (sources: Sources): Actions => {
     return {
         credentialsMessage$: Stream.merge(migrationMessage$, Stream.merge(saveMessage$, clearMessage$)
             .map((message) => Stream.fromPromise(message)).flatten()),
+        onAccountTypeChanged$,
+        onAccountTypeLoaded$,
         onNotificationsEnabledLoaded$,
         onNotificationsToggled$,
         onSoundEnabledLoaded$,

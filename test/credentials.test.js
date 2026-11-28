@@ -540,3 +540,40 @@ test('Settings shows empty inputs with password masking even after credentials a
     assert.equal(input.data.attrs?.value, undefined);
   }
 });
+
+test('Settings shows both account types with their maximum order size and the saved selection', async () => {
+  const renderer = createRenderer(new Map());
+  const vnode = await new Promise((resolve, reject) => {
+    renderer.view(renderer.Stream.of({ credentialsMessage: '', soundEnabled: true, accountType: 'corporate' }))
+      .addListener({ next: resolve, error: reject });
+  });
+  const find = (node, selector) =>
+    node.sel === selector ? node : node.children?.map((child) => find(child, selector)).find(Boolean);
+  const select = find(vnode, 'select#account-type-input');
+  assert.equal(select.data.props.value, 'corporate');
+  assert.deepEqual(Array.from(select.children, (option) => option.text), [
+    'Individual (max 10 BTC-CFD per order)',
+    'Corporate (max 40 BTC-CFD per order)',
+  ]);
+});
+
+test('Settings loads the saved account type and reports changes, defaulting to individual', async () => {
+  const renderer = createRenderer(new Map());
+  const changed$ = renderer.Stream.create();
+  const settings = renderer.settingsIntent({
+    DOM: { select: (selector) => ({
+      events: (type) => selector === '#account-type-input' && type === 'change' ? changed$ : renderer.Stream.never(),
+    }) },
+    storage: { local: { getItem: (key) => renderer.Stream.of(key === 'account-type' ? 'corporate' : null) } },
+  });
+  const loaded = await new Promise((resolve, reject) => {
+    settings.onAccountTypeLoaded$.take(1).addListener({ next: resolve, error: reject });
+  });
+  assert.equal(loaded, 'corporate');
+
+  const changed = new Promise((resolve, reject) => {
+    settings.onAccountTypeChanged$.take(1).addListener({ next: resolve, error: reject });
+  });
+  changed$.shamefullySendNext({ target: { value: 'not-a-real-account-type' } });
+  assert.equal(await changed, 'individual');
+});

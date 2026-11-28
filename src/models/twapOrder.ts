@@ -1,4 +1,4 @@
-import {isValidOrderSize} from "./order";
+import {AccountType, defaultAccountType, isValidOrderSize} from "./order";
 
 export interface TwapOrder {
     error?: string;
@@ -35,12 +35,13 @@ export const allocateSlices = (size: number, slices: number) => {
 
 export const isRunning = (twap: TwapOrder): boolean => twap.remaining > 0;
 
-export const canStart = (twap: TwapOrder, size: number): boolean =>
-    !isRunning(twap)
-    && Number.isInteger(twap.slices)
-    && twap.slices > 0
-    && isValidTwapInterval(twap.interval)
-    && isValidOrderSize(allocateSlices(size, twap.slices).baseSize);
+export const canStart = (twap: TwapOrder, size: number, accountType: AccountType = defaultAccountType): boolean => {
+    if (isRunning(twap) || !Number.isInteger(twap.slices) || twap.slices <= 0 || !isValidTwapInterval(twap.interval)) {
+        return false;
+    }
+    const { baseSize, largerSize, largerCount } = allocateSlices(size, twap.slices);
+    return isValidOrderSize(baseSize, accountType) && (largerCount === 0 || isValidOrderSize(largerSize, accountType));
+};
 
 const orderPrecision = 8;
 

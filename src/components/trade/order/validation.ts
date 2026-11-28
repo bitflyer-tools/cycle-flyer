@@ -1,13 +1,14 @@
 import {currentCredentialVersion} from "../../../credentials";
-import {isValidOrderSize as meetsOrderSizeMinimum} from "../../../models/order";
+import {defaultAccountType, isValidOrderSize as meetsOrderSizeLimit, maximumOrderSizeByAccountType} from "../../../models/order";
 import {State} from "./index";
 
 export const canClearPosition = (state: State): boolean =>
     !state.isOrdering && !state.positionClosePending && state.position.size !== 0
+    && Math.abs(state.position.size) <= maximumOrderSizeByAccountType[state.accountType ?? defaultAccountType]
     && state.positionCredentialVersion === currentCredentialVersion();
 
 export const isValidOrderSize = (state: State): boolean =>
-    meetsOrderSizeMinimum(state.size);
+    meetsOrderSizeLimit(state.size, state.accountType);
 
 export const isValidLimitOrder = (state: State): boolean =>
     isValidOrderSize(state) && isPositiveFinite(state.price);
