@@ -32,6 +32,7 @@ for how to attach a debugger.
 ```sh
 npm run lint
 npm run format:check
+npm run typecheck
 npm run test:coverage
 npm run build
 ```
