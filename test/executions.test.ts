@@ -3,10 +3,14 @@ import {createHmac} from "node:crypto";
 import {once} from "node:events";
 import {createServer, ServerResponse} from "node:http";
 import {test, TestContext} from "node:test";
+import {setImmediate as flush} from "node:timers/promises";
 import {VNode} from "@cycle/dom";
 import {RequestInput, RequestOptions} from "@cycle/http";
-import {StateSource} from "@cycle/state";
+import {StateSource, withState} from "@cycle/state";
+import {routerify} from "cyclic-router";
+import switchPath from "switch-path";
 import Stream from "xstream";
+import {Root, Sinks, Sources} from "../src/components";
 import {Execution, ExecutionsComponent, State, toCsv} from "../src/components/trade/executions";
 import {saveCredentials} from "../src/credentials";
 import {authorizeRequest, makeHTTPDriver, unsignedRequests$} from "../src/drivers/httpDriver";
@@ -325,4 +329,89 @@ test("disables CSV export until executions have loaded, then downloads a CSV on 
     assert.equal(link.clicked, 1);
     assert.equal(link.download, "executions.csv");
     assert.match(link.href, /^blob:/);
+});
+
+test("exports the current executions once after repeated Trade and Setting round trips", async (t) => {
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+
+    const history = Stream.create<{ pathname: string }>();
+    const refresh$ = Stream.create();
+    const exportCsv$ = Stream.create();
+    const responses$ = Stream.create();
+    const events = new Map([[".refresh-executions", refresh$], [".export-executions-csv", exportCsv$]]);
+    const dom = (selector = "") => ({
+        select: dom,
+        events: () => events.get(selector) ?? Stream.never(),
+    });
+    const app = routerify(withState(Root), switchPath);
+    const sinks: Sinks = app({
+        history,
+        DOM: dom(),
+        HTTP: { select: (category: string) => category === "executions" ? responses$ : Stream.never() },
+        socket: {
+            connected$: Stream.of(true),
+            board$: Stream.never(),
+            childOrderEvent$: Stream.never(),
+            executionBatch$: Stream.never(),
+            parentOrderEvent$: Stream.never(),
+            reconnect$: Stream.never(),
+        },
+        storage: { local: { getItem: () => Stream.of(null) } },
+    } as unknown as Omit<Sources, "state" | "router"> & { history: typeof history });
+    const requests: RequestOptions[] = [];
+    const http = sinks.HTTP.subscribe({ next: (request) => {
+        if (request && typeof request !== "string" && request.category === "executions") { requests.push(request); }
+    } });
+    const rendering = sinks.DOM.subscribe({});
+    t.after(() => {
+        history.shamefullySendNext({ pathname: "/setting" });
+        http.unsubscribe();
+        rendering.unsubscribe();
+    });
+
+    const downloads: Blob[] = [];
+    t.mock.method(URL, "createObjectURL", (blob: Blob) => {
+        downloads.push(blob);
+        return "blob:executions";
+    });
+    t.mock.method(URL, "revokeObjectURL", () => {});
+    const document = Object.getOwnPropertyDescriptor(globalThis, "document");
+    Object.defineProperty(globalThis, "document", {
+        configurable: true,
+        value: { createElement: () => ({ click() {} }) },
+    });
+    t.after(() => {
+        if (document) Object.defineProperty(globalThis, "document", document);
+        else Reflect.deleteProperty(globalThis, "document");
+    });
+
+    const navigate = async (pathname: string) => {
+        history.shamefullySendNext({ pathname });
+        await flush();
+    };
+    const load = async (rows: Execution[]) => {
+        const requestCount = requests.length;
+        refresh$.shamefullySendNext(null);
+        assert.equal(requests.length, requestCount + 1);
+        responses$.shamefullySendNext(Object.assign(Stream.of({ text: JSON.stringify(rows) }), {
+            request: requests.at(-1),
+        }));
+        await flush();
+    };
+    for (const id of [1, 2, 3]) {
+        await navigate("/");
+        await load([execution(id)]);
+        await navigate("/setting");
+        exportCsv$.shamefullySendNext(null);
+        assert.equal(downloads.length, 0);
+    }
+    await navigate("/");
+    const rows = [execution(5), execution(4)];
+    await load(rows);
+    await navigate("/");
+    exportCsv$.shamefullySendNext(null);
+
+    assert.equal(downloads.length, 1);
+    assert.equal(await downloads[0].text(), toCsv(rows));
 });

@@ -73,7 +73,7 @@ export const Trade = (
     const executionsComponent = isolate(ExecutionsComponent, { state: "executionsComponentState" })({
         ...sources,
         DOM: sources.DOM as MainDOMSource,
-    });
+    }, leaveTrade$);
     const summaryComponent = isolate(SummaryComponent, {
         state: {
             get: (state: State) => state.summaryComponentState && {

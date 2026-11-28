@@ -4,7 +4,9 @@ import isolate from "@cycle/isolate";
 import {Reducer, StateSource} from "@cycle/state";
 import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
+import type {RouteMatcherReturn} from "cyclic-router/lib/interfaces";
 import Stream from "xstream";
+import dropRepeats from "xstream/extra/dropRepeats";
 import {SocketIOSource} from "../drivers/socketIODriver";
 import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
@@ -44,7 +46,7 @@ const isolateTradeReducer = (reducer: Reducer<TradeState>): Reducer<any> => (out
 };
 
 export const Root = (sources: Sources): Sinks => {
-    const leaveTrade$ = Stream.create<void>();
+    let leaveTrade$: Stream<void> | undefined;
     const trade = isolate(Trade, { "*": tradeScope });
     const orderSubmission = createOrderSubmissionState(sources.HTTP);
     const routes$: Stream<Sinks> = sources.router
@@ -52,9 +54,12 @@ export const Root = (sources: Sources): Sinks => {
             "/": trade,
             "/setting": isolate(Setting, { "*": "setting" }),
         })
+        .compose(dropRepeats<RouteMatcherReturn>((previous, next) => previous.value === trade && next.value === trade &&
+            previous.path === next.path))
         .map((route: any) => {
-            // Cancel while the outgoing Trade reducer is still subscribed.
-            if (route.value !== trade) { leaveTrade$.shamefullySendNext(undefined); }
+            // End the previous Trade mount while its reducer is still subscribed.
+            leaveTrade$?.shamefullySendNext(undefined);
+            leaveTrade$ = route.value === trade ? Stream.create<void>() : undefined;
             return route.value({
                 ...sources,
                 // Tag order submissions with the same HTTP scope as the other requests.

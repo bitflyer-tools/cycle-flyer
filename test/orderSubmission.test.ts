@@ -4,7 +4,7 @@ import {MainHTTPSource} from "@cycle/http/lib/cjs/MainHTTPSource";
 import {StateSource} from "@cycle/state";
 import {StorageRequest} from "@cycle/storage";
 import {routerify} from "cyclic-router";
-import {deepEqual, doesNotMatch, equal, match} from "node:assert/strict";
+import {deepEqual, doesNotMatch, equal, match, ok} from "node:assert/strict";
 import {once} from "node:events";
 import {createServer} from "node:http";
 import {test, TestContext} from "node:test";
@@ -1369,6 +1369,26 @@ for (const category of ["limit-order", "cancel-orders", "market-order"] as const
         equal(order.requests.length, 2);
     });
 }
+
+test("revisiting the active Trade route keeps the TWAP schedule running", async (t) => {
+    const order = setup(t, "0.01", { apis: ["setInterval"] });
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+
+    order.buyTWAP();
+    const firstSlice = order.requests[0];
+    const signing = authorizeRequest(firstSlice);
+    const scheduleId = order.state.twap.scheduleId;
+    order.navigate("/");
+    equal(order.state.twap.scheduleId, scheduleId);
+    equal(order.state.twap.remaining, 3);
+    ok(await signing);
+
+    order.respondTo(firstSlice).succeed({ child_order_acceptance_id: "JRF-TWAP" });
+    t.mock.timers.tick(1000);
+    deepEqual(order.requests.map(({ category }) => category), ["twap-order", "twap-order"]);
+    equal(order.state.twap.scheduleId, scheduleId);
+});
 
 test("leaving Trade cancels a TWAP slice that is still signing", async (t) => {
     const order = setup(t);
