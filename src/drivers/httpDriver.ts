@@ -48,7 +48,7 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
     try {
         const body = request.send || "";
         const headers = typeof body === "string"
-            ? await signRest(request.method || "GET", request.url.slice(origin.length), body)
+            ? await signWithDeadline(request.method || "GET", request.url.slice(origin.length), body)
             : null;
         if (!cancelled() && headers) {
             const authorized: AccountRequest = {
@@ -65,6 +65,7 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
     return null;
 };
 
+const signingDeadlineMs = 15_000;
 const requestDeadlineMs = 10_000;
 const pollDeadlineMs = 15_000;
 const periodicReadCategories = new Set(["orders", "positions", "collateral", "status"]);
@@ -80,6 +81,18 @@ export const makeHTTPDriver = (deadlineMs = requestDeadlineMs) =>
 
 export const isWriteDeadlineError = (error: any): boolean =>
     error?.code === "ECONNABORTED" && error.errno === "ETIME";
+
+const signWithDeadline = async (method: string, path: string, body: string) => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const expiry = new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), signingDeadlineMs);
+    });
+    try {
+        return await Promise.race([signRest(method, path, body), expiry]);
+    } finally {
+        clearTimeout(timeout);
+    }
+};
 
 const responseStream = (options: RequestOptions, deadlineMs: number) => {
     const method = options.method?.toUpperCase() ?? "GET";
