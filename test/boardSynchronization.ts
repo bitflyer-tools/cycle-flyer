@@ -221,6 +221,18 @@ test("prunes both sides for directional executions in a mixed batch live and dur
     });
 });
 
+test("replays an execution that leaves the live board unchanged onto a pending snapshot", () => {
+    const {request, execute, asks, revision} = setup();
+    request()([{ price: 110, size: 2 }]);
+    const respond = request();
+    const before = revision();
+
+    execute({ side: "BUY", price: 110 });
+    assert.equal(revision(), before);
+    respond([{ price: 100, size: 1 }, { price: 110, size: 2 }]);
+    assert.deepEqual(asks(), [[110, 2]]);
+});
+
 test("applies deltas and execution pruning in the same order live and in snapshot replay", () => {
     const {request, execute, update, asks} = setup();
     const initial = [{ price: 100, size: 1 }, { price: 110, size: 1 }];
@@ -328,6 +340,7 @@ const setup = (connected$ = Stream.of(true)) => {
         asks: () => state.board.asks.map(({price, size}) => [price, size]),
         bids: () => state.board.bids.map(({price, size}) => [price, size]),
         hasBoardSnapshot: () => state.hasBoardSnapshot,
+        revision: () => state.boardRevision,
         execute: (...executions: Execution[]) => executions$.shamefullySendNext(executions),
         request: () => {
             const response$ = Stream.create<Response>();
