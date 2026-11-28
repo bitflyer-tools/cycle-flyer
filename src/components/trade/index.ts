@@ -67,7 +67,7 @@ export interface State {
 }
 
 export const Trade = (
-    sources: Sources, leaveTrade$?: Stream<void>,
+    sources: Sources, leaveTrade$ = Stream.never<void>(),
 ): Sinks => {
     const submission = sources.orderSubmission;
     const executionsComponent = isolate(ExecutionsComponent, { state: "executionsComponentState" })({
@@ -123,7 +123,9 @@ export const Trade = (
             }),
         },
     })(sources, submission.isOrdering$, leaveTrade$, withMarketFillPreview(orderViewInputs$));
-    (orderComponent.orderRequests as unknown as Stream<OrderRequestBatch>).addListener({ next: submission.submit });
+    (orderComponent.orderRequests as unknown as Stream<OrderRequestBatch>)
+        .endWhen(leaveTrade$)
+        .addListener({ next: submission.submit });
 
     const cancellationOutcome$ = cancellationOutcomes(sources.orderRequests);
     const actions = intent(sources, cancellationOutcome$);
