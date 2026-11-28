@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {test, TestContext} from "node:test";
 import Stream from "xstream";
 import {areNotificationsEnabled, makeNotificationDriver, notificationsEnabledStorageKey} from "../src/drivers/notificationDriver";
-import {Sound} from "../src/drivers/soundDriver";
+import type {NotificationEvent} from "../src/drivers/notificationDriver";
 
 function withLocalStorage(t: TestContext, value: Record<string, string>): void {
     const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
@@ -37,11 +37,24 @@ test("the driver shows a notification when enabled and permission is granted", (
     const shown: { title: string; body?: string }[] = [];
     withNotification(t, "granted", shown);
 
-    const notification$ = Stream.create<Sound>();
+    const notification$ = Stream.create<NotificationEvent>();
     makeNotificationDriver()(notification$);
     notification$.shamefullySendNext("price-alert");
 
     assert.deepEqual(shown, [{ title: "Price alert", body: "Your price alert condition was met." }]);
+});
+
+test("an unconfirmed submission describes the uncertain acceptance", (t) => {
+    withLocalStorage(t, { [notificationsEnabledStorageKey]: "true" });
+    const shown: { title: string; body?: string }[] = [];
+    withNotification(t, "granted", shown);
+
+    makeNotificationDriver()(Stream.of<NotificationEvent>({ operation: "submission", status: "unconfirmed" }));
+
+    assert.deepEqual(shown, [{
+        title: "Order unconfirmed",
+        body: "Could not confirm whether bitFlyer accepted your order.",
+    }]);
 });
 
 test("the driver stays silent when notifications are disabled", (t) => {
@@ -49,9 +62,9 @@ test("the driver stays silent when notifications are disabled", (t) => {
     const shown: { title: string; body?: string }[] = [];
     withNotification(t, "granted", shown);
 
-    const notification$ = Stream.create<Sound>();
+    const notification$ = Stream.create<NotificationEvent>();
     makeNotificationDriver()(notification$);
-    notification$.shamefullySendNext("success");
+    notification$.shamefullySendNext({ operation: "submission", status: "success" });
 
     assert.deepEqual(shown, []);
 });
@@ -61,7 +74,7 @@ test("the driver stays silent when permission has not been granted", (t) => {
     const shown: { title: string; body?: string }[] = [];
     withNotification(t, "denied", shown);
 
-    const notification$ = Stream.create<Sound>();
+    const notification$ = Stream.create<NotificationEvent>();
     makeNotificationDriver()(notification$);
     notification$.shamefullySendNext("execution");
 
@@ -74,9 +87,9 @@ test("the driver stays silent outside a Notification-capable environment", (t) =
     delete (globalThis as any).Notification;
     t.after(() => { (globalThis as any).Notification = original; });
 
-    const notification$ = Stream.create<Sound>();
+    const notification$ = Stream.create<NotificationEvent>();
     assert.doesNotThrow(() => {
         makeNotificationDriver()(notification$);
-        notification$.shamefullySendNext("failure");
+        notification$.shamefullySendNext({ operation: "submission", status: "failed" });
     });
 });
