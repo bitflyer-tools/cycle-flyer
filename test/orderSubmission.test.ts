@@ -564,6 +564,45 @@ for (const [statusCode, expectedStatus] of [[400, "failed"], [200, "unconfirmed"
     });
 }
 
+for (const [category, name] of [["limit-order", "Limit"], ["cancel-orders", "Cancel"]] as const) {
+    for (const [status, outcome] of [[400, "failed"], [408, "unconfirmed"], [504, "unconfirmed"]] as const) {
+        test(`settles ${category} after HTTP ${status} as ${outcome}`, { timeout: 5_000 }, async (t) => {
+            const methods: string[] = [];
+            const server = createServer((request, response) => {
+                methods.push(request.method!);
+                request.resume();
+                response.writeHead(status, { "Content-Type": "application/json" });
+                response.end(JSON.stringify({ status: -1, error_message: "Order rejected" }));
+            });
+            t.after(() => {
+                server.closeAllConnections();
+                server.close();
+            });
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const { port } = server.address() as { port: number };
+            const order = setup(t, "0.01", { writeOrigin: `http://127.0.0.1:${port}`, apis: [] });
+
+            if (category === "cancel-orders") {
+                order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getorders", category: "orders", _namespace: ["trade"] })
+                    .succeed([{ side: "BUY", size: 0.1, price: 100 }]);
+                order.clearOrders();
+            } else {
+                order.buy("limit");
+            }
+            equal(order.state.isOrdering, true);
+            await order.waitForHistoryCount(1);
+
+            equal(order.state.isOrdering, false);
+            deepEqual(methods, ["POST"]);
+            deepEqual(order.requests.map((request) => request.category), [category]);
+            const rejectionReason = status === 400 ? "Order rejected" : undefined;
+            deepEqual(order.histories.map(({ name, status, timedOut, rejectionReason }) =>
+                [name, status, timedOut, rejectionReason]), [[name, outcome, undefined, rejectionReason]]);
+        });
+    }
+}
+
 test("routes account executions without changing session history or reviving stale responses", async (t) => {
     await saveCredentials({ key: "account-a", secret: "secret-a" });
     t.after(() => saveCredentials(null));
@@ -1391,7 +1430,7 @@ test("leaving Trade cancels a TWAP slice that is still signing", async (t) => {
 });
 
 for (const route of ["/", "/setting"]) {
-    for (const outcome of ["success", "failed", "deadline", "disconnect"] as const) {
+    for (const outcome of ["success", "failed", "deadline", "disconnect", "gateway timeout"] as const) {
         test(`records and notifies a TWAP slice once when it settles on ${route} (${outcome})`, async (t) => {
             const order = setup(t, "0.01", { twapSlices: 2 });
             await saveCredentials({ key: "test-key", secret: "test-secret" });
@@ -1416,9 +1455,11 @@ for (const route of ["/", "/setting"]) {
             if (outcome === "success") response.succeed({ child_order_acceptance_id: "JRF-TWAP" });
             else if (outcome === "failed") response.reject();
             else if (outcome === "disconnect") response.disconnect();
+            else if (outcome === "gateway timeout") response.fail(Object.assign(new Error("Gateway Timeout"), { status: 504 }));
             else response.fail(Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }));
 
-            const status = outcome === "deadline" || outcome === "disconnect" ? "unconfirmed" : outcome;
+            const status = outcome === "success" || outcome === "failed" ? outcome : "unconfirmed";
+            deepEqual(order.requests.map(({ category }) => category), ["twap-order"]);
 
             const sounds = [status === "success" ? "success" : "failure"];
             deepEqual(order.sounds, sounds);
