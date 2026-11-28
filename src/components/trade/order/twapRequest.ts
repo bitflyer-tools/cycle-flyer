@@ -59,10 +59,8 @@ const slices = (
     const { baseSize, largerSize, largerCount } = allocateSlices(state.size, state.twap.slices);
     const isOwnSlice = (request: TwapSliceRequest) =>
         request.category === "twap-order" && request.scheduleId === schedule.id;
-    const dispatched$ = Stream.merge(
-        http.select("twap-order").filter((response$) => isOwnSlice(response$.request as TwapSliceRequest)),
-        unsignedRequests$.filter((request) => isOwnSlice(request as TwapSliceRequest)),
-    );
+    const dispatched$ = http.select("twap-order")
+        .filter((response$) => isOwnSlice(response$.request as TwapSliceRequest));
     const signingFailures$ = unsignedRequests$.filter((request) => isOwnSlice(request as TwapSliceRequest));
 
     let periodicSubscription: { unsubscribe: () => void } | undefined;
@@ -82,9 +80,12 @@ const slices = (
                     ...twapSliceOrder(tick + 1 < largerCount ? largerSize : baseSize, schedule.side, schedule.id),
                     cancelled: () => !isTwapActive(),
                 });
-                if (produced === state.twap.slices) { listener.complete(); }
             };
             const release = (): void => {
+                if (produced === state.twap.slices) {
+                    listener.complete();
+                    return;
+                }
                 gateOpen = true;
                 const tick = queue.shift();
                 if (tick !== undefined) { produce(tick); }

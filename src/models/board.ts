@@ -26,20 +26,22 @@ export class Board {
         return upper - lower;
     }
 
-    public remove(side: string, price: number) {
+    public remove(side: string, price: number): boolean {
         if (side === "BUY") {
-            if (this.asks.length === 0 || this.asks[0].price >= price) { return; }
+            if (this.asks.length === 0 || this.asks[0].price >= price) { return false; }
             this.asks = this.asks.filter((ask) => ask.price >= price);
         } else {
-            if (this.bids.length === 0 || this.bids[0].price <= price) { return; }
+            if (this.bids.length === 0 || this.bids[0].price <= price) { return false; }
             this.bids = this.bids.filter((bid) => bid.price <= price);
         }
+        return true;
     }
 
-    public removeExecutions(executions: Execution[]): void {
+    public removeExecutions(executions: Execution[]): boolean {
         const { highestBuy, lowestSell } = executionPriceLimits(executions);
-        if (highestBuy !== undefined) { this.remove("BUY", highestBuy); }
-        if (lowestSell !== undefined) { this.remove("SELL", lowestSell); }
+        const asksChanged = highestBuy !== undefined && this.remove("BUY", highestBuy);
+        const bidsChanged = lowestSell !== undefined && this.remove("SELL", lowestSell);
+        return asksChanged || bidsChanged;
     }
 
     public merge(asks: BoardOrder[], bids: BoardOrder[]): Board {
