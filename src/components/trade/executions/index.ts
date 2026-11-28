@@ -35,7 +35,7 @@ type ExecutionRequest = AccountRequest & { executionRequestId: symbol };
 
 export const initialState: State = { rows: [], loaded: false, loading: false };
 
-export const ExecutionsComponent = ({DOM, HTTP, state}: Sources) => {
+export const ExecutionsComponent = ({DOM, HTTP, state}: Sources, leaveTrade$ = Stream.never<void>()) => {
     let requestId: symbol | undefined;
     const requests$ = Stream.merge(
         DOM.select(".refresh-executions").events("click").mapTo(false),
@@ -84,6 +84,7 @@ export const ExecutionsComponent = ({DOM, HTTP, state}: Sources) => {
         .compose(sampleCombine(state.stream))
         .map(([, current]) => current.rows)
         .filter((rows) => rows.length > 0)
+        .endWhen(leaveTrade$)
         .addListener({ next: (rows) => downloadCsv("executions.csv", toCsv(rows)) });
 
     return {

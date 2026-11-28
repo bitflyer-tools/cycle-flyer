@@ -53,8 +53,8 @@ export const Root = (sources: Sources): Sinks => {
             "/setting": isolate(Setting, { "*": "setting" }),
         })
         .map((route: any) => {
-            // Cancel while the outgoing Trade reducer is still subscribed.
-            if (route.value !== trade) { leaveTrade$.shamefullySendNext(undefined); }
+            // End the previous Trade mount while its reducer is still subscribed.
+            leaveTrade$.shamefullySendNext(undefined);
             return route.value({
                 ...sources,
                 // Tag order submissions with the same HTTP scope as the other requests.
