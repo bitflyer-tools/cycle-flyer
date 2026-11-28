@@ -3,6 +3,7 @@ export interface OrderHistory {
     description: string;
     name: string;
     status: string;
+    rejectionReason?: string;
     timedOut?: boolean;
 }
 
