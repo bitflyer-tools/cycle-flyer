@@ -766,6 +766,44 @@ test("coalesces synchronized market depth scans and immediately refreshes on siz
     deepEqual(order.requests, []);
 });
 
+test("refreshes market fill estimates after execution pruning and snapshot replacement", async (t) => {
+    const order = setup(t);
+    order.enterSize("0.01");
+    await Promise.resolve();
+    order.respondTo(order.boardRequest!).succeed({
+        asks: [{ price: 100, size: 0.01 }, { price: 110, size: 0.01 }],
+        bids: [],
+    });
+    match(order.rendered(), /100 JPY \(0.0000%\)/);
+    t.mock.timers.tick(1);
+
+    order.publishExecution(110);
+    match(order.rendered(), /100 JPY \(0.0000%\)/);
+    t.mock.timers.tick(marketFillRefreshMs);
+    match(order.rendered(), /110 JPY \(0.0000%\)/);
+
+    t.mock.timers.tick(15_000);
+    order.respondTo(order.boardRequest!).succeed({ asks: [{ price: 120, size: 0.01 }], bids: [] });
+    match(order.rendered(), /110 JPY \(0.0000%\)/);
+    t.mock.timers.tick(marketFillRefreshMs);
+    match(order.rendered(), /120 JPY \(0.0000%\)/);
+});
+
+test("updates the trade price without scheduling a fill estimate at the best ask", async (t) => {
+    const order = setup(t);
+    order.enterSize("0.01");
+    await Promise.resolve();
+    order.respondTo(order.boardRequest!).succeed({ asks: [{ price: 100, size: 0.01 }], bids: [] });
+    match(order.rendered(), /100 JPY \(0.0000%\)/);
+    t.mock.timers.tick(1);
+    const schedule = t.mock.method(globalThis, "setTimeout");
+
+    order.publishExecution(100);
+    schedule.mock.restore();
+    equal(order.tradeState.currentPrice, 100);
+    equal(schedule.mock.calls.some(({ arguments: [, delay] }) => delay === marketFillRefreshMs), false);
+});
+
 test("reports a failed bulk cancellation and keeps the child orders visible", (t) => {
     const order = setup(t);
     order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getorders", category: "orders", _namespace: ["trade"] }).succeed([
