@@ -407,9 +407,9 @@ test("exports the current executions once after repeated Trade and Setting round
         assert.equal(downloads.length, 0);
     }
     await navigate("/");
-    await navigate("/");
     const rows = [execution(5), execution(4)];
     await load(rows);
+    await navigate("/");
     exportCsv$.shamefullySendNext(null);
 
     assert.equal(downloads.length, 1);
