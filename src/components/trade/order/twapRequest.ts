@@ -79,12 +79,15 @@ const slices = (
                     ...twapSliceOrder(size, schedule.side, schedule.id),
                     cancelled: () => !isTwapActive(),
                 });
-                if (produced === state.twap.slices) { listener.complete(); }
             };
             signingFailedSubscription = signingFailures$.subscribe({ next: onSigningFailure });
             dispatchedSubscription = dispatched$.subscribe({
                 next: () => {
-                    if (produced < state.twap.slices) { timer = setTimeout(produce, intervalMs); }
+                    if (produced === state.twap.slices) {
+                        listener.complete();
+                        return;
+                    }
+                    timer = setTimeout(produce, intervalMs);
                 },
             });
             produce();

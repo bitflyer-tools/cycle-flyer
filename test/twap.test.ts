@@ -50,7 +50,7 @@ test("settles overlapping slices and returns to idle in either response order", 
 });
 
 test("spaces three dispatches after a delayed first signature", (context) => {
-    const twap = createTwap(context, 1, 3, true);
+    const twap = createTwap(context, 1, 3, { delayFirstSignature: true });
     twap.setSize("0.03000002");
     twap.buy.shamefullySendNext(null);
 
@@ -93,6 +93,30 @@ test("discards later slices once an earlier slice fails to sign", (context) => {
     context.mock.timers.tick(2000);
     strictEqual(requests.length, 1);
 });
+
+for (const slices of [1, 2]) {
+    test(`settles a ${slices}-slice TWAP when signing the final slice fails`, async (context) => {
+        const twap = createTwap(context, 1, slices, {
+            rejectFinalSignature: async (request) => {
+                unsignedRequests$.shamefullySendNext(await Promise.resolve(request));
+            },
+        });
+        twap.buy.shamefullySendNext(null);
+        if (slices === 2) {
+            twap.requests[0].succeed();
+            context.mock.timers.tick(1000);
+        }
+        strictEqual(twap.state.twap.remaining, 1);
+
+        await Promise.resolve();
+        strictEqual(isRunning(twap.state.twap), false);
+        strictEqual(twap.state.twap.scheduleId, undefined);
+        const status = twapSection(twap.state, hasApiCredentials()).children!
+            .find((node): node is VNode => typeof node === "object" && node?.sel === "p.twap-status");
+        strictEqual(status?.text, "TWAP stopped because an order could not be signed.");
+        strictEqual(twap.requests.length, slices - 1);
+    });
+}
 
 test("ignores a canceled schedule's response when tracking replacement progress", (context) => {
     const twap = createTwap(context);
@@ -204,8 +228,14 @@ test("manual market orders and one-slice TWAP share the same minimum", (context)
     deepStrictEqual(twap.requests.map(({ response$ }) => JSON.parse(response$.request.send as string).size), [0.001]);
 });
 
-const createTwap = (context: TestContext, interval = 1, slices = 2, delayFirstSignature = false) => {
-    context.mock.timers.enable({ apis: ["Date", "setInterval", "setTimeout"] });
+const createTwap = (
+    context: TestContext, interval = 1, slices = 2,
+    { delayFirstSignature = false, rejectFinalSignature }: {
+        delayFirstSignature?: boolean;
+        rejectFinalSignature?: (request: TwapSliceRequest) => void;
+    } = {},
+) => {
+    context.mock.timers.enable({ apis: ["Date", "setTimeout"] });
     const buy = Stream.create<null>();
     const cancel = Stream.create<null>();
     const sell = Stream.create<null>();
@@ -254,7 +284,11 @@ const createTwap = (context: TestContext, interval = 1, slices = 2, delayFirstSi
     };
     const request = scheduler.requests$.subscribe({
         next: (input) => {
-            const pending = fakeResponse(input as TwapSliceRequest);
+            if (rejectFinalSignature && requests.length === slices - 1) {
+                rejectFinalSignature(input);
+                return;
+            }
+            const pending = fakeResponse(input);
             requests.push(pending);
             if (!delayFirstSignature || requests.length > 1) { dispatch(pending); }
         },

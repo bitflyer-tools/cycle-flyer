@@ -31,6 +31,19 @@ before(async () => {
     }
 });
 
+test("flattens stop markers in parent and marker order and caches by record", () => {
+    const first = new StopOrder({ price: 300, side: "BUY", size: 1 });
+    const second = new StopOrder({ price: 100, side: "SELL", size: 1 });
+    const third = new StopOrder({ price: 200, side: "BUY", size: 1 });
+    const parentStopOrders = { z: [first, second], pending: [], a: [third] };
+
+    const markers = flattenStopOrders(parentStopOrders);
+    deepStrictEqual(markers, [first, second, third]);
+    strictEqual(flattenStopOrders(parentStopOrders), markers);
+    deepStrictEqual(flattenStopOrders({ ...parentStopOrders, a: [] }), [first, second]);
+    strictEqual(flattenStopOrders(parentStopOrders), markers);
+});
+
 test("retires a canceled parent only after a fresh list omits it", (t) => {
     const trade = setup(t);
     const state = observeState(t, trade.actions, trade.cancellations$);
