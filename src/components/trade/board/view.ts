@@ -24,7 +24,7 @@ export const view = (state$: Stream<State>) => {
                     span(".grouped-size", state.groupedSize),
                     button(".plus", "+"),
                     span("Spread"),
-                    span(".spread", state.board.spread().toLocaleString()),
+                    span(".spread", state.board.spread()?.toLocaleString() ?? "—"),
                 ]),
                 div(".asks", state.board.groupedAsks(state.groupedSize).map((ask: BoardOrder) =>
                     div(".ask", { dataset: { price: ask.price } }, [

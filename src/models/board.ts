@@ -20,10 +20,10 @@ export class Board {
         this.bids = json.bids.map((bid) => new BoardOrder(bid)).sort(descendingPrice);
     }
 
-    public spread(): number {
-        const upper = (this.asks[0] || { price: 0 }).price;
-        const lower = (this.bids[0] || { price: 0 }).price;
-        return upper - lower;
+    public spread(): number | undefined {
+        const [ask] = this.asks;
+        const [bid] = this.bids;
+        return ask && bid ? ask.price - bid.price : undefined;
     }
 
     public remove(side: string, price: number): boolean {
