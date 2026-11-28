@@ -31,7 +31,10 @@ export const flattenStopOrders = (parentStopOrders: ParentStopOrders): StopOrder
     const cached = flattenedStopOrders.get(parentStopOrders);
     if (cached) { return cached; }
 
-    const orders = Object.keys(parentStopOrders).reduce((acc: StopOrder[], id) => acc.concat(parentStopOrders[id]), []);
+    const orders: StopOrder[] = [];
+    Object.keys(parentStopOrders).forEach((id) => {
+        parentStopOrders[id].forEach((order) => orders.push(order));
+    });
     flattenedStopOrders.set(parentStopOrders, orders);
     return orders;
 };
