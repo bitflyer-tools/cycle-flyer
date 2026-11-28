@@ -4,11 +4,12 @@ import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {AccountRequest, isCurrentAccountRequest, isWriteDeadlineError} from "../../../drivers/httpDriver";
 import {TwapSliceRequest} from "../../../http";
 import {createOrderHistory, OrderHistory} from "../../../models/orderHistory";
-import {AcceptanceIdField, hasOrderAcceptanceId, isOrderRejection} from "./rejection";
+import {AcceptanceIdField, hasOrderAcceptanceId, orderRejectionReason} from "./rejection";
 
 type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 
 export type OrderStatus = "success" | "failed" | "unconfirmed";
+type OutcomeDetails = { status: OrderStatus } & Pick<OrderHistory, "rejectionReason" | "timedOut">;
 
 export interface OrderOutcome {
     status: OrderStatus;
@@ -85,25 +86,26 @@ const createOutcome = (
 ): Stream<OrderOutcome> =>
     stream$
         .last()
-        .map<{ status: OrderStatus; timedOut: boolean }>((response) => ({
-            status: responseStatus(response, acceptanceIdField),
-            timedOut: false,
-        }))
+        .map((response) => responseDetails(response, acceptanceIdField))
         .replaceError((error) => {
-            const timedOut = isWriteDeadlineError(error);
-            const status: OrderStatus = !timedOut && isOrderRejection(error?.response) ? "failed" : "unconfirmed";
-            return Stream.of<{ status: OrderStatus; timedOut: boolean }>({ status, timedOut });
+            if (isWriteDeadlineError(error)) return Stream.of<OutcomeDetails>({ status: "unconfirmed", timedOut: true });
+            const rejectionReason = orderRejectionReason(error?.response);
+            return Stream.of<OutcomeDetails>(rejectionReason
+                ? { status: "failed", rejectionReason }
+                : { status: "unconfirmed" });
         })
         .filter(() => isCurrentAccountRequest(stream$.request as AccountRequest))
-        .map(({ status, timedOut }) => {
-            const histories = createHistories(stream$.request.send as string, status);
-            return { status, histories: timedOut ? histories.map((history) => ({ ...history, timedOut })) : histories };
-        });
+        .map(({ status, ...details }) => ({
+            status,
+            histories: createHistories(stream$.request.send as string, status)
+                .map((history) => ({ ...history, ...details })),
+        }));
 
-const responseStatus = (response: Response, acceptanceIdField?: AcceptanceIdField): OrderStatus => {
-    if (isOrderRejection(response)) return "failed";
-    if (acceptanceIdField && !hasOrderAcceptanceId(response, acceptanceIdField)) return "unconfirmed";
-    return "success";
+const responseDetails = (response: Response, acceptanceIdField?: AcceptanceIdField): OutcomeDetails => {
+    const rejectionReason = orderRejectionReason(response);
+    if (rejectionReason) return { status: "failed", rejectionReason };
+    const accepted = !acceptanceIdField || hasOrderAcceptanceId(response, acceptanceIdField);
+    return { status: accepted ? "success" : "unconfirmed" };
 };
 
 const orderNames: { [conditionType: string]: string } = {

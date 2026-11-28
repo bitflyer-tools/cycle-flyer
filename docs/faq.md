@@ -35,11 +35,10 @@ duplicate order.
 ## An order was rejected — where is the reason?
 
 When bitFlyer returns a definitive error for a submitted or canceled order,
-the history entry is marked "✗". The underlying reason is the
-`error_message` bitFlyer sent back (for example the order was below the
-minimum size or the account lacked sufficient margin); see the
-[order form reference](order-entry.md) for the size and validation rules the
-app enforces before submitting.
+the history entry is marked "✗". In the **Trade** history panel, look below
+that entry's request details for the rejection message from bitFlyer, if
+provided. The [order form reference](order-entry.md) lists the size and
+validation rules the app enforces before submitting.
 
 ## TWAP stopped before sending all of its slices
 

@@ -138,6 +138,10 @@ for (const [statusCode, status] of [[400, 'failed'], [408, 'unconfirmed'], [503,
       { operation: 'submission', status },
       { operation: 'cancellation', status },
     ]);
-    assert.deepEqual(app.histories().map((history) => history.status), [status, status]);
+    const rejectionReason = status === 'failed' ? 'Request rejected' : undefined;
+    assert.deepEqual(app.histories().map((history) => [history.status, history.rejectionReason]), [
+      [status, rejectionReason],
+      [status, rejectionReason],
+    ]);
   });
 }
