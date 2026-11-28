@@ -33,7 +33,7 @@ const findNode = (node, selector) => {
 };
 
 test("leaving Trade stops a partially completed TWAP and restores idle controls", async (t) => {
-    t.mock.timers.enable({ apis: ["setInterval"] });
+    t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] });
 
     const history = Stream.create();
     const buy = Stream.create();

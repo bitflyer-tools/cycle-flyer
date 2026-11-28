@@ -49,32 +49,32 @@ test("settles overlapping slices and returns to idle in either response order", 
     ));
 });
 
-test("withholds a later slice until the earlier slice has been dispatched", (context) => {
-    context.mock.timers.enable({ apis: ["setInterval"] });
-    const start$ = Stream.create<TwapSchedule>();
-    const dispatched$ = Stream.create<{ request: TwapSliceRequest }>();
-    const http = { select: (category: string) => category === "twap-order" ? dispatched$ : Stream.never() } as unknown as HTTPSource;
-    const requests: TwapSliceRequest[] = [];
-    const { requests$ } = twapRequest(
-        { onTwapStarted$: start$, onClickTwapCancelButton$: Stream.never() } as unknown as TwapActions,
-        Stream.of({ size: 0.02, twap: { interval: 1, slices: 2 } } as unknown as State),
-        http,
-    );
-    const subscription = requests$.subscribe({ next: (request) => requests.push(request) });
-    context.after(() => subscription.unsubscribe());
+test("spaces three dispatches after a delayed first signature", (context) => {
+    const twap = createTwap(context, 1, 3, true);
+    twap.setSize("0.03000002");
+    twap.buy.shamefullySendNext(null);
 
-    start$.shamefullySendNext({ id: Symbol(), side: "BUY" });
-    strictEqual(requests.length, 1);
+    context.mock.timers.tick(2500);
+    strictEqual(twap.requests.length, 1);
+    deepStrictEqual(twap.dispatches, []);
+    twap.dispatch(twap.requests[0]);
+    deepStrictEqual(twap.dispatches, [[2500, 0.01000001]]);
+    context.mock.timers.tick(999);
+    strictEqual(twap.dispatches.length, 1);
+    context.mock.timers.tick(1);
+    deepStrictEqual(twap.dispatches, [[2500, 0.01000001], [3500, 0.01000001]]);
+    context.mock.timers.tick(999);
+    strictEqual(twap.dispatches.length, 2);
+    context.mock.timers.tick(1);
+    deepStrictEqual(twap.dispatches, [[2500, 0.01000001], [3500, 0.01000001], [4500, 0.01]]);
 
-    context.mock.timers.tick(1000);
-    strictEqual(requests.length, 1);
-
-    dispatched$.shamefullySendNext({ request: requests[0] });
-    strictEqual(requests.length, 2);
+    strictEqual(twap.state.twap.remaining, 3);
+    [...twap.requests].reverse().forEach(({ succeed }) => succeed());
+    strictEqual(isRunning(twap.state.twap), false);
 });
 
 test("discards later slices once an earlier slice fails to sign", (context) => {
-    context.mock.timers.enable({ apis: ["setInterval"] });
+    context.mock.timers.enable({ apis: ["setTimeout"] });
     const start$ = Stream.create<TwapSchedule>();
     const http = { select: () => Stream.never() } as unknown as HTTPSource;
     const requests: TwapSliceRequest[] = [];
@@ -204,8 +204,8 @@ test("manual market orders and one-slice TWAP share the same minimum", (context)
     deepStrictEqual(twap.requests.map(({ response$ }) => JSON.parse(response$.request.send as string).size), [0.001]);
 });
 
-const createTwap = (context: TestContext, interval = 1, slices = 2) => {
-    context.mock.timers.enable({ apis: ["setInterval"] });
+const createTwap = (context: TestContext, interval = 1, slices = 2, delayFirstSignature = false) => {
+    context.mock.timers.enable({ apis: ["Date", "setInterval", "setTimeout"] });
     const buy = Stream.create<null>();
     const cancel = Stream.create<null>();
     const sell = Stream.create<null>();
@@ -247,16 +247,21 @@ const createTwap = (context: TestContext, interval = 1, slices = 2) => {
     state$.shamefullySendNext(state);
 
     const requests: Array<ReturnType<typeof fakeResponse>> = [];
+    const dispatches: Array<[number, number]> = [];
+    const dispatch = ({ response$ }: ReturnType<typeof fakeResponse>) => {
+        dispatches.push([Date.now(), JSON.parse(response$.request.send as string).size]);
+        responses$.shamefullySendNext(response$);
+    };
     const request = scheduler.requests$.subscribe({
         next: (input) => {
             const pending = fakeResponse(input as TwapSliceRequest);
             requests.push(pending);
-            responses$.shamefullySendNext(pending.response$);
+            if (!delayFirstSignature || requests.length > 1) { dispatch(pending); }
         },
     });
     context.after(() => { request.unsubscribe(); reducer.unsubscribe(); });
     return {
-        actions, state$, buy, cancel, sell, marketBuy, marketSell, requests,
+        actions, state$, buy, cancel, sell, marketBuy, marketSell, requests, dispatches, dispatch,
         setSize: (value: string) => inputs["#size-input"].shamefullySendNext({target: {value}}),
         setInterval: (value: number) => inputs["#twap-interval-input"].shamefullySendNext({target: {value: String(value)}}),
         setSlices: (value: number) => inputs["#twap-slices-input"].shamefullySendNext({target: {value: String(value)}}),

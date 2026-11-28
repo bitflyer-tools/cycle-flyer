@@ -59,48 +59,38 @@ const slices = (
     const { baseSize, largerSize, largerCount } = allocateSlices(state.size, state.twap.slices);
     const isOwnSlice = (request: TwapSliceRequest) =>
         request.category === "twap-order" && request.scheduleId === schedule.id;
-    const dispatched$ = Stream.merge(
-        http.select("twap-order").filter((response$) => isOwnSlice(response$.request as TwapSliceRequest)),
-        unsignedRequests$.filter((request) => isOwnSlice(request as TwapSliceRequest)),
-    );
+    const dispatched$ = http.select("twap-order")
+        .filter((response$) => isOwnSlice(response$.request as TwapSliceRequest));
     const signingFailures$ = unsignedRequests$.filter((request) => isOwnSlice(request as TwapSliceRequest));
+    const intervalMs = Math.ceil(state.twap.interval * 1000);
 
-    let periodicSubscription: { unsubscribe: () => void } | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let dispatchedSubscription: { unsubscribe: () => void } | undefined;
     let signingFailedSubscription: { unsubscribe: () => void } | undefined;
 
     return Stream.create<TwapSliceRequest>({
         start: (listener) => {
-            let gateOpen = true;
             let produced = 0;
-            const queue: number[] = [];
-            const produce = (tick: number): void => {
+            const produce = (): void => {
                 if (!isTwapActive()) { return; }
-                gateOpen = false;
+                const size = produced < largerCount ? largerSize : baseSize;
                 produced += 1;
                 listener.next({
-                    ...twapSliceOrder(tick + 1 < largerCount ? largerSize : baseSize, schedule.side, schedule.id),
+                    ...twapSliceOrder(size, schedule.side, schedule.id),
                     cancelled: () => !isTwapActive(),
                 });
                 if (produced === state.twap.slices) { listener.complete(); }
             };
-            const release = (): void => {
-                gateOpen = true;
-                const tick = queue.shift();
-                if (tick !== undefined) { produce(tick); }
-            };
             signingFailedSubscription = signingFailures$.subscribe({ next: onSigningFailure });
-            dispatchedSubscription = dispatched$.subscribe({ next: release });
-            periodicSubscription = Stream.periodic(state.twap.interval * 1000)
-                .startWith(-1)
-                .take(state.twap.slices)
-                .filter(isTwapActive)
-                .subscribe({
-                    next: (tick) => { if (gateOpen) { produce(tick); } else { queue.push(tick); } },
-                });
+            dispatchedSubscription = dispatched$.subscribe({
+                next: () => {
+                    if (produced < state.twap.slices) { timer = setTimeout(produce, intervalMs); }
+                },
+            });
+            produce();
         },
         stop: () => {
-            periodicSubscription?.unsubscribe();
+            clearTimeout(timer);
             dispatchedSubscription?.unsubscribe();
             signingFailedSubscription?.unsubscribe();
         },

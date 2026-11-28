@@ -187,7 +187,7 @@ for (const [operation, replacement] of [
   ['clearing', null],
 ]) {
   test(`${operation} credentials stops the remaining TWAP requests`, async (t) => {
-    t.mock.timers.enable({ apis: ['setInterval'] });
+    t.mock.timers.enable({ apis: ['setTimeout'] });
     const renderer = createRenderer(new Map());
     await renderer.saveCredentials(pair);
     const buy$ = renderer.Stream.create();
@@ -238,7 +238,7 @@ test('Electron TWAP readiness controls the buttons and the status explains why T
 });
 
 test('a missing Electron signature stops the current TWAP before its next slice', async (t) => {
-  t.mock.timers.enable({ apis: ['setInterval'] });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const renderer = createRenderer(new Map(), {
     hasCredentials: async () => true,
     signRest: async () => null,
@@ -262,7 +262,7 @@ test('a missing Electron signature stops the current TWAP before its next slice'
 });
 
 test('starting, canceling, and failing a TWAP leave another scheduler signing independently', async (t) => {
-  t.mock.timers.enable({ apis: ['setInterval'] });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   let finishSigning;
   const headers = { 'ACCESS-KEY': pair.key };
   const renderer = createRenderer(new Map(), {
