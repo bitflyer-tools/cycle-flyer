@@ -52,12 +52,14 @@ function setup(t) {
     });
     let state;
     const sounds = [];
+    const notifications = [];
     const subscriptions = [
         sinks.state.subscribe({ next: (reduce) => {
             state = reduce(state);
             state$.shamefullySendNext(state);
         } }),
         sinks.sound.subscribe({ next: (sound) => sounds.push(sound) }),
+        sinks.notification.subscribe({ next: (notification) => notifications.push(notification) }),
     ];
     t.after(() => subscriptions.forEach((subscription) => subscription.unsubscribe()));
 
@@ -68,6 +70,7 @@ function setup(t) {
         dismiss: () => dismiss$.shamefullySendNext({}),
         execute: (...prices) => executionBatch$.shamefullySendNext(prices.map((price) => ({ price, side: "BUY" }))),
         navigate: (pathname) => history$.shamefullySendNext({ pathname }),
+        notifications,
         set: (threshold, direction) => submit$.shamefullySendNext({ target: { elements: {
             namedItem: (name) => name === "threshold" ? { valueAsNumber: threshold } : { value: direction },
         } } }),
@@ -125,6 +128,7 @@ test("an upward touch disarms the alert and emits one sound", (t) => {
     [101, 100, 99, 100].forEach(trade.execute);
     assert.equal(trade.alert, triggered);
     assert.deepEqual(trade.sounds, ["price-alert"]);
+    assert.deepEqual(trade.notifications, ["price-alert"]);
 });
 
 test("a downward alert ignores the first execution and the opposite crossing", (t) => {
@@ -137,12 +141,14 @@ test("a downward alert ignores the first execution and the opposite crossing", (
     trade.execute(98);
     assert.equal(trade.alert.price, 98);
     assert.deepEqual(trade.sounds, ["price-alert"]);
+    assert.deepEqual(trade.notifications, ["price-alert"]);
 
     trade.set(97, "down");
     trade.dismiss();
     trade.execute(97);
     assert.equal(trade.alert, null);
     assert.deepEqual(trade.sounds, ["price-alert"]);
+    assert.deepEqual(trade.notifications, ["price-alert"]);
 });
 
 test("a non-crossing batch reuses the summary state object", (t) => {
@@ -193,4 +199,5 @@ test("leaving Trade clears the alert and the crossing baseline on return", (t) =
     trade.navigate("/");
     assert.equal(trade.alert, null);
     assert.deepEqual(trade.sounds, ["price-alert"]);
+    assert.deepEqual(trade.notifications, ["price-alert"]);
 });

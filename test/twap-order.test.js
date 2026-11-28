@@ -55,11 +55,13 @@ test('schedules all 29 requests at the exact minimum size', (t) => {
   const start$ = Stream.create();
   const scheduleId = Symbol();
   const requests = [];
+  const dispatched$ = Stream.create();
+  const http = { select: (category) => category === 'twap-order' ? dispatched$ : Stream.never() };
   const subscription = twapRequest({
     onTwapStarted$: start$,
     onClickTwapCancelButton$: Stream.never(),
-  }, Stream.of({ size: 0.029, twap })).requests$.subscribe({
-    next: (request) => { requests.push(request); request.onDispatched?.(); },
+  }, Stream.of({ size: 0.029, twap }), http).requests$.subscribe({
+    next: (request) => { requests.push(request); dispatched$.shamefullySendNext({ request }); },
   });
   t.after(() => subscription.unsubscribe());
 
@@ -90,7 +92,9 @@ function setup(t, savedInterval, interval = defaultTwapOrder.interval) {
     HTTP: { select: () => Stream.never() },
     storage: { local: { getItem: (key) => Stream.of(key === "twap-interval" ? savedInterval : null) } },
   }, state$);
-  const scheduler = twapRequest(actions, state$);
+  const dispatched$ = Stream.create();
+  const http = { select: (category) => category === 'twap-order' ? dispatched$ : Stream.never() };
+  const scheduler = twapRequest(actions, state$, http);
   const modelSubscription = twapModel(actions, scheduler.lifecycle$).subscribe({
     next: (reducer) => {
       state = reducer(state);
@@ -99,7 +103,7 @@ function setup(t, savedInterval, interval = defaultTwapOrder.interval) {
   });
   const requests = [];
   const requestSubscription = scheduler.requests$.subscribe({
-    next: (request) => { requests.push(request); request.onDispatched?.(); },
+    next: (request) => { requests.push(request); dispatched$.shamefullySendNext({ request }); },
   });
   t.after(() => {
     modelSubscription.unsubscribe();

@@ -3,7 +3,7 @@ const { resolve } = require('node:path');
 const { test } = require('node:test');
 const ts = require('typescript');
 
-test('the installed TypeScript compiler accepts the project options', () => {
+test('the project type-checks under tsconfig.json', () => {
   const configPath = resolve(__dirname, '../tsconfig.json');
   const config = ts.readConfigFile(configPath, ts.sys.readFile);
   const formatDiagnostics = (diagnostics) => ts.formatDiagnostics(diagnostics, {
@@ -18,6 +18,11 @@ test('the installed TypeScript compiler accepts the project options', () => {
     config.config, ts.sys, resolve(__dirname, '..')
   );
   const program = ts.createProgram(fileNames, { ...options, noEmit: true });
-  const diagnostics = [...errors, ...program.getOptionsDiagnostics()];
+  const diagnostics = [
+    ...errors,
+    ...program.getOptionsDiagnostics(),
+    ...program.getSyntacticDiagnostics(),
+    ...program.getSemanticDiagnostics(),
+  ];
   assert.equal(diagnostics.length, 0, formatDiagnostics(diagnostics));
 });

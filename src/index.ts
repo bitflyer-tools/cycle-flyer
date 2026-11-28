@@ -9,6 +9,7 @@ import switchPath from "switch-path";
 import {Root} from "./components";
 import {initializeCredentials} from "./credentials";
 import {makeSignedHTTPDriver} from "./drivers/httpDriver";
+import {makeNotificationDriver} from "./drivers/notificationDriver";
 import {makeSocketIODriver} from "./drivers/socketIODriver";
 import {makeSoundDriver} from "./drivers/soundDriver";
 import "./index.styl";
@@ -68,6 +69,7 @@ run(routerify(withState(Root), switchPath), {
     DOM: makeDOMDriver("#app"),
     HTTP: makeSignedHTTPDriver(),
     history: captureClicks(wrapHistoryDriver(makeHistoryDriver())),
+    notification: makeNotificationDriver(),
     socket: makeSocketIODriver(),
     sound: makeSoundDriver(),
     storage: storageDriver,

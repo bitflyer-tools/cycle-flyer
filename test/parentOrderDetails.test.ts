@@ -15,6 +15,7 @@ import {unsignedRequests$} from "../src/drivers/httpDriver";
 import {parentOrdersPageSize} from "../src/http";
 import {ParentOrderEvent} from "../src/models/orderEvent";
 import {flattenStopOrders} from "../src/models/parentStopOrders";
+import {StopOrder} from "../src/models/stopOrder";
 
 before(async () => {
     const storage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
@@ -28,6 +29,19 @@ before(async () => {
         if (storage) { Object.defineProperty(globalThis, "localStorage", storage); }
         else { Reflect.deleteProperty(globalThis, "localStorage"); }
     }
+});
+
+test("flattens stop markers in parent and marker order and caches by record", () => {
+    const first = new StopOrder({ price: 300, side: "BUY", size: 1 });
+    const second = new StopOrder({ price: 100, side: "SELL", size: 1 });
+    const third = new StopOrder({ price: 200, side: "BUY", size: 1 });
+    const parentStopOrders = { z: [first, second], pending: [], a: [third] };
+
+    const markers = flattenStopOrders(parentStopOrders);
+    deepStrictEqual(markers, [first, second, third]);
+    strictEqual(flattenStopOrders(parentStopOrders), markers);
+    deepStrictEqual(flattenStopOrders({ ...parentStopOrders, a: [] }), [first, second]);
+    strictEqual(flattenStopOrders(parentStopOrders), markers);
 });
 
 test("retires a canceled parent only after a fresh list omits it", (t) => {
@@ -216,7 +230,7 @@ test("preserves a stop marker after malformed details and installs the retried d
         t.after(() => subscription.unsubscribe());
 
         trade.list(["a", "b"]);
-        deepStrictEqual(state!.parentStopOrders, { a: [], b: [] });
+        deepStrictEqual(state!.parentStopOrders, { a: [] as StopOrder[], b: [] as StopOrder[] });
         const resolve = trade.requests.map((input, index) => {
             const response$ = Stream.create<Response>();
             trade.send(input, response$);
@@ -478,7 +492,7 @@ const setup = (t: { after: (cleanup: () => void) => void }) => {
     const requestedId = (input: RequestOptions) => new URL(input.url).searchParams.get("parent_order_id")!;
     const send = (input: RequestOptions, response$: Stream<Response>, credentialVersion = 0) => {
         const signedRequest = { ...input, credentialVersion };
-        const response = Object.assign(response$.map((value) => ({ ...value, request: signedRequest })),
+        const response = Object.assign(response$.map((value): Response => ({ ...value, request: signedRequest })),
             { request: signedRequest });
         channels.get(input.category!)!.shamefullySendNext(response);
     };

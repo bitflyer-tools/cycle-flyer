@@ -18,9 +18,10 @@ import "./index.styl";
 import {intent} from "./intent";
 import {model} from "./model";
 import {OrderComponent, State as OrderComponentState} from "./order";
-import {CancellationOutcome} from "./order/history";
+import {cancellationOutcomes} from "./order/history";
 import {withMarketFillPreview} from "./order/marketFillPreview";
 import {OrderRequestBatch} from "./order/request";
+import type {OrderSubmissionState} from "./orderSubmissionState";
 import {recentTrades} from "./recentTrades";
 import {request} from "./request";
 import {State as SummaryComponentState} from "./summary";
@@ -31,6 +32,7 @@ export interface Sources {
     DOM: DOMSource;
     HTTP: HTTPSource;
     orderRequests: HTTPSource;
+    orderSubmission: OrderSubmissionState;
     state: StateSource<State>;
     router: RouterSource;
     socket: SocketIOSource;
@@ -43,6 +45,7 @@ export interface Sinks {
     state: Stream<Reducer<State>>;
     router: Stream<void>;
     storage: Stream<StorageRequest>;
+    notification?: Stream<Sound>;
     sound?: Stream<Sound>;
 }
 
@@ -64,11 +67,9 @@ export interface State {
 }
 
 export const Trade = (
-    sources: Sources, isOrdering$: Stream<boolean>, leaveTrade$?: Stream<void>,
-    cancellationOutcome$?: Stream<CancellationOutcome>,
-): Sinks & {
-    orderRequests: Stream<OrderRequestBatch>;
-} => {
+    sources: Sources, leaveTrade$?: Stream<void>,
+): Sinks => {
+    const submission = sources.orderSubmission;
     const executionsComponent = isolate(ExecutionsComponent, { state: "executionsComponentState" })({
         ...sources,
         DOM: sources.DOM as MainDOMSource,
@@ -121,8 +122,10 @@ export const Trade = (
                 price: orderComponentState.price,
             }),
         },
-    })(sources, isOrdering$, leaveTrade$, withMarketFillPreview(orderViewInputs$));
+    })(sources, submission.isOrdering$, leaveTrade$, withMarketFillPreview(orderViewInputs$));
+    (orderComponent.orderRequests as unknown as Stream<OrderRequestBatch>).addListener({ next: submission.submit });
 
+    const cancellationOutcome$ = cancellationOutcomes(sources.orderRequests);
     const actions = intent(sources, cancellationOutcome$);
     const reducer$ = model(actions, sources.socket.connected$);
     const marketTrades = recentTrades(sources, leaveTrade$);
@@ -139,7 +142,10 @@ export const Trade = (
         DOM: view$,
         HTTP: Stream.merge(request$, boardComponent.HTTP, summaryComponent.HTTP, orderComponent.HTTP,
             executionsComponent.HTTP, marketTrades.HTTP),
-        orderRequests: orderComponent.orderRequests,
+        notification: Stream.merge(
+            actions.onMyExecutionCreated$.mapTo<Sound>("execution"),
+            summaryComponent.notification || Stream.never(),
+        ),
         router: Stream.never(),
         sound: Stream.merge(
             actions.onMyExecutionCreated$.mapTo<Sound>("execution"),
