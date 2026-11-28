@@ -26,5 +26,10 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
                 label({ attrs: { for: "sound-enabled-input" } }, "Sound"),
                 input("#sound-enabled-input", { props: { type: "checkbox", checked: state.soundEnabled } }),
             ]),
+            div(".notifications-enabled", [
+                label({ attrs: { for: "notifications-enabled-input" } }, "Desktop notifications"),
+                input("#notifications-enabled-input",
+                    { props: { type: "checkbox", checked: state.notificationsEnabled } }),
+            ]),
         ]),
     );

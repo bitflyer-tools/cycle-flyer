@@ -18,6 +18,19 @@ const tradeModule = { exports: {} };
 new Function('require', 'module', bundle.outputFiles[0].text)(require, tradeModule);
 const { Trade } = tradeModule.exports;
 
+const submissionBundle = buildSync({
+  entryPoints: ['src/components/trade/orderSubmissionState.ts'],
+  bundle: true,
+  format: 'cjs',
+  platform: 'node',
+  external: ['xstream'],
+  define: { window: 'undefined' },
+  write: false,
+});
+const submissionModule = { exports: {} };
+new Function('require', 'module', submissionBundle.outputFiles[0].text)(require, submissionModule);
+const { createOrderSubmissionState } = submissionModule.exports;
+
 test('board deltas reuse the order form and refreshed markers show open quantities', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const board$ = Stream.create();
@@ -36,20 +49,22 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
     })[selector] || dom,
     events: never,
   };
+  const orderSubmission = createOrderSubmissionState({ select: never });
   const sinks = Trade({
     DOM: dom,
     HTTP: { select: (category) => category === 'orders' ? orders$ : never() },
     orderRequests: { select: never },
+    orderSubmission,
     socket: { connected$: Stream.of(true), board$, executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
-  }, Stream.of(false));
+  });
   let state;
   let tradeNode;
   let orderNode;
   let orderRenders = 0;
   const requests = [];
-  const orderRequestListener = { next: (batch) => requests.push(...batch.requests) };
+  const orderRequestListener = { next: (request) => requests.push(request) };
   const stateListener = { next: (reduce) => state$.shamefullySendNext(state = reduce(state)) };
   const domListener = {
     next: (node) => {
@@ -63,9 +78,9 @@ test('board deltas reuse the order form and refreshed markers show open quantiti
   };
   sinks.state.addListener(stateListener);
   sinks.DOM.addListener(domListener);
-  sinks.orderRequests.addListener(orderRequestListener);
+  orderSubmission.orderRequests$.addListener(orderRequestListener);
   t.after(() => {
-    sinks.orderRequests.removeListener(orderRequestListener);
+    orderSubmission.orderRequests$.removeListener(orderRequestListener);
     sinks.DOM.removeListener(domListener);
     sinks.state.removeListener(stateListener);
   });
@@ -128,10 +143,11 @@ test('the summary waits for a public execution before valuing an open position',
     DOM: dom,
     HTTP: { select: (category) => ({ positions: positions$, collateral: collateral$ })[category] || never() },
     orderRequests: { select: never },
+    orderSubmission: createOrderSubmissionState({ select: never }),
     socket: { connected$: Stream.of(true), board$: never(), executionBatch$, childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
-  }, Stream.of(false));
+  });
   let state;
   let summary;
   const stateSubscription = sinks.state.subscribe({
@@ -183,10 +199,11 @@ test('the Position preset fills the latest size after a position-only poll', (t)
     DOM: dom,
     HTTP: { select: (category) => category === 'positions' ? positions$ : never() },
     orderRequests: { select: never },
+    orderSubmission: createOrderSubmissionState({ select: never }),
     socket: { connected$: Stream.of(true), board$: never(), executionBatch$: never(), childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$: never() },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
-  }, Stream.of(false));
+  });
   let state;
   let order;
   const stateSubscription = sinks.state.subscribe({
@@ -226,13 +243,14 @@ test('recent market trades seed and refresh without credentials or extra board r
     DOM: dom,
     HTTP: { select: (category) => category === 'recent-trades' ? history$ : never() },
     orderRequests: { select: never },
+    orderSubmission: createOrderSubmissionState({ select: never }),
     socket: {
       connected$: Stream.of(true), board$: never(), executionBatch$,
       childOrderEvent$: never(), parentOrderEvent$: never(), reconnect$,
     },
     state: new StateSource(state$, 'state'),
     storage: { local: { getItem: never } },
-  }, Stream.of(false));
+  });
   let state;
   let board;
   let panel;

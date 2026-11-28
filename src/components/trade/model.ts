@@ -18,8 +18,12 @@ const defaultState: State = {
     price: 0,
 };
 
-export const model = (actions: Actions): Stream<Reducer<State>> => {
+export const model = (actions: Actions, connected$ = Stream.never<boolean>()): Stream<Reducer<State>> => {
     const defaultReducer$ = Stream.of(startTradeSession);
+
+    const disconnectReducer$ = connected$
+        .filter((connected) => !connected)
+        .mapTo((state: State) => state.currentPrice === null ? state : { ...state, currentPrice: null });
 
     const currentPriceReducer$ = actions.onExecutionBatch$
         .filter((executions) => executions.length > 0)
@@ -72,6 +76,7 @@ export const model = (actions: Actions): Stream<Reducer<State>> => {
 
     return Stream.merge(
         defaultReducer$,
+        disconnectReducer$,
         currentPriceReducer$,
         myExecutionReducer$,
         ordersReducer$,

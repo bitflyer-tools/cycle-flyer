@@ -4,10 +4,10 @@ import {once} from "node:events";
 import {createServer, ServerResponse} from "node:http";
 import {test, TestContext} from "node:test";
 import {VNode} from "@cycle/dom";
-import {RequestOptions} from "@cycle/http";
+import {RequestInput, RequestOptions} from "@cycle/http";
 import {StateSource} from "@cycle/state";
 import Stream from "xstream";
-import {Execution, ExecutionsComponent, State} from "../src/components/trade/executions";
+import {Execution, ExecutionsComponent, State, toCsv} from "../src/components/trade/executions";
 import {saveCredentials} from "../src/credentials";
 import {authorizeRequest, makeHTTPDriver, unsignedRequests$} from "../src/drivers/httpDriver";
 import {executionPageSize, getExecutions} from "../src/http";
@@ -28,8 +28,9 @@ async function setup(t: TestContext, credentials = true, origin?: string) {
     const refresh$ = Stream.create();
     const older$ = Stream.create();
     const scroll$ = Stream.create();
+    const exportCsv$ = Stream.create();
     const responses$ = Stream.create();
-    const transport$ = Stream.create<RequestOptions>();
+    const transport$ = Stream.create<RequestInput | null>();
     const state$ = Stream.create<State>().remember();
     const sinks = ExecutionsComponent({
         DOM: { select: (selector: string) => ({
@@ -37,6 +38,7 @@ async function setup(t: TestContext, credentials = true, origin?: string) {
                 ".refresh-executions": refresh$,
                 ".load-older-executions": older$,
                 ".executions-scroll": scroll$,
+                ".export-executions-csv": exportCsv$,
             })[selector],
         }) } as any,
         HTTP: origin ? makeHTTPDriver(250)(transport$) : { select: (category: string) => {
@@ -72,6 +74,7 @@ async function setup(t: TestContext, credentials = true, origin?: string) {
         failSigning: () => unsignedRequests$.shamefullySendNext(requests.at(-1)!),
         refresh: () => refresh$.shamefullySendNext(null),
         older: () => older$.shamefullySendNext(null),
+        exportCsv: () => exportCsv$.shamefullySendNext(null),
         scroll: (scrollTop: number) => scroll$.shamefullySendNext({ target: { scrollTop } }),
         page: (rows: Execution[]) => respond(Stream.of({ text: JSON.stringify(rows) })),
         fail: (error: object) => respond(Stream.throw(error)),
@@ -86,6 +89,12 @@ async function setup(t: TestContext, credentials = true, origin?: string) {
             const scroll = dom.children?.find((child) => typeof child === "object" && child?.sel === "div.executions-scroll") as VNode;
             const table = scroll.children![0] as VNode;
             return (table.children![1] as VNode).children as VNode[];
+        },
+        get tableHeaders() {
+            const scroll = dom.children?.find((child) => typeof child === "object" && child?.sel === "div.executions-scroll") as VNode;
+            const table = scroll.children![0] as VNode;
+            const headerRow = (table.children![0] as VNode).children![0] as VNode;
+            return (headerRow.children as VNode[]).map((header) => header.text);
         },
     };
 }
@@ -170,6 +179,7 @@ test("loads on demand, appends older fills and replaces the list on refresh", as
     panel.page(Array.from({ length: executionPageSize }, (_, index) => execution(10 + index)));
     assert.equal(panel.state.rows[0].id, executionPageSize + 9);
     assert.equal(panel.state.before, 10);
+    assert.deepEqual(panel.tableHeaders, ["Exchange time", "Side", "Price (JPY)", "Size (BTC-CFD)", "Order acceptance ID"]);
     assert.match(panel.dom, /2025-03-22T09:57:40.397/);
     assert.match(panel.dom, /BUY/);
     assert.match(panel.dom, /12,000,000|12000000/);
@@ -178,7 +188,7 @@ test("loads on demand, appends older fills and replaces the list on refresh", as
 
     const loadedRows = panel.state.rows.slice();
     panel.older();
-    assert.equal(new URL(panel.requests[1].url).searchParams.get("before"), "10");
+    assert.equal(new URL(panel.requests[1].url!).searchParams.get("before"), "10");
     panel.page([execution(10), execution(8), execution(100), execution(9), execution(8)]);
     assert.deepEqual(panel.state.rows, [...loadedRows, execution(9), execution(8)]);
     panel.older();
@@ -208,7 +218,7 @@ test("windows 5,000 retained fills across the scroll range and only formats moun
         assert.ok(rows.length <= 21);
         rows.filter(({ sel }) => sel === "tr").forEach(({ key }) => seen.add(key));
         const spacerHeight = (spacer: VNode) => Number.parseInt(
-            (spacer.children![0] as VNode).data!.style!.height, 10);
+            (spacer.children![0] as VNode).data!.style!.height!, 10);
         assert.equal(spacerHeight(rows[0]) + spacerHeight(rows.at(-1)!) + (rows.length - 2) * 28, total * 28);
     }
     assert.equal(seen.size, total);
@@ -257,4 +267,43 @@ test("explains missing credentials without sending a request", async (t) => {
     panel.refresh();
     assert.equal(panel.requests.length, 0);
     assert.match(panel.dom, /Set an API key and secret/);
+});
+
+test("serializes rows to CSV with a header row and escaped fields", () => {
+    const rows: Execution[] = [
+        execution(1),
+        { ...execution(2), child_order_acceptance_id: "JRF,\"2025\"" },
+    ];
+    assert.equal(toCsv(rows), [
+        "Exchange time,Side,Price (JPY),Size (BTC-CFD),Order acceptance ID",
+        "2025-03-22T09:57:40.397,BUY,12000000,1e-8,JRF20250322-095740-000001",
+        "2025-03-22T09:57:40.397,SELL,12000000,1e-8,\"JRF,\"\"2025\"\"\"",
+        "",
+    ].join("\r\n"));
+});
+
+test("disables CSV export until executions have loaded, then downloads a CSV on click", async (t) => {
+    const panel = await setup(t);
+    assert.equal(panel.disabled("button.export-executions-csv"), true);
+
+    panel.exportCsv();
+    panel.refresh();
+    panel.page([execution(2), execution(1)]);
+    assert.equal(panel.disabled("button.export-executions-csv"), false);
+
+    const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+    const link = { href: "", download: "", clicked: 0, click() { this.clicked++; } };
+    Object.defineProperty(globalThis, "document", {
+        configurable: true,
+        value: { createElement: (tag: string) => { assert.equal(tag, "a"); return link; } },
+    });
+    t.after(() => {
+        if (originalDocument) Object.defineProperty(globalThis, "document", originalDocument);
+        else delete (globalThis as any).document;
+    });
+
+    panel.exportCsv();
+    assert.equal(link.clicked, 1);
+    assert.equal(link.download, "executions.csv");
+    assert.match(link.href, /^blob:/);
 });
