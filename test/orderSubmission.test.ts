@@ -412,6 +412,7 @@ for (const [category, name, field, otherField] of [
         ["HTML", "<html>Bad gateway</html>"],
         ["malformed JSON", "{"],
         ["a missing ID", "{}"],
+        ["a message without a negative status", JSON.stringify({ status: 0, error_message: "Not a rejection" })],
         ["the other endpoint's ID", JSON.stringify({ [otherField]: acceptanceId })],
         ["a blank ID", JSON.stringify({ [field]: "   " })],
         ["a numeric ID", JSON.stringify({ [field]: 42 })],
@@ -422,6 +423,7 @@ for (const [category, name, field, otherField] of [
             order.respondTo(order.requests[0]).respondOK(body);
 
             deepEqual(order.histories.map(({ name, status }) => [name, status]), [[name, "unconfirmed"]]);
+            deepEqual(order.historyRows.map((row) => findNode(row, "span.rejection-reason")), [undefined]);
             deepEqual(order.sounds, ["failure"]);
             equal(order.state.isOrdering, false);
         });
@@ -432,7 +434,11 @@ for (const [category, name, field, otherField] of [
         order.buy(category);
         order.respondTo(order.requests[0]).succeed({ status: -1, error_message: "Order rejected" });
 
-        deepEqual(order.histories.map(({ name, status }) => [name, status]), [[name, "failed"]]);
+        deepEqual(order.histories.map(({ name, status, rejectionReason }) => [name, status, rejectionReason]),
+            [[name, "failed", "Order rejected"]]);
+        const [row] = order.historyRows;
+        equal(findNode(row, "span.failed")?.text, "✗");
+        equal(findNode(row, "span.rejection-reason")?.text, "Order rejected");
         deepEqual(order.sounds, ["failure"]);
     });
 }
@@ -615,6 +621,7 @@ test("records a rejected limit order and permits a retry", (t) => {
         description: "BUY / 0.03 / 900",
         name: "Limit",
         status: "failed",
+        rejectionReason: "Order rejected",
     }]);
 
     order.buy("limit");
@@ -710,6 +717,12 @@ for (const [outcome, status] of [
         deepEqual(order.histories.map(({ description, status }) => [description, status]), [
             ["Parent order JCO-stop", status], ["All child orders", status],
         ]);
+        const reason = outcome === "reject" ? "Order rejected" : undefined;
+        deepEqual(order.histories.map(({ rejectionReason }) => rejectionReason), [reason, reason]);
+        deepEqual(order.historyRows.map((row) => findNode(row, "span.rejection-reason")?.text), [reason, reason]);
+        if (outcome === "reject") {
+            deepEqual(order.historyRows.map((row) => findNode(row, "span.failed")?.text), ["✗", "✗"]);
+        }
         const sound = succeeded ? "success" : "failure";
         deepEqual(order.sounds, [sound, sound]);
     });
@@ -1750,6 +1763,7 @@ function setup(t: TestContext, width = "0.01", options: {
         enterTriggerPrice: (value: string) => triggerInput$.shamefullySendNext({ target: { value } }),
         get executions() { return state!.trade!.executionsComponentState!; },
         get histories() { return state!.trade!.histories; },
+        get historyRows() { return (findNode(vNode, "ul.histories")?.children ?? []) as VNode[]; },
         waitForHistoryCount: (count: number) => new Promise<void>((resolve) => {
             const subscription = state$.filter(({ trade }) => trade?.histories.length === count)
                 .take(1).subscribe({ next: () => resolve() });

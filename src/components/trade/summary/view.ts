@@ -71,6 +71,7 @@ const createHistoryListView = () => {
                 span(".name", history.name),
                 span(".description", history.description),
                 span(".created-at", history.createdAt.toLocaleTimeString()),
+                history.rejectionReason ? span(".rejection-reason", history.rejectionReason) : null,
             ]),
         ));
         return list;
