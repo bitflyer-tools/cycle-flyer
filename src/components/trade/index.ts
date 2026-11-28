@@ -55,6 +55,7 @@ export interface State {
     histories: readonly OrderHistory[];
     orders: Order[];
     orderSigningError?: string;
+    parentOrderClearError?: string;
     parentStopOrders: ParentStopOrders;
     position: Position;
     positionCredentialVersion?: number;
@@ -169,6 +170,7 @@ const orderState = (state: State): OrderComponentState | undefined =>
         histories: state.histories,
         orders: state.orders,
         orderSigningError: state.orderSigningError,
+        parentOrderClearError: state.parentOrderClearError,
         positionCredentialVersion: state.positionCredentialVersion,
         parentStopOrders: state.parentStopOrders,
         position: state.position,

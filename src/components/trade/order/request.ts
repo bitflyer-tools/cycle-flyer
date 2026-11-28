@@ -5,11 +5,13 @@ import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import sampleCombine from "xstream/extra/sampleCombine";
 import {credentialsChanging$, currentCredentialVersion} from "../../../credentials";
 import {AccountRequest, unsignedRequests$} from "../../../drivers/httpDriver";
-import {cancelOrders, cancelParentOrder, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
+import {cancelOrders, getParentOrders, ifdocoOrder, limitOrder, marketOrder, stopOrder} from "../../../http";
 import {State} from "./index";
 import {Actions} from "./intent";
 import {isOrderRejection} from "./rejection";
 import {canClearPosition, isValidIFDOCOOrder, isValidLimitOrder, isValidOrderSize, isValidStopOrder} from "./validation";
+
+export const clearParentOrdersCategory = "clear-parent-orders";
 
 export interface OrderRequestBatch {
     requests: RequestInput[];
@@ -24,7 +26,7 @@ interface Submission extends AccountRequest {
 
 export const unsignedSubmissions$ = unsignedRequests$
     .map((request) => request as Submission)
-    .filter(({ submissionId, credentialVersion }) => !!submissionId
+    .filter(({ submissionId, category, credentialVersion }) => !!submissionId && category !== clearParentOrdersCategory
         && (credentialVersion === undefined || credentialVersion === currentCredentialVersion()));
 
 export const closePositionOutcomes = (http: HTTPSource): Stream<{ id: symbol; rejected: boolean }> =>
@@ -40,7 +42,15 @@ export const closePositionOutcomes = (http: HTTPSource): Stream<{ id: symbol; re
             .map(({ submissionId: id }) => ({ id, rejected: true })),
     );
 
-export const submissions = (requests$: Stream<OrderRequestBatch>, http: HTTPSource): Stream<Submission[] | null> => {
+export interface SubmissionContinuation {
+    id: symbol;
+    requests: AccountRequest[];
+}
+
+export const submissions = (
+    requests$: Stream<OrderRequestBatch>, http: HTTPSource,
+    continuations$ = Stream.never<SubmissionContinuation>(),
+): Stream<Submission[] | null> => {
     const requested$ = requests$.map(({ requests, _namespace, closePositionSize }) => requests.map((request) => ({
         credentialVersion: currentCredentialVersion() ?? undefined,
         ...request as AccountRequest,
@@ -50,6 +60,7 @@ export const submissions = (requests$: Stream<OrderRequestBatch>, http: HTTPSour
     })));
 
     const completed$ = http.select()
+        .filter((response$) => response$.request.category !== clearParentOrdersCategory)
         .map((response$) => ({ response$, submissionId: (response$.request as Submission).submissionId }))
         .filter(({ submissionId }) => !!submissionId)
         .map(({ response$, submissionId }) =>
@@ -59,7 +70,7 @@ export const submissions = (requests$: Stream<OrderRequestBatch>, http: HTTPSour
     const unsigned$ = unsignedSubmissions$.map(({ submissionId }) => submissionId);
 
     const idle = { batch: null as Submission[] | null, remaining: [] as symbol[] };
-    return Stream.merge(completed$, unsigned$, requested$, credentialsChanging$.mapTo(null))
+    return Stream.merge(completed$, unsigned$, requested$, continuations$, credentialsChanging$.mapTo(null))
         .fold((pending, event) => {
             if (event === null) { return idle; }
             if (typeof event === "symbol") {
@@ -67,7 +78,15 @@ export const submissions = (requests$: Stream<OrderRequestBatch>, http: HTTPSour
                 const remaining = pending.remaining.filter((id) => id !== event);
                 return remaining.length ? { ...pending, remaining } : idle;
             }
-            return pending.batch ? pending : { batch: event, remaining: event.map(({ submissionId }) => submissionId) };
+            if (Array.isArray(event)) {
+                return pending.batch ? pending : { batch: event, remaining: event.map(({ submissionId }) => submissionId) };
+            }
+            if (!pending.remaining.includes(event.id)) { return pending; }
+            const _namespace = pending.batch?.[0]._namespace;
+            const batch = event.requests.map((request) => ({ ...request, _namespace, submissionId: Symbol() }));
+            const remaining = pending.remaining.filter((id) => id !== event.id)
+                .concat(batch.map(({ submissionId }) => submissionId));
+            return remaining.length ? { batch: batch.length ? batch : pending.batch, remaining } : idle;
         }, idle)
         .map(({ batch }) => batch)
         .compose(dropRepeats())
@@ -106,9 +125,7 @@ export const orderRequests = (actions: Actions, state$: Stream<State>): Stream<O
         actions.onClickClearOrderButton$.compose(sampleCombine(state$))
             .filter(([_, state]) => currentCredentialVersion() !== null
                 && state.orders.length + Object.keys(state.parentStopOrders).length > 0)
-            .map(([_, state]) => ({
-                requests: [cancelOrders(), ...Object.keys(state.parentStopOrders).map(cancelParentOrder)],
-            })),
+            .map(() => ({ requests: [cancelOrders(), { ...getParentOrders(), category: clearParentOrdersCategory }] })),
     );
 };
 

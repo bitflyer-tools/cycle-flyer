@@ -3,7 +3,6 @@ import {deepStrictEqual, strictEqual} from "node:assert/strict";
 import {before, test} from "node:test";
 import Stream from "xstream";
 import {State as TradeState} from "../src/components/trade";
-import {cancellationReducer} from "../src/components/trade/cancellation";
 import {intent as tradeIntent} from "../src/components/trade/intent";
 import {model as tradeModel} from "../src/components/trade/model";
 import {request as tradeRequest} from "../src/components/trade/request";
@@ -11,8 +10,11 @@ import {State} from "../src/components/trade/order";
 import {cancellationOutcomes} from "../src/components/trade/order/history";
 import {intent} from "../src/components/trade/order/intent";
 import {model} from "../src/components/trade/order/model";
-import {orderRequests} from "../src/components/trade/order/request";
+import {view} from "../src/components/trade/order/view";
+import {clearParentOrdersCategory, orderRequests} from "../src/components/trade/order/request";
+import {createOrderSubmissionState} from "../src/components/trade/orderSubmissionState";
 import {currentCredentialVersion, initializeCredentials, saveCredentials} from "../src/credentials";
+import {AccountRequest, unsignedRequests$} from "../src/drivers/httpDriver";
 import {flattenStopOrders, retainActive} from "../src/models/parentStopOrders";
 import {StopOrder} from "../src/models/stopOrder";
 
@@ -31,21 +33,88 @@ before(async () => {
 });
 
 test("Clear Orders cancels a standalone stop by parent order ID", () => {
-    const {requests} = clearOrders(["JCO-stop"]);
+    const {click, clearLists, requests, orderLists, lists} = clearOrders([], false, false);
+    orderLists.shamefullySendNext(Stream.of<unknown>(childOrderList(100)));
+    const pendingPoll$ = Object.assign(Stream.create<unknown>(), {
+        request: { credentialVersion: currentCredentialVersion()! },
+    });
+    lists.shamefullySendNext(pendingPoll$);
+
+    click();
+    deepStrictEqual(requests.map(({category}) => category), ["cancel-orders", clearParentOrdersCategory]);
+    clearLists.shamefullySendNext(listResponse([{parent_order_id: "JCO-stop"}], requests[1]));
 
     deepStrictEqual(requests.map(({url}) => new URL(url).pathname), [
         "/v1/me/cancelallchildorders",
+        "/v1/me/getparentorders",
         "/v1/me/cancelparentorder",
     ]);
-    strictEqual(requests[1].method, "POST");
-    deepStrictEqual(JSON.parse(requests[1].send), {
+    strictEqual(requests[2].method, "POST");
+    deepStrictEqual(JSON.parse(requests[2].send), {
         parent_order_id: "JCO-stop",
         product_code: "FX_BTC_JPY",
     });
+    pendingPoll$.shamefullySendComplete();
 });
 
 test("Clear Orders cancels every active parent order across two pages", () => {
-    const {click, lists, pages, pageRequests, parentResponses, requests, state} = clearOrders(["JCO-old"], false, false);
+    const {click, clearLists, clearPages, parentResponses, requests, state} = clearOrders(["JCO-old"], false, false);
+    const orders = Array.from({ length: 101 }, (_, index) => ({
+        id: 101 - index,
+        parent_order_id: `JCO-${101 - index}`,
+    }));
+
+    click();
+    clearLists.shamefullySendNext(listResponse(orders.slice(0, 100), requests[1]));
+    deepStrictEqual(requests.map(({category}) => category), [
+        "cancel-orders", clearParentOrdersCategory, `${clearParentOrdersCategory}-page`,
+    ]);
+    deepStrictEqual(Object.fromEntries(new URL(requests[2].url).searchParams), {
+        product_code: "FX_BTC_JPY", parent_order_state: "ACTIVE", count: "100", before: "2",
+    });
+    clearPages.shamefullySendNext(listResponse(orders.slice(100), requests[2]));
+
+    const parentRequests = requests.filter(({category}) => category === "cancel-parent-order");
+    deepStrictEqual(parentRequests.map(({send}) => JSON.parse(send).parent_order_id),
+        orders.map(({parent_order_id}) => parent_order_id));
+    parentRequests.forEach((request) => parentResponses.shamefullySendNext(cancellationResponse(request)));
+    deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-old"]);
+});
+
+test("A failed parent page reports an incomplete Clear Orders after child cancellation succeeds", () => {
+    const {childResponses, click, clearLists, clearPages, requests, state, state$} = clearOrders(["JCO-old"], false, false);
+    const orders = Array.from({ length: 100 }, (_, index) => ({
+        id: 100 - index,
+        parent_order_id: `JCO-${100 - index}`,
+    }));
+
+    click();
+    childResponses.shamefullySendNext(cancellationResponse(requests[0]));
+    strictEqual(state().isOrdering, true);
+    clearLists.shamefullySendNext(listResponse(orders, requests[1]));
+    clearPages.shamefullySendNext(Object.assign(Stream.throw(new Error("Page failed")), { request: requests[2] }));
+
+    strictEqual(state().isOrdering, false);
+    const message = "Could not load active parent orders. Parent orders could not be cleared.";
+    strictEqual(state().parentOrderClearError, message);
+    const alert = view(state$).take(1).subscribe({ next: (node) => {
+        const error = node.children?.find((child) => typeof child !== "string" && child.sel?.endsWith(".parent-order-clear-error"));
+        deepStrictEqual(error && typeof error !== "string" && [error.data?.attrs?.role, error.text], ["alert", message]);
+    } });
+    alert.unsubscribe();
+    strictEqual(requests.length, 3);
+    deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-old"]);
+
+    click();
+    strictEqual(state().parentOrderClearError, undefined);
+    childResponses.shamefullySendNext(cancellationResponse(requests[3]));
+    clearLists.shamefullySendNext(listResponse([], requests[4]));
+    strictEqual(state().isOrdering, false);
+    strictEqual(requests.length, 5);
+});
+
+test("An account refresh publishes active parent orders only after every page loads", () => {
+    const {lists, pages, pageRequests, state} = clearOrders(["JCO-old"]);
     const orders = Array.from({ length: 101 }, (_, index) => ({
         id: 101 - index,
         parent_order_id: `JCO-${101 - index}`,
@@ -71,16 +140,24 @@ test("Clear Orders cancels every active parent order across two pages", () => {
     respond(pageRequests[1]);
     strictEqual(pageRequests.length, 2);
 
+    deepStrictEqual(Object.keys(state().parentStopOrders), orders.map(({parent_order_id}) => parent_order_id));
+});
+
+test("An unsigned parent list reports an incomplete Clear Orders", () => {
+    const {click, requests, state} = clearOrders(["JCO-old"], false, false);
+
     click();
-    const parentRequests = requests.filter(({url}) => new URL(url).pathname === "/v1/me/cancelparentorder");
-    deepStrictEqual(parentRequests.map(({send}) => JSON.parse(send).parent_order_id),
-        orders.map(({parent_order_id}) => parent_order_id));
-    parentRequests.forEach((request) => parentResponses.shamefullySendNext(cancellationResponse(request)));
-    deepStrictEqual(Object.keys(state().parentStopOrders), []);
+    unsignedRequests$.shamefullySendNext(requests[1]);
+    unsignedRequests$.shamefullySendNext(requests[0]);
+
+    strictEqual(state().isOrdering, false);
+    strictEqual(state().parentOrderClearError, "Could not load active parent orders. Parent orders could not be cleared.");
+    strictEqual(requests.length, 2);
+    deepStrictEqual(Object.keys(state().parentStopOrders), ["JCO-old"]);
 });
 
 test("A standalone stop stays visible until its parent cancellation succeeds", () => {
-    const {childResponses, parentResponses, requests, state} = clearOrders(["JCO-stop"]);
+    const {childResponses, parentResponses, cancellations: requests, state} = clearOrders(["JCO-stop"]);
 
     childResponses.shamefullySendNext(cancellationResponse({}));
     strictEqual(flattenStopOrders(state().parentStopOrders).length, 1);
@@ -91,7 +168,7 @@ test("A standalone stop stays visible until its parent cancellation succeeds", (
 });
 
 test("Concurrent parent cancellations leave failed orders visible", () => {
-    const {parentResponses, requests, state} = clearOrders(["JCO-success", "JCO-failure", "JCO-pending-detail"], true);
+    const {parentResponses, cancellations: requests, state} = clearOrders(["JCO-success", "JCO-failure", "JCO-pending-detail"], true);
     const success$ = Object.assign(Stream.create<unknown>(), { request: { ...requests[1], credentialVersion: currentCredentialVersion()! } });
     const failure$ = Object.assign(Stream.create<unknown>(), { request: { ...requests[2], credentialVersion: currentCredentialVersion()! } });
 
@@ -107,7 +184,7 @@ test("Concurrent parent cancellations leave failed orders visible", () => {
 });
 
 test("A late parent detail response cannot restore a canceled stop", () => {
-    const {sendParentDetail, parentResponses, requests, state} = clearOrders(["JCO-canceled"]);
+    const {sendParentDetail, parentResponses, cancellations: requests, state} = clearOrders(["JCO-canceled"]);
     parentResponses.shamefullySendNext(cancellationResponse(requests[1]));
     const canceledState = state();
 
@@ -117,7 +194,7 @@ test("A late parent detail response cannot restore a canceled stop", () => {
 });
 
 test("A late active list and its details cannot restore a canceled stop", () => {
-    const {sendParentDetail, lists, parentResponses, requests, state} = clearOrders(["JCO-canceled", "JCO-active"]);
+    const {sendParentDetail, lists, parentResponses, cancellations: requests, state} = clearOrders(["JCO-canceled", "JCO-active"]);
     const pendingList$ = Object.assign(Stream.create<unknown>(), { request: { credentialVersion: currentCredentialVersion()! } });
     lists.shamefullySendNext(pendingList$);
     parentResponses.shamefullySendNext(cancellationResponse(requests[1]));
@@ -224,8 +301,7 @@ function cancellationResponse(input: { category?: string; send?: string }) {
     return Object.assign(Stream.of<unknown>({ request }), { request });
 }
 
-function listResponse(orders: object[]) {
-    const request = { credentialVersion: currentCredentialVersion()! };
+function listResponse(orders: object[], request: AccountRequest | { credentialVersion: number } = { credentialVersion: currentCredentialVersion()! }) {
     return Object.assign(Stream.of<unknown>({ request, text: JSON.stringify(orders) }), { request });
 }
 
@@ -244,6 +320,8 @@ function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = tr
     const orderLists = Stream.create<Stream<unknown>>();
     const lists = Stream.create<Stream<unknown>>();
     const pages = Stream.create<Stream<unknown>>();
+    const clearLists = Stream.create<Stream<unknown>>();
+    const clearPages = Stream.create<Stream<unknown>>();
     const sources = {
         DOM: {
             select(selector: string) {
@@ -252,9 +330,12 @@ function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = tr
             events: () => Stream.never(),
         },
         HTTP: {
-            select(category: string) {
+            select(category?: string) {
+                if (category === undefined) { return Stream.merge(childResponses, parentResponses, clearLists, clearPages); }
                 return {
                     "cancel-orders": childResponses,
+                    [clearParentOrdersCategory]: clearLists,
+                    [`${clearParentOrdersCategory}-page`]: clearPages,
                     "cancel-parent-order": parentResponses,
                     "parent-order": details,
                     "parent-orders": lists,
@@ -275,7 +356,8 @@ function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = tr
     const state$ = Stream.createWithMemory<State>();
     const actions = intent(sources, state$);
     let currentState: State & TradeState;
-    model(actions, Stream.of(false)).addListener({
+    const submission = createOrderSubmissionState(sources.HTTP);
+    model(actions, submission.isOrdering$).addListener({
         next: (reducer) => {
             currentState = reducer(currentState)! as State & TradeState;
             state$.shamefullySendNext(currentState);
@@ -283,7 +365,7 @@ function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = tr
     });
 
     const outcome$ = cancellationOutcomes(sources.HTTP);
-    outcome$.map(cancellationReducer).addListener({
+    submission.reducer$.addListener({
         next: (reducer) => {
             currentState = reducer(currentState)! as State & TradeState;
             state$.shamefullySendNext(currentState);
@@ -328,10 +410,21 @@ function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = tr
         details.shamefullySendNext(Object.assign(response$, { request: { ...request, credentialVersion: currentCredentialVersion()! } }));
     };
 
-    const requests: Array<{ url: string; method: string; send: string; category: string }> = [];
-    orderRequests(actions, state$).addListener({ next: (batch) => requests.push(...batch.requests as typeof requests) });
+    const requests: Array<AccountRequest & { method: string; send: string; category: string }> = [];
+    const cancellations: typeof requests = [];
+    submission.orderRequests$.addListener({
+        next: (input) => {
+            const request = input as typeof requests[number];
+            requests.push(request);
+            if (request.category.startsWith("cancel-")) { cancellations.push(request); }
+        },
+    });
+    orderRequests(actions, state$).addListener({ next: submission.submit });
     const click = () => clicks$.shamefullySendNext(null);
-    if (clickOnSetup) { click(); }
+    if (clickOnSetup && ids.length) {
+        click();
+        clearLists.shamefullySendNext(listResponse(ids.map((id) => ({ parent_order_id: id })), requests[1]));
+    }
 
     const startPolling = () => {
         const polls: RequestOptions[] = [];
@@ -343,7 +436,8 @@ function clearOrders(ids: string[], lastDetailPending = false, clickOnSetup = tr
         return { polls, subscription };
     };
     return {
-        childResponses, click, lists, orderLists, pageRequests, pages, parentResponses, requests, sendParentDetail,
+        childResponses, click, clearLists, clearPages, lists, orderLists, parentResponses, pageRequests, pages, state$,
+        cancellations, requests, sendParentDetail,
         startPolling, state: () => currentState,
     };
 }
