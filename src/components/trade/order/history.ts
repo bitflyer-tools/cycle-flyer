@@ -8,7 +8,7 @@ import {AcceptanceIdField, hasOrderAcceptanceId, orderRejectionReason} from "./r
 
 type HTTPResponse$ = MemoryStream<Response> & ResponseStream;
 
-type OrderStatus = "success" | "failed" | "unconfirmed";
+export type OrderStatus = "success" | "failed" | "unconfirmed";
 type OutcomeDetails = { status: OrderStatus } & Pick<OrderHistory, "rejectionReason" | "timedOut">;
 
 export interface OrderOutcome {
@@ -90,11 +90,9 @@ const createOutcome = (
         .replaceError((error) => {
             if (isWriteDeadlineError(error)) return Stream.of<OutcomeDetails>({ status: "unconfirmed", timedOut: true });
             const rejectionReason = orderRejectionReason(error?.response);
-            const statusCode = error?.statusCode;
-            const hasHTTPError = !!error?.response || (statusCode >= 400 && statusCode < 600);
-            const isClosePosition = (stream$.request as { closePositionSize?: number }).closePositionSize !== undefined;
-            if (rejectionReason) return Stream.of<OutcomeDetails>({ status: "failed", rejectionReason });
-            return Stream.of<OutcomeDetails>({ status: !isClosePosition && hasHTTPError ? "failed" : "unconfirmed" });
+            return Stream.of<OutcomeDetails>(rejectionReason
+                ? { status: "failed", rejectionReason }
+                : { status: "unconfirmed" });
         })
         .filter(() => isCurrentAccountRequest(stream$.request as AccountRequest))
         .map(({ status, ...details }) => ({

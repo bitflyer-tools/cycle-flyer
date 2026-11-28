@@ -1,25 +1,43 @@
 import Stream from "xstream";
-import {Sound} from "./soundDriver";
+import type {OrderStatus} from "../components/trade/order/history";
+
+export type NotificationEvent = "execution" | "price-alert" | {
+    operation: "submission" | "cancellation";
+    status: OrderStatus;
+};
 
 export const notificationsEnabledStorageKey = "notifications-enabled";
 
-export const makeNotificationDriver = () => (notification$: Stream<Sound>) => {
+export const makeNotificationDriver = () => (notification$: Stream<NotificationEvent>) => {
     notification$
         .filter((_) => areNotificationsEnabled())
-        .addListener({ next: (sound) => notify(sound) });
+        .addListener({ next: notify });
 };
 
 export const areNotificationsEnabled = (): boolean => localStorage[notificationsEnabledStorageKey] === "true";
 
-const messages: { [sound in Sound]: { title: string; body: string } } = {
+const eventMessages = {
     execution: { title: "Execution", body: "Your order was executed." },
-    failure: { title: "Order failed", body: "Your order could not be completed." },
-    success: { title: "Order filled", body: "Your order was filled." },
     "price-alert": { title: "Price alert", body: "Your price alert condition was met." },
 };
 
-const notify = (sound: Sound): void => {
+const orderMessages = {
+    submission: {
+        success: { title: "Order accepted", body: "bitFlyer accepted your order." },
+        failed: { title: "Order rejected", body: "bitFlyer rejected your order submission." },
+        unconfirmed: { title: "Order submission unconfirmed", body: "Check your orders on bitFlyer." },
+    },
+    cancellation: {
+        success: { title: "Cancellation confirmed", body: "bitFlyer confirmed your cancellation request." },
+        failed: { title: "Cancellation rejected", body: "bitFlyer rejected your cancellation request." },
+        unconfirmed: { title: "Cancellation unconfirmed", body: "Check your orders on bitFlyer." },
+    },
+};
+
+const notify = (event: NotificationEvent): void => {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") { return; }
-    const { title, body } = messages[sound];
+    const { title, body } = typeof event === "string"
+        ? eventMessages[event]
+        : orderMessages[event.operation][event.status];
     new Notification(title, { body });
 };

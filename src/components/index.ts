@@ -6,6 +6,7 @@ import {StorageRequest, StorageSource} from "@cycle/storage";
 import {RouterSource} from "cyclic-router";
 import Stream from "xstream";
 import {SocketIOSource} from "../drivers/socketIODriver";
+import type {NotificationEvent} from "../drivers/notificationDriver";
 import {Sound} from "../drivers/soundDriver";
 import {Setting} from "./setting";
 import {Trade, type State as TradeState} from "./trade";
@@ -26,7 +27,7 @@ export interface Sinks {
     state: Stream<Reducer<any>>;
     router: Stream<any>;
     storage: Stream<StorageRequest>;
-    notification?: Stream<Sound>;
+    notification?: Stream<NotificationEvent>;
     sound?: Stream<Sound>;
 }
 
@@ -87,7 +88,7 @@ export const Root = (sources: Sources): Sinks => {
         ),
         notification: Stream.merge(
             routes$.map((sinks: Sinks) => sinks.notification || Stream.never()).flatten(),
-            orderSubmission.sound$,
+            orderSubmission.notification$,
         ),
         router: routes$.map((sinks: Sinks) => sinks.router).flatten(),
         sound: Stream.merge(
