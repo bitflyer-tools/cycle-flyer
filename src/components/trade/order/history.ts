@@ -1,7 +1,7 @@
 import {HTTPSource, Response, ResponseStream} from "@cycle/http";
 import {MemoryStream, Stream} from "xstream";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
-import {isCurrentAccountRequest, isWriteDeadlineError} from "../../../drivers/httpDriver";
+import {AccountRequest, isCurrentAccountRequest, isWriteDeadlineError} from "../../../drivers/httpDriver";
 import {TwapSliceRequest} from "../../../http";
 import {createOrderHistory, OrderHistory} from "../../../models/orderHistory";
 import {AcceptanceIdField, hasOrderAcceptanceId, isOrderRejection} from "./rejection";
@@ -96,9 +96,9 @@ const createOutcome = (
             const isClosePosition = (stream$.request as { closePositionSize?: number }).closePositionSize !== undefined;
             const rejected = isClosePosition ? isOrderRejection(error?.response) : hasDefinitiveHTTPError;
             const status: OrderStatus = !timedOut && rejected ? "failed" : "unconfirmed";
-            return Stream.of({ status, timedOut });
+            return Stream.of<{ status: OrderStatus; timedOut: boolean }>({ status, timedOut });
         })
-        .filter(() => isCurrentAccountRequest(stream$.request))
+        .filter(() => isCurrentAccountRequest(stream$.request as AccountRequest))
         .map(({ status, timedOut }) => {
             const histories = createHistories(stream$.request.send as string, status);
             return { status, histories: timedOut ? histories.map((history) => ({ ...history, timedOut })) : histories };

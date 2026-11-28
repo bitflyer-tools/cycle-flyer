@@ -10,10 +10,10 @@ import {State} from "./index";
 
 interface UpdatableBoard {
     merge(asks: BoardLevels["asks"], bids: BoardLevels["bids"]): void;
-    removeExecutions(executions: Execution[]): void;
+    removeExecutions(executions: Execution[]): boolean | void;
 }
 
-type BoardUpdate = (board: UpdatableBoard) => void;
+type BoardUpdate = (board: UpdatableBoard) => boolean | void;
 const snapshotDeadlineMs = 30_000;
 
 interface PendingSnapshot {
@@ -35,13 +35,14 @@ export const synchronizeBoard = <T extends Stream<Response>>(
             .map<BoardUpdate>((batch) => (board) => board.removeExecutions(batch)),
     );
     const liveReducer$ = boardUpdates$.map<Reducer<State>>((update) => (state) => {
-        if (!state) { return state; }
-        update(state.board);
+        if (!state || update(state.board) === false) { return state; }
         return { ...state, boardRevision: (state.boardRevision ?? 0) + 1 };
     });
     const connection$ = connected$.compose(dropRepeats()).remember();
     const invalidation$ = connection$.mapTo(invalidateSnapshot);
-    const snapshotReducer$ = snapshotReducers(responses$$, boardUpdates$, connection$);
+    const snapshotReducer$ = snapshotReducers(
+        responses$$.map<Stream<Response>>((response$) => response$), boardUpdates$, connection$,
+    );
 
     return Stream.merge(liveReducer$, invalidation$, snapshotReducer$);
 };
