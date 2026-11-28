@@ -16,8 +16,9 @@ const { outputFiles } = buildSync({
     }).concat(
       'export { request as board_request } from "./src/components/trade/board/request";',
       'export { pollResponse } from "./src/components/trade/pollResponse";',
-      'export { makeHTTPDriver } from "./src/drivers/httpDriver";',
-      'export { saveCredentials, currentCredentialVersion } from "./src/credentials";',
+      'export { authorizeRequest, makeHTTPDriver, makeSignedHTTPDriver, unsignedRequests$ } from "./src/drivers/httpDriver";',
+      'export { saveCredentials, currentCredentialVersion, initializeCredentials } from "./src/credentials";',
+      'export { cancelOrders, getParentOrder, marketOrder, parentOrdersPageSize } from "./src/http";',
     ).join('\n'),
     resolveDir: path.join(__dirname, '..'),
   },
@@ -26,14 +27,118 @@ const { outputFiles } = buildSync({
   platform: 'node',
   write: false,
 });
-const testModule = { exports: {} };
 const localStorage = { getItem: () => null, removeItem() {} };
-runInNewContext(outputFiles[0].text, { module: testModule, require, localStorage });
-const components = testModule.exports;
+const loadComponents = (overrides = {}) => {
+  const module = { exports: {} };
+  runInNewContext(outputFiles[0].text, { module, require, localStorage, ...overrides });
+  return module.exports;
+};
+const components = loadComponents();
 
 const accountCategories = ['orders', 'parent-orders', 'positions'];
 const otherAccountCategories = ['orders', 'positions'];
 const initialCategories = [...accountCategories, 'collateral', 'status', 'board'];
+
+for (const stalledPage of ['first', 'continuation']) {
+  test(`Trade recovers from stalled signing on the ${stalledPage} parent-order page`, async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
+    const flush = () => new Promise((resolve) => setImmediate(resolve));
+    const headers = { 'ACCESS-KEY': 'test-key' };
+    const dispatched = [];
+    let finishSigning;
+    const renderer = loadComponents({
+      setTimeout, clearTimeout, URL,
+      window: { bitFlyerCredentials: {
+        hasCredentials: async () => true,
+        signRest: async (_method, path) => {
+          const url = new URL(path, 'https://api.bitflyer.jp');
+          const page = url.searchParams.has('before') ? 'continuation' : 'first';
+          if (url.pathname === '/v1/me/getparentorders' && page === stalledPage && !finishSigning) {
+            return new Promise((resolve) => { finishSigning = resolve; });
+          }
+          return headers;
+        },
+      } },
+      require: (id) => id === '@cycle/http/lib/cjs/http-driver' ? {
+        createResponse$: (request) => {
+          const fullPage = stalledPage === 'continuation' && !dispatched.includes('parent-orders');
+          dispatched.push(request.category);
+          const orders = request.category !== 'parent-orders' ? []
+            : fullPage ? Array.from({ length: renderer.parentOrdersPageSize }, (_, id) => ({ id, parent_order_id: `partial-${id}` }))
+              : [{ parent_order_id: 'recovered' }];
+          return Stream.fromPromise(Promise.resolve({ request, text: JSON.stringify(orders) }));
+        },
+        optionsToSuperagent: (request) => ({
+          timeout() { return this; },
+          end(callback) { callback(null, { request, text: '[]' }); },
+        }),
+      } : require(id),
+    });
+    await renderer.initializeCredentials();
+    const requests$ = Stream.create();
+    const HTTP = renderer.makeSignedHTTPDriver()(requests$);
+    const idle = Stream.never();
+    const actions = renderer.trade_intent({
+      HTTP, socket: { childOrderEvent$: idle, executionBatch$: idle, parentOrderEvent$: idle, reconnect$: idle },
+    });
+    let state;
+    const unsigned = [];
+    const subscriptions = [
+      renderer.trade_model(actions).subscribe({ next: (reduce) => { state = reduce(state); } }),
+      renderer.unsignedRequests$.subscribe({ next: ({ category }) => unsigned.push(category) }),
+      renderer.trade_request(actions).subscribe({ next: (request) => requests$.shamefullySendNext(request) }),
+    ];
+    t.after(() => subscriptions.forEach((subscription) => subscription.unsubscribe()));
+    const lists = () => dispatched.filter((category) => category.startsWith('parent-orders'));
+
+    await flush();
+    assert.equal(typeof finishSigning, 'function');
+    const beforeExpiry = stalledPage === 'first' ? [] : ['parent-orders'];
+    t.mock.timers.tick(10000);
+    await flush();
+    t.mock.timers.tick(4999);
+    await flush();
+    assert.deepEqual(lists(), beforeExpiry);
+    assert.deepEqual(unsigned, []);
+    assert.deepEqual(Object.keys(state.parentStopOrders), []);
+
+    t.mock.timers.tick(1);
+    await flush();
+    assert.deepEqual(unsigned, [stalledPage === 'first' ? 'parent-orders' : 'parent-orders-page']);
+    assert.deepEqual(lists(), [...beforeExpiry, 'parent-orders']);
+    assert.deepEqual(Object.keys(state.parentStopOrders), ['recovered']);
+
+    finishSigning(headers);
+    await flush();
+    assert.deepEqual(lists(), [...beforeExpiry, 'parent-orders']);
+    assert.deepEqual(Object.keys(state.parentStopOrders), ['recovered']);
+  });
+}
+
+test('Other authenticated requests can finish signing after the parent-order list deadline', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const headers = { 'ACCESS-KEY': 'test-key' };
+  let finishSigning;
+  const pendingSignature = new Promise((resolve) => { finishSigning = resolve; });
+  const renderer = loadComponents({
+    setTimeout, clearTimeout,
+    window: { bitFlyerCredentials: {
+      hasCredentials: async () => true,
+      signRest: () => pendingSignature,
+    } },
+  });
+  await renderer.initializeCredentials();
+  const requests = [renderer.marketOrder(0.01, 'BUY'), renderer.cancelOrders(), renderer.getParentOrder('detail')];
+  const authorized = Promise.all(requests.map(renderer.authorizeRequest));
+  t.mock.timers.tick(15000);
+  await new Promise((resolve) => setImmediate(resolve));
+  finishSigning(headers);
+  const results = await authorized;
+  results.forEach((request, index) => {
+    assert.equal(request.url, requests[index].url);
+    assert.equal(request.headers['ACCESS-KEY'], headers['ACCESS-KEY']);
+  });
+});
 
 for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'secret']]) {
   test(`Trade polls with API key ${key ? 'present' : 'absent'} and secret ${secret ? 'present' : 'absent'}`, async (t) => {
