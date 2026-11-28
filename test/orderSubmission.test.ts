@@ -505,8 +505,8 @@ for (const [category, entries] of disconnectedOrders) {
     });
 }
 
-for (const [statusCode, expectedStatus] of [[400, "failed"], [200, "unconfirmed"]] as const) {
-    test(`records a malformed HTTP ${statusCode} order response as ${expectedStatus}`, { timeout: 5_000 }, async (t) => {
+for (const statusCode of [200, 400, 408, 503]) {
+    test(`records a malformed HTTP ${statusCode} order response as unconfirmed`, { timeout: 5_000 }, async (t) => {
         const server = createServer((request, response) => {
             request.resume();
             response.writeHead(statusCode, { "Content-Type": "application/json" });
@@ -526,7 +526,7 @@ for (const [statusCode, expectedStatus] of [[400, "failed"], [200, "unconfirmed"
 
         equal(order.state.isOrdering, false);
         deepEqual(order.sounds, ["failure"]);
-        deepEqual(order.histories.map(({ name, status }) => [name, status]), [["Market", expectedStatus]]);
+        deepEqual(order.histories.map(({ name, status }) => [name, status]), [["Market", "unconfirmed"]]);
     });
 }
 

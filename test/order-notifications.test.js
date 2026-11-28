@@ -87,7 +87,9 @@ function appHarness(t) {
           response$.shamefullySendNext({ request, status: 200, text: JSON.stringify(body) });
           response$.shamefullySendComplete();
         },
-        reject: () => response$.shamefullySendError({ response: { request } }),
+        reject: (status = 400) => response$.shamefullySendError({
+          response: { request, status, text: JSON.stringify({ status: -1, error_message: 'Request rejected' }) },
+        }),
         timeout: () => response$.shamefullySendError(
           Object.assign(new Error('Deadline exceeded'), { code: 'ECONNABORTED', errno: 'ETIME' }),
         ),
@@ -125,3 +127,17 @@ test('notifies for submissions, TWAP slices, cancellations, and private executio
   assert.equal(app.histories().at(-1).status, 'unconfirmed');
   assert.equal(app.histories().at(-1).timedOut, true);
 });
+
+for (const [statusCode, status] of [[400, 'failed'], [408, 'unconfirmed'], [503, 'unconfirmed']]) {
+  test(`notifies that HTTP ${statusCode} submissions and cancellations are ${status}`, (t) => {
+    const app = appHarness(t);
+    app.submit(marketOrder(0.01, 'BUY')).reject(statusCode);
+    app.submit(cancelOrders()).reject(statusCode);
+
+    assert.deepEqual(app.notifications, [
+      { operation: 'submission', status },
+      { operation: 'cancellation', status },
+    ]);
+    assert.deepEqual(app.histories().map((history) => history.status), [status, status]);
+  });
+}
