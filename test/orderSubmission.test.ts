@@ -7,7 +7,7 @@ import {deepEqual, doesNotMatch, equal, match} from "node:assert/strict";
 import {once} from "node:events";
 import {createServer} from "node:http";
 import {test, TestContext} from "node:test";
-import {setImmediate as flush} from "node:timers/promises";
+import {setImmediate as flush, setTimeout as delay} from "node:timers/promises";
 import switchPath from "switch-path";
 import Stream, {MemoryStream} from "xstream";
 import {Sound} from "../src/drivers/soundDriver";
@@ -727,6 +727,7 @@ test("coalesces synchronized market depth scans and immediately refreshes on siz
             },
         });
     }
+
     const updateDepth = (size: number) => order.updateBoard({
         asks: [{ price: 110, size }],
         bids: [{ price: 72, size }],
@@ -764,6 +765,41 @@ test("coalesces synchronized market depth scans and immediately refreshes on siz
     order.enterSize("0");
     doesNotMatch(order.rendered(), /market-fill-preview/);
     deepEqual(order.requests, []);
+});
+
+test("skips market fill scans for unchanged executions and refreshes after pruning or snapshot replacement", async (t) => {
+    await saveCredentials(null);
+    const order = setup(t, "0.01", { apis: [] });
+    order.enterSize("0.01");
+    await Promise.resolve();
+    order.respondTo(order.boardRequest!).succeed({
+        asks: [{ price: 100, size: 0.01 }, { price: 110, size: 0.01 }],
+        bids: [],
+    });
+    match(order.rendered(), /100 JPY \(0.0000%\)/);
+
+    const { board } = order.tradeState.boardComponentState!;
+    t.mock.method(board, "groupedAsks", () => []);
+    const scans = t.mock.fn(board.asks[Symbol.iterator].bind(board.asks));
+    Object.defineProperty(board.asks, Symbol.iterator, { value: scans });
+    order.publishExecution(100);
+    equal(order.tradeState.currentPrice, 100);
+    await delay(marketFillRefreshMs);
+    equal(scans.mock.callCount(), 0);
+
+    order.publishExecution(110);
+    match(order.rendered(), /100 JPY \(0.0000%\)/);
+    await delay(marketFillRefreshMs);
+    match(order.rendered(), /110 JPY \(0.0000%\)/);
+
+    const replacement = order.respondTo(order.boardRequest!);
+    order.publishExecution(110);
+    replacement.succeed({
+        asks: [{ price: 105, size: 0.01 }, { price: 120, size: 0.01 }],
+        bids: [],
+    });
+    await delay(marketFillRefreshMs);
+    match(order.rendered(), /120 JPY \(0.0000%\)/);
 });
 
 test("reports a failed bulk cancellation and keeps the child orders visible", (t) => {

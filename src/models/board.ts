@@ -36,10 +36,13 @@ export class Board {
         }
     }
 
-    public removeExecutions(executions: Execution[]): void {
+    public removeExecutions(executions: Execution[]): boolean {
+        const askCount = this.asks.length;
+        const bidCount = this.bids.length;
         const { highestBuy, lowestSell } = executionPriceLimits(executions);
         if (highestBuy !== undefined) { this.remove("BUY", highestBuy); }
         if (lowestSell !== undefined) { this.remove("SELL", lowestSell); }
+        return this.asks.length !== askCount || this.bids.length !== bidCount;
     }
 
     public merge(asks: BoardOrder[], bids: BoardOrder[]): Board {
