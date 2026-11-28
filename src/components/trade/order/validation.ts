@@ -4,6 +4,7 @@ import {State} from "./index";
 
 export const canClearPosition = (state: State): boolean =>
     !state.isOrdering && !state.positionClosePending && !state.positionStale && state.position.size !== 0
+    && state.positionExpiresAt !== undefined && Date.now() < state.positionExpiresAt
     && state.positionCredentialVersion === currentCredentialVersion();
 
 export const isValidOrderSize = (state: State): boolean =>

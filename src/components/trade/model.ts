@@ -8,6 +8,8 @@ import {Position} from "../../models/position";
 import {State} from "./index";
 import {Actions} from "./intent";
 
+const positionSnapshotMaxAgeMs = 15_000;
+
 const defaultState: State = {
     currentPrice: null,
     histories: [],
@@ -45,6 +47,7 @@ export const model = (actions: Actions, connected$ = Stream.never<boolean>()): S
                     || Math.abs(position.size) < Math.abs(close.size));
             return {
                 ...state, position, positionCredentialVersion, positionStale: false,
+                positionExpiresAt: Date.now() + positionSnapshotMaxAgeMs,
                 positionClose: reconciled ? undefined : close,
             };
         });

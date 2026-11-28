@@ -58,6 +58,7 @@ export interface State {
     parentStopOrders: ParentStopOrders;
     position: Position;
     positionCredentialVersion?: number;
+    positionExpiresAt?: number;
     positionStale: boolean;
     positionClose?: { id: symbol; size: number; settled: boolean; rejected?: boolean };
     price: number;
@@ -171,6 +172,7 @@ const orderState = (state: State): OrderComponentState | undefined =>
         orders: state.orders,
         orderSigningError: state.orderSigningError,
         positionCredentialVersion: state.positionCredentialVersion,
+        positionExpiresAt: state.positionExpiresAt,
         positionStale: state.positionStale,
         parentStopOrders: state.parentStopOrders,
         position: state.position,
