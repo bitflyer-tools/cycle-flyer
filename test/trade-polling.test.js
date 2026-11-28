@@ -16,9 +16,9 @@ const { outputFiles } = buildSync({
     }).concat(
       'export { request as board_request } from "./src/components/trade/board/request";',
       'export { pollResponse } from "./src/components/trade/pollResponse";',
-      'export { makeHTTPDriver, makeSignedHTTPDriver, unsignedRequests$ } from "./src/drivers/httpDriver";',
+      'export { authorizeRequest, makeHTTPDriver, makeSignedHTTPDriver, unsignedRequests$ } from "./src/drivers/httpDriver";',
       'export { saveCredentials, currentCredentialVersion, initializeCredentials } from "./src/credentials";',
-      'export { parentOrdersPageSize } from "./src/http";',
+      'export { cancelOrders, getParentOrder, marketOrder, parentOrdersPageSize } from "./src/http";',
     ).join('\n'),
     resolveDir: path.join(__dirname, '..'),
   },
@@ -114,6 +114,31 @@ for (const stalledPage of ['first', 'continuation']) {
     assert.deepEqual(Object.keys(state.parentStopOrders), ['recovered']);
   });
 }
+
+test('Other authenticated requests can finish signing after the parent-order list deadline', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const headers = { 'ACCESS-KEY': 'test-key' };
+  let finishSigning;
+  const pendingSignature = new Promise((resolve) => { finishSigning = resolve; });
+  const renderer = loadComponents({
+    setTimeout, clearTimeout,
+    window: { bitFlyerCredentials: {
+      hasCredentials: async () => true,
+      signRest: () => pendingSignature,
+    } },
+  });
+  await renderer.initializeCredentials();
+  const requests = [renderer.marketOrder(0.01, 'BUY'), renderer.cancelOrders(), renderer.getParentOrder('detail')];
+  const authorized = Promise.all(requests.map(renderer.authorizeRequest));
+  t.mock.timers.tick(15000);
+  await new Promise((resolve) => setImmediate(resolve));
+  finishSigning(headers);
+  const results = await authorized;
+  results.forEach((request, index) => {
+    assert.equal(request.url, requests[index].url);
+    assert.equal(request.headers['ACCESS-KEY'], headers['ACCESS-KEY']);
+  });
+});
 
 for (const [key, secret] of [['', ''], ['key', ''], ['', 'secret'], ['key', 'secret']]) {
   test(`Trade polls with API key ${key ? 'present' : 'absent'} and secret ${secret ? 'present' : 'absent'}`, async (t) => {

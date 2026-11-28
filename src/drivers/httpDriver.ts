@@ -47,8 +47,13 @@ export const authorizeRequest = async (request: RequestInput | null): Promise<Re
 
     try {
         const body = request.send || "";
+        const method = request.method || "GET";
+        const sign = method.toUpperCase() === "GET"
+            && (request.category === "parent-orders" || request.category === "parent-orders-page")
+            ? signWithDeadline
+            : signRest;
         const headers = typeof body === "string"
-            ? await signWithDeadline(request.method || "GET", request.url.slice(origin.length), body)
+            ? await sign(method, request.url.slice(origin.length), body)
             : null;
         if (!cancelled() && headers) {
             const authorized: AccountRequest = {
