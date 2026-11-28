@@ -2,6 +2,7 @@ import {mockDOMSource, VNode} from "@cycle/dom";
 import {RequestInput, RequestOptions, Response, ResponseStream} from "@cycle/http";
 import {MainHTTPSource} from "@cycle/http/lib/cjs/MainHTTPSource";
 import {StateSource} from "@cycle/state";
+import {StorageRequest} from "@cycle/storage";
 import {routerify} from "cyclic-router";
 import {deepEqual, doesNotMatch, equal, match} from "node:assert/strict";
 import {once} from "node:events";
@@ -28,6 +29,33 @@ import {currentCredentialVersion, saveCredentials} from "../src/credentials";
 import {AccountRequest, authorizeRequest, makeHTTPDriver, makeSignedHTTPDriver, unsignedRequests$} from "../src/drivers/httpDriver";
 import {cancelOrders, getParentOrders, limitOrder, parentOrdersPageSize, stopOrder, twapSliceOrder} from "../src/http";
 import {flattenStopOrders} from "../src/models/parentStopOrders";
+
+test("saves only changed order form settings", (t) => {
+    const order = setup(t, "10000");
+    const writes: StorageRequest[] = [];
+    const subscription = order.storage.subscribe({ next: (request) => writes.push(request) });
+    t.after(() => subscription.unsubscribe());
+
+    equal(writes.length, 0);
+    order.enterPrice("101000");
+    equal(writes.length, 0);
+
+    order.enterSize("0.05");
+    order.enterSetting("price-width", "12000");
+    order.enterSetting("ratio", "60");
+    order.enterSetting("twap-slices", "4");
+    order.enterSetting("twap-interval", "2");
+    order.enterSize("0.050");
+    order.enterSetting("twap-interval", "2");
+
+    deepEqual(writes, [
+        { key: "order-size", value: "0.05" },
+        { key: "ifdoco-price-width", value: "12000" },
+        { key: "ifdoco-ratio", value: "60" },
+        { key: "twap-slices", value: "4" },
+        { key: "twap-interval", value: "2" },
+    ]);
+});
 
 test("shows a signing error for a market order without credentials and clears it on retry", async (t) => {
     const order = setup(t);
@@ -775,6 +803,44 @@ test("coalesces synchronized market depth scans and immediately refreshes on siz
     deepEqual(order.requests, []);
 });
 
+test("refreshes market fill estimates after execution pruning and snapshot replacement", async (t) => {
+    const order = setup(t);
+    order.enterSize("0.01");
+    await Promise.resolve();
+    order.respondTo(order.boardRequest!).succeed({
+        asks: [{ price: 100, size: 0.01 }, { price: 110, size: 0.01 }],
+        bids: [],
+    });
+    match(order.rendered(), /100 JPY \(0.0000%\)/);
+    t.mock.timers.tick(1);
+
+    order.publishExecution(110);
+    match(order.rendered(), /100 JPY \(0.0000%\)/);
+    t.mock.timers.tick(marketFillRefreshMs);
+    match(order.rendered(), /110 JPY \(0.0000%\)/);
+
+    t.mock.timers.tick(15_000);
+    order.respondTo(order.boardRequest!).succeed({ asks: [{ price: 120, size: 0.01 }], bids: [] });
+    match(order.rendered(), /110 JPY \(0.0000%\)/);
+    t.mock.timers.tick(marketFillRefreshMs);
+    match(order.rendered(), /120 JPY \(0.0000%\)/);
+});
+
+test("updates the trade price without scheduling a fill estimate at the best ask", async (t) => {
+    const order = setup(t);
+    order.enterSize("0.01");
+    await Promise.resolve();
+    order.respondTo(order.boardRequest!).succeed({ asks: [{ price: 100, size: 0.01 }], bids: [] });
+    match(order.rendered(), /100 JPY \(0.0000%\)/);
+    t.mock.timers.tick(1);
+    const schedule = t.mock.method(globalThis, "setTimeout");
+
+    order.publishExecution(100);
+    schedule.mock.restore();
+    equal(order.tradeState.currentPrice, 100);
+    equal(schedule.mock.calls.some(({ arguments: [, delay] }) => delay === marketFillRefreshMs), false);
+});
+
 test("reports a failed bulk cancellation and keeps the child orders visible", (t) => {
     const order = setup(t);
     order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getorders", category: "orders", _namespace: ["trade"] }).succeed([
@@ -1515,6 +1581,12 @@ function setup(t: TestContext, width = "0.01", options: {
         stop: Stream.create<null>(),
     };
     const sizeInput$ = Stream.create<{ target: { value: string } }>();
+    const settingInputs = {
+        "price-width": Stream.create<{ target: { value: string } }>(),
+        ratio: Stream.create<{ target: { value: string } }>(),
+        "twap-slices": Stream.create<{ target: { value: string } }>(),
+        "twap-interval": Stream.create<{ target: { value: string } }>(),
+    };
     const priceInput$ = Stream.createWithMemory<{ target: { value: string } }>();
     priceInput$.shamefullySendNext({ target: { value: "100000" } });
     const triggerInput$ = Stream.createWithMemory<{ target: { value: string } }>();
@@ -1538,6 +1610,7 @@ function setup(t: TestContext, width = "0.01", options: {
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
+        ...Object.fromEntries(Object.entries(settingInputs).map(([name, input]) => [`#${name}-input`, { input }])),
         ".refresh-executions": { click: refreshExecutions$ },
         "#price-input": { input: priceInput$ },
         "#size-input": { input: sizeInput$ },
@@ -1648,6 +1721,9 @@ function setup(t: TestContext, width = "0.01", options: {
                 .map(({ data }) => data?.attrs?.disabled),
         get clearOrdersDisabled() { return findNode(vNode, "button.clear-order-button")?.data?.attrs?.disabled; },
         enterSize: (value: string) => sizeInput$.shamefullySendNext({ target: { value } }),
+        enterSetting: (name: keyof typeof settingInputs, value: string) =>
+            settingInputs[name].shamefullySendNext({ target: { value } }),
+        storage: main.storage,
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         rendered: () => JSON.stringify(vNode),
         setConnected: (connected: boolean) => connected$.shamefullySendNext(connected),
