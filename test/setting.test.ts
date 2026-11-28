@@ -3,7 +3,10 @@ import {test, TestContext} from "node:test";
 import {mockDOMSource} from "@cycle/dom";
 import {StateSource} from "@cycle/state";
 import {StorageRequest} from "@cycle/storage";
+import {routerify} from "cyclic-router";
+import switchPath from "switch-path";
 import Stream from "xstream";
+import {Root, Sources as RootSources} from "../src/components";
 import {Setting, Sources} from "../src/components/setting";
 import {State} from "../src/components/setting/model";
 import {notificationsEnabledStorageKey} from "../src/drivers/notificationDriver";
@@ -108,4 +111,63 @@ test("disabling notifications does not request permission", (t) => {
     const settings = setup(t);
     settings.toggleNotifications(false);
     assert.equal(permissionRequests.length, 0);
+});
+
+test("only the active Settings route requests notification permission", (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const requestPermission = t.mock.fn(async () => "default");
+    const original = Object.getOwnPropertyDescriptor(globalThis, "Notification");
+    Object.defineProperty(globalThis, "Notification", {
+        configurable: true, value: { permission: "default", requestPermission },
+    });
+    t.after(() => {
+        if (original) Object.defineProperty(globalThis, "Notification", original);
+        else Reflect.deleteProperty(globalThis, "Notification");
+    });
+
+    const stop = t.mock.fn();
+    const change$ = Stream.create<{ target: { checked: boolean } }>({ start() {}, stop });
+    const dom = (selector = "") => ({
+        select: (next: string) => dom(next),
+        events: (type: string) =>
+            selector === "#notifications-enabled-input" && type === "change" ? change$ : Stream.never(),
+    });
+    const history = Stream.create<{ pathname: string }>();
+    const app = routerify(Root, switchPath);
+    const sinks = app({
+        DOM: dom() as RootSources["DOM"],
+        HTTP: { select: () => Stream.never() } as unknown as RootSources["HTTP"],
+        history,
+        socket: {
+            connected$: Stream.of(false),
+            board$: Stream.never(),
+            childOrderEvent$: Stream.never(),
+            executionBatch$: Stream.never(),
+            parentOrderEvent$: Stream.never(),
+            reconnect$: Stream.never(),
+        },
+        state: new StateSource(Stream.create<object>(), "state"),
+        storage: { local: { getItem: () => Stream.of(null) } } as unknown as RootSources["storage"],
+    });
+    const subscription = sinks.storage.subscribe({ next() {} });
+    t.after(() => subscription.unsubscribe());
+    const navigate = (pathname: string) => {
+        history.shamefullySendNext({ pathname });
+        t.mock.timers.runAll();
+    };
+
+    navigate("/");
+    navigate("/setting");
+    navigate("/");
+    navigate("/setting");
+    navigate("/");
+    navigate("/setting");
+
+    change$.shamefullySendNext({ target: { checked: true } });
+    assert.equal(requestPermission.mock.callCount(), 1);
+
+    navigate("/");
+    change$.shamefullySendNext({ target: { checked: true } });
+    assert.equal(requestPermission.mock.callCount(), 1);
+    assert.equal(stop.mock.callCount(), 3);
 });
