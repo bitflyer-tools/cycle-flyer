@@ -5,7 +5,7 @@ import {StateSource} from "@cycle/state";
 import {StorageRequest} from "@cycle/storage";
 import {routerify} from "cyclic-router";
 import {deepEqual, doesNotMatch, equal, match} from "node:assert/strict";
-import {once} from "node:events";
+import {EventEmitter, once} from "node:events";
 import {createServer} from "node:http";
 import {test, TestContext} from "node:test";
 import {setImmediate as flush} from "node:timers/promises";
@@ -87,6 +87,24 @@ test("shows a clear-orders signing error after returning from Settings", async (
     equal(order.state.isOrdering, false);
     equal(order.signingAlert?.text,
         "Could not sign the request to clear orders. Check your bitFlyer credentials in Settings.");
+});
+
+test("releases market order clicks on each Trade exit and settles submitted orders in Settings", async (t) => {
+    const order = setup(t, "0.01", { apis: [] });
+    for (let roundTrip = 0; roundTrip < 3; roundTrip++) {
+        const stopped = order.waitForMarketBuyStop();
+        order.navigate("/setting");
+        await stopped;
+        order.navigate("/");
+    }
+
+    order.buy("market");
+    deepEqual(order.requests.map(({ category }) => category), ["market-order"]);
+    const pending = order.respondTo(order.requests[0]);
+    order.navigate("/setting");
+    pending.succeed();
+    deepEqual(order.histories.map(({ status }) => status), ["success"]);
+    deepEqual(order.sounds, ["success"]);
 });
 
 for (const type of ["stop", "ifdoco"] as const) {
@@ -1546,10 +1564,11 @@ function setup(t: TestContext, width = "0.01", options: {
         }
     });
 
+    const marketBuyEvents = new EventEmitter();
     const buy$ = {
         ifdoco: Stream.create<null>(),
         limit: Stream.create<null>(),
-        market: Stream.create<null>(),
+        market: Stream.create<null>({ start() {}, stop: () => marketBuyEvents.emit("stop") }),
         stop: Stream.create<null>(),
     };
     const sizeInput$ = Stream.create<{ target: { value: string } }>();
@@ -1677,6 +1696,7 @@ function setup(t: TestContext, width = "0.01", options: {
 
     return {
         get boardRequest() { return boardRequest; },
+        waitForMarketBuyStop: () => once(marketBuyEvents, "stop", { signal: AbortSignal.timeout(1000) }),
         buy: (category: keyof typeof buy$) => buy$[category].shamefullySendNext(null),
         buyTWAP: () => buyTWAP$.shamefullySendNext(null),
         clearPosition: () => clearPosition$.shamefullySendNext(null),
