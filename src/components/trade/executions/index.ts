@@ -131,10 +131,14 @@ const readPage = (response: Response): Execution[] => {
 
 export const toCsv = (rows: Execution[]): string => {
     const lines = [executionColumns, ...rows.map((row) => [
-        row.exec_date, row.side, String(row.price), String(row.size), row.child_order_acceptance_id,
+        literalCsvText(row.exec_date), literalCsvText(row.side), String(row.price), String(row.size),
+        literalCsvText(row.child_order_acceptance_id),
     ])];
     return lines.map((line) => line.map(csvField).join(",")).join("\r\n") + "\r\n";
 };
+
+const literalCsvText = (value: string): string =>
+    /^(?:[\t\r\n]|\s*[=+@＝＋－＠-])/.test(value) ? "'" + value : value;
 
 const csvField = (value: string): string =>
     /[",\r\n]/.test(value) ? `"${value.replace(/"/g, "\"\"")}"` : value;
