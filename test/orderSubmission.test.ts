@@ -1246,6 +1246,33 @@ test("disables Clear Position once a position refresh fails and re-enables after
     equal(order.requests.length, 1);
 });
 
+test("blocks Clear Position after malformed position responses for the current account", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "test-key", secret: "test-secret" });
+    t.after(() => saveCredentials(null));
+    const position = [{ side: "BUY", size: 0.1, price: 100 }];
+    const poll = order.positionRequests[0];
+    order.respondTo(poll).succeed(position);
+    equal(order.clearPositionDisabled, false);
+
+    order.respondTo({ ...poll, credentialVersion: -1 }).succeed({ error_message: "Position unavailable" });
+    equal(order.clearPositionDisabled, false);
+
+    for (const malformed of [{ error_message: "Position unavailable" }, [{ ...position[0], size: "0.1" }]]) {
+        order.respondTo(poll).succeed(malformed);
+        equal(order.tradeState.position.size, 0.1);
+        equal(order.clearPositionDisabled, true);
+        order.clearPosition();
+        equal(order.requests.length, 0);
+
+        order.respondTo(poll).succeed(position);
+        equal(order.clearPositionDisabled, false);
+    }
+
+    order.clearPosition();
+    equal(order.requests.length, 1);
+});
+
 test("allows retry after a definite rejection and a fresh unchanged position", async (t) => {
     const order = setup(t);
     await saveCredentials({ key: "test-key", secret: "test-secret" });

@@ -73,13 +73,14 @@ export const intent = (sources: Sources, cancellationOutcome$ = Stream.never<Can
     const positionsResponses$ = sources.HTTP.select("positions");
 
     const decodePositions = (response: Response): PositionPollOutcome => {
+        if (!isCurrent(response)) { return { failed: false }; }
         let json: unknown;
         try {
             json = JSON.parse(response.text);
         } catch {
             return { failed: true };
         }
-        if (!isCurrent(response) || !isPositionList(json)) { return { failed: false }; }
+        if (!isPositionList(json)) { return { failed: true }; }
         return {
             failed: false,
             result: {
@@ -93,13 +94,8 @@ export const intent = (sources: Sources, cancellationOutcome$ = Stream.never<Can
     let nextPositionsRequest = 0;
     let latestAppliedPositionsRequest = 0;
 
-    // A transport error or unparsable body means the account's actual position is unknown and must
-    // mark the snapshot stale; a stale credential or a well-formed-but-unexpected shape stays
-    // completely invisible here too, exactly like pollResponse, so it never advances the sequence
-    // counter below and can't make a still-valid snapshot look stale or superseded. Sharing one
-    // request/latestApplied sequence between the success and failure signals (instead of polling the
-    // same responses twice, independently) keeps a late failure from an already-superseded poll from
-    // overriding a newer snapshot that was already applied.
+    // Sequence successful and failed polls together so a late failure cannot supersede a newer
+    // snapshot. Responses from stale credentials are filtered out before advancing the sequence.
     const positionsPolled$ = positionsResponses$
         .map((response$) => {
             const request = ++nextPositionsRequest;
