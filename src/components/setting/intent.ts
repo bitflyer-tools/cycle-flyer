@@ -60,9 +60,11 @@ export const intent = (sources: Sources): Actions => {
 
     const onNotificationsToggled$ = dom.select("#notifications-enabled-input")
         .events("change")
-        .map((event) => (event.target as HTMLInputElement).checked);
-
-    onNotificationsToggled$.filter((enabled) => enabled).addListener({ next: requestNotificationPermission });
+        .map((event) => {
+            const enabled = (event.target as HTMLInputElement).checked;
+            if (enabled) { requestNotificationPermission(); }
+            return enabled;
+        });
 
     return {
         credentialsMessage$: Stream.merge(migrationMessage$, Stream.merge(saveMessage$, clearMessage$)
