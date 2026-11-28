@@ -1,16 +1,20 @@
 import {HTTPSource, RequestInput} from "@cycle/http";
 import {Reducer} from "@cycle/state";
 import Stream from "xstream";
+import dropRepeats from "xstream/extra/dropRepeats";
 import flattenConcurrently from "xstream/extra/flattenConcurrently";
 import {credentialsChanging$} from "../../credentials";
+import {AccountRequest} from "../../drivers/httpDriver";
 import {Sound} from "../../drivers/soundDriver";
+import {cancelParentOrder} from "../../http";
 import {prependOrderHistories} from "../../models/orderHistory";
 import {Position} from "../../models/position";
 import {cancellationReducer} from "./cancellation";
 import {initialState as initialExecutionsState} from "./executions";
 import type {State} from "./index";
 import {cancellationOutcomes, submittedOrderOutcomes, twapOutcomes} from "./order/history";
-import {closePositionOutcomes, OrderRequestBatch, submissions, unsignedSubmissions$} from "./order/request";
+import {clearParentOrdersCategory, closePositionOutcomes, OrderRequestBatch, SubmissionContinuation, submissions, unsignedSubmissions$} from "./order/request";
+import {parentOrderPages} from "./parentOrderPages";
 
 export interface OrderSubmissionState {
     isOrdering$: Stream<boolean>;
@@ -28,8 +32,17 @@ export interface OrderSubmissionState {
 // orderSigningError/positionClose/histories) the moment Trade unmounts.
 export const createOrderSubmissionState = (http: HTTPSource): OrderSubmissionState => {
     const submissionBatchSignal$ = Stream.create<OrderRequestBatch>();
-    const pending$ = submissions(submissionBatchSignal$, http);
-    const isOrdering$ = pending$.map((pending) => pending !== null);
+    let clearSequence = 0;
+    const clearPages = parentOrderPages(http, () => ++clearSequence, clearParentOrdersCategory);
+    const clearResults$ = clearPages.results$.filter(({ submissionId }) => submissionId !== undefined);
+    const pending$ = submissions(submissionBatchSignal$, http,
+        clearResults$.map<SubmissionContinuation>(({ submissionId, credentialVersion, orders }) => ({
+            id: submissionId!,
+            requests: [...new Set(orders?.map(({ parent_order_id }) => parent_order_id))].map((id) => ({
+                ...cancelParentOrder(id) as AccountRequest, credentialVersion,
+            })),
+        })));
+    const isOrdering$ = pending$.map((pending) => pending !== null).compose(dropRepeats()).remember();
 
     const positionCloseReducer$ = pending$.map((pending) => (state: State | undefined) => {
         if (!state) return state;
@@ -49,13 +62,18 @@ export const createOrderSubmissionState = (http: HTTPSource): OrderSubmissionSta
             return { ...state, positionClose: { ...close, settled: true, rejected } };
         });
     const orderSigningError$ = Stream.merge(
-        pending$.filter((pending) => pending !== null).mapTo(undefined),
+        isOrdering$.filter(Boolean).mapTo(undefined),
         unsignedSubmissions$.map(({ category }) => (category === "cancel-orders" || category === "cancel-parent-order")
             ? "Could not sign the request to clear orders. Check your bitFlyer credentials in Settings."
             : "Could not sign the order. Check your bitFlyer credentials in Settings."),
     );
     const orderSigningReducer$ = orderSigningError$.map<Reducer<State>>((orderSigningError) =>
         (state) => state && { ...state, orderSigningError });
+    const parentOrderClearErrorReducer$ = Stream.merge(
+        isOrdering$.filter(Boolean).mapTo(undefined),
+        clearResults$.filter(({ orders }) => orders === null)
+            .mapTo("Could not load active parent orders. Parent orders could not be cleared."),
+    ).map<Reducer<State>>((parentOrderClearError) => (state) => state && { ...state, parentOrderClearError });
     const orderOutcome$ = Stream.merge(
         submittedOrderOutcomes(http),
         twapOutcomes(http),
@@ -83,6 +101,7 @@ export const createOrderSubmissionState = (http: HTTPSource): OrderSubmissionSta
         positionCloseReducer$,
         closeOutcomeReducer$,
         orderSigningReducer$,
+        parentOrderClearErrorReducer$,
         orderOutcomeReducer$,
         resetAccountReducer$,
     ) as Stream<Reducer<State>>;
@@ -96,7 +115,7 @@ export const createOrderSubmissionState = (http: HTTPSource): OrderSubmissionSta
 
     return {
         isOrdering$,
-        orderRequests$,
+        orderRequests$: Stream.merge(orderRequests$, clearPages.requests$),
         reducer$,
         sound$,
         submit: (batch) => submissionBatchSignal$.shamefullySendNext(batch),
@@ -110,6 +129,7 @@ const resetAccount: Reducer<State> = (state) => state && {
     histories: [],
     orders: [],
     orderSigningError: undefined,
+    parentOrderClearError: undefined,
     parentStopOrders: {},
     summaryComponentState: state.summaryComponentState && { ...state.summaryComponentState, collateral: 0 },
     orderComponentState: state.orderComponentState && { ...state.orderComponentState, isOrdering: false },

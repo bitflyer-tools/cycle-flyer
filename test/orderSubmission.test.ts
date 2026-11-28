@@ -19,6 +19,7 @@ import {marketFillRefreshMs} from "../src/components/trade/order/marketFillPrevi
 import {twapStorageKeys} from "../src/components/trade/order/twapIntent";
 import {stopSection} from "../src/components/trade/order/stopView";
 import {storageKeys} from "../src/components/trade/order/intent";
+import {clearParentOrdersCategory} from "../src/components/trade/order/request";
 import {BoardLevels} from "../src/models/board";
 import {Execution} from "../src/models/execution";
 import {HISTORY_LIMIT} from "../src/models/orderHistory";
@@ -83,6 +84,7 @@ test("shows a clear-orders signing error after returning from Settings", async (
     order.navigate("/setting");
 
     await rejectUnsigned({ ...order.requests[0], send: {} });
+    order.respondTo(order.clearLists[0]).succeed([]);
     order.navigate("/");
     equal(order.state.isOrdering, false);
     equal(order.signingAlert?.text,
@@ -647,6 +649,10 @@ test("reports mixed Clear Orders results and stays locked until every request se
 
     order.clearOrders();
     order.clearOrders();
+    equal(order.clearLists.length, 1);
+    order.respondTo(order.clearLists[0]).succeed([
+        { parent_order_id: "JCO-success" }, { parent_order_id: "JCO-failure" },
+    ]);
     deepEqual(order.requests.map(({ category }) => category), [
         "cancel-orders", "cancel-parent-order", "cancel-parent-order",
     ]);
@@ -674,6 +680,7 @@ test("reports mixed Clear Orders results and stays locked until every request se
     ]);
     deepEqual(order.sounds, ["failure", "success", "success"]);
     order.clearOrders();
+    order.respondTo(order.clearLists[1]).succeed([{ parent_order_id: "JCO-failure" }]);
     deepEqual(order.requests.slice(3).map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
     equal(JSON.parse(order.requests[4].send as string).parent_order_id, "JCO-failure");
 });
@@ -698,11 +705,13 @@ for (const [outcome, status] of [
         equal(order.clearOrdersDisabled, false);
 
         order.clearOrders();
-        deepEqual(order.requests.map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
-        const pending = order.requests.map((request) => order.respondTo(request));
+        deepEqual(order.requests.map(({ category }) => category), ["cancel-orders"]);
+        const parentList = order.respondTo(order.clearLists[0]);
         order.navigate("/setting");
         await flush();
-        pending.forEach((response) => response[outcome]());
+        parentList.succeed(parentOrders);
+        deepEqual(order.requests.map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
+        order.requests.forEach((request) => order.respondTo(request)[outcome]());
 
         const pollsBeforeReturn = order.polls.length;
         order.navigate("/");
@@ -853,6 +862,7 @@ test("reports a failed bulk cancellation and keeps the child orders visible", (t
     const childOrders = order.tradeState.orders;
 
     order.clearOrders();
+    order.respondTo(order.clearLists[0]).succeed([]);
     order.respondTo(order.requests[0]).reject();
 
     equal(order.state.isOrdering, false);
@@ -876,6 +886,7 @@ test("keeps a parent order visible when its cancellation times out", async (t) =
     deepEqual(flattenStopOrders(order.tradeState.parentStopOrders).map(({ price }) => price), [200]);
 
     order.clearOrders();
+    order.respondTo(order.clearLists[0]).succeed([{ parent_order_id: "JCO-timeout" }]);
     order.respondTo(order.requests[0]).succeed();
     order.respondTo(order.requests[1]).fail(
         Object.assign(new Error("Deadline exceeded"), { code: "ECONNABORTED", errno: "ETIME" }),
@@ -896,6 +907,7 @@ test("ignores Clear Orders results from the previous account", async (t) => {
     const parentOrders = order.polls.find(({ category }) => category === "parent-orders")!;
     order.respondTo(parentOrders).succeed([{ parent_order_id: "JCO-old" }]);
     order.clearOrders();
+    order.respondTo(order.clearLists[0]).succeed([{ parent_order_id: "JCO-old" }]);
     deepEqual(order.requests.map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
     const [bulkCancel, parentCancel] = order.requests;
     const pendingBulkCancel = order.respondTo(bulkCancel);
@@ -910,6 +922,32 @@ test("ignores Clear Orders results from the previous account", async (t) => {
     equal(order.state.isOrdering, false);
     deepEqual(order.histories, []);
     deepEqual(order.sounds, []);
+});
+
+test("ignores a Clear Orders parent list after the account changes", async (t) => {
+    const order = setup(t);
+    await saveCredentials({ key: "account-a", secret: "secret-a" });
+    t.after(() => saveCredentials(null));
+    const childOrders = [{ price: 100, side: "BUY", outstanding_size: 0.01 }];
+    order.respondTo(order.polls.find(({ category }) => category === "orders")!).succeed(childOrders);
+    order.clearOrders();
+    const previousList = order.respondTo(order.clearLists[0]);
+
+    await saveCredentials({ key: "account-b", secret: "secret-b" });
+    order.respondTo(order.polls.filter(({ category }) => category === "orders").at(-1)!).succeed(childOrders);
+    order.clearOrders();
+    const currentList = order.respondTo(order.clearLists[1]);
+    previousList.succeed([{ parent_order_id: "JCO-old" }]);
+    deepEqual(order.requests.map(({ category }) => category), ["cancel-orders", "cancel-orders"]);
+    equal(order.state.isOrdering, true);
+
+    currentList.succeed([{ parent_order_id: "JCO-current" }]);
+    equal(JSON.parse(order.requests[2].send as string).parent_order_id, "JCO-current");
+    equal((order.requests[2] as AccountRequest).credentialVersion, currentCredentialVersion());
+    order.respondTo(order.requests[1]).succeed();
+    equal(order.state.isOrdering, true);
+    order.respondTo(order.requests[2]).succeed();
+    equal(order.state.isOrdering, false);
 });
 
 test("clears collateral and child orders and ignores late responses after switching credentials", async (t) => {
@@ -946,6 +984,7 @@ test("settles an unsigned parent cancellation while waiting for the rest of Clea
     ]);
 
     order.clearOrders();
+    order.respondTo(order.clearLists[0]).succeed([{ parent_order_id: "JCO-unsigned" }]);
     deepEqual(order.requests.map(({ category }) => category), ["cancel-orders", "cancel-parent-order"]);
     await rejectUnsigned(order.requests[1]);
     equal(order.state.isOrdering, true);
@@ -955,6 +994,7 @@ test("settles an unsigned parent cancellation while waiting for the rest of Clea
     equal(order.state.isOrdering, false);
     deepEqual(Object.keys(order.tradeState.parentStopOrders), ["JCO-unsigned"]);
     order.clearOrders();
+    order.respondTo(order.clearLists[1]).succeed([{ parent_order_id: "JCO-unsigned" }]);
     equal(order.requests.length, 4);
     equal(order.signingAlert, undefined);
 });
@@ -1339,6 +1379,7 @@ for (const category of ["limit-order", "cancel-orders", "market-order"] as const
         equal(order.state.isOrdering, true);
         order.navigate("/setting");
         const [, stalledResponse] = await receivedFirst;
+        if (category === "cancel-orders") { order.respondTo(order.clearLists[0]).succeed([]); }
         await once(stalledResponse, "close");
         order.navigate("/");
         equal(order.state.isOrdering, false);
@@ -1711,6 +1752,7 @@ function setup(t: TestContext, width = "0.01", options: {
         }),
         navigate: (pathname: string) => history$.shamefullySendNext({ pathname }),
         pages,
+        get clearLists() { return polls.filter(({ category }) => category === clearParentOrdersCategory); },
         parentDetails,
         polls,
         publishExecution,

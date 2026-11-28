@@ -18,6 +18,9 @@ export const view = (state$: Stream<State>): Stream<VNode> =>
             ...(state.orderSigningError
                 ? [div(".order-signing-error", { attrs: { role: "alert" } }, state.orderSigningError)]
                 : []),
+            ...(state.parentOrderClearError
+                ? [div(".order-signing-error.parent-order-clear-error", { attrs: { role: "alert" } }, state.parentOrderClearError)]
+                : []),
             sizeSection(state),
             hr(),
             marketSection(state),
@@ -39,6 +42,7 @@ const sameViewInputs = (previous: State, next: State): boolean =>
     && previous.isOrdering === next.isOrdering
     && sameMarketFills(previous.marketFills, next.marketFills)
     && previous.orderSigningError === next.orderSigningError
+    && previous.parentOrderClearError === next.parentOrderClearError
     && previous.positionCredentialVersion === next.positionCredentialVersion
     && canClearPosition(previous) === canClearPosition(next)
     && Object.is(Math.abs(previous.position.size), Math.abs(next.position.size))

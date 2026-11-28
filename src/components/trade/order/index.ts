@@ -24,6 +24,7 @@ export interface State {
     marketFills?: MarketFills;
     orders: Order[];
     orderSigningError?: string;
+    parentOrderClearError?: string;
     parentStopOrders: ParentStopOrders;
     position: Position;
     positionCredentialVersion?: number;
