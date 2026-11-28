@@ -21,6 +21,7 @@ import {stopSection} from "../src/components/trade/order/stopView";
 import {storageKeys} from "../src/components/trade/order/intent";
 import {BoardLevels} from "../src/models/board";
 import {Execution} from "../src/models/execution";
+import {AccountType, accountTypeStorageKey} from "../src/models/order";
 import {HISTORY_LIMIT} from "../src/models/orderHistory";
 import type {State as SummaryState} from "../src/components/trade/summary";
 import {view as summaryView} from "../src/components/trade/summary/view";
@@ -1052,6 +1053,30 @@ test("stops TWAP on signing failure and ignores old slices after a restart", asy
     equal(order.histories[0].name, "TWAP");
 });
 
+for (const [accountType, maximum] of [["individual", 10], ["corporate", 40]] as const) {
+    for (const side of ["BUY", "SELL"] as const) {
+        test(`enforces the ${accountType} maximum when closing a ${side} position`, async (t) => {
+            const order = setup(t, "0.01", { accountType });
+            await saveCredentials({ key: "test-key", secret: "test-secret" });
+            t.after(() => saveCredentials(null));
+
+            const positions = { url: "https://api.bitflyer.jp/v1/me/getpositions", category: "positions", _namespace: ["trade"] };
+            order.respondTo(positions).succeed([{ side, size: maximum + 0.00000001, price: 100 }]);
+            equal(order.clearPositionDisabled, true);
+            order.clearPosition();
+            equal(order.requests.length, 0);
+
+            order.respondTo(positions).succeed([{ side, size: maximum, price: 100 }]);
+            equal(order.clearPositionDisabled, false);
+            order.clearPosition();
+            deepEqual(order.requests.map(({ category }) => category), ["market-order"]);
+            const payload = JSON.parse(order.requests[0].send as string);
+            equal(payload.side, side === "BUY" ? "SELL" : "BUY");
+            equal(payload.size, maximum);
+        });
+    }
+}
+
 test("clears the previous account position and only closes a position from the current account", async (t) => {
     const order = setup(t);
     await saveCredentials({ key: "first-key", secret: "first-secret" });
@@ -1576,6 +1601,7 @@ test("ignores write deadlines from the previous account", async (t) => {
 });
 
 function setup(t: TestContext, width = "0.01", options: {
+    accountType?: AccountType;
     initialPrice?: number | null;
     writeDeadline?: number;
     twapSlices?: number;
@@ -1649,6 +1675,7 @@ function setup(t: TestContext, width = "0.01", options: {
         },
     };
     const storedValues: Record<string, string> = {
+        [accountTypeStorageKey]: options.accountType ?? "",
         [groupSizeStorageKey]: "100",
         [storageKeys.priceWidth]: width,
         [twapStorageKeys.interval]: "1",
