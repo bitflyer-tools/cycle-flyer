@@ -101,7 +101,9 @@ export const intent = (sources: Sources, cancellationOutcome$ = Stream.never<Can
             const request = ++nextPositionsRequest;
             return response$
                 .map(decodePositions)
-                .replaceError(() => Stream.of<PositionPollOutcome>({ failed: true }))
+                .replaceError(() => isCurrentAccountRequest(response$.request as AccountRequest)
+                    ? Stream.of<PositionPollOutcome>({ failed: true })
+                    : Stream.empty<PositionPollOutcome>())
                 .filter((outcome) => outcome.failed || outcome.result !== undefined)
                 .map((outcome) => ({ request, outcome }));
         })

@@ -211,13 +211,14 @@ test('marks the position snapshot stale after a failed refresh and fresh again a
     error: (error) => { throw error; },
   });
   const respond = (text) => responses.shamefullySendNext(Stream.of({ text, request: { credentialVersion: components.currentCredentialVersion() } }));
-  const fail = () => responses.shamefullySendNext(Stream.throw(new Error('Position poll failed')));
+  const failedPoll = (credentialVersion = components.currentCredentialVersion()) =>
+    Object.assign(Stream.throw(new Error('Position poll failed')), { request: { credentialVersion } });
 
   try {
     respond(JSON.stringify([{ side: 'BUY', price: 100, size: 0.1 }]));
     assert.equal(state.positionStale, false);
 
-    fail();
+    responses.shamefullySendNext(failedPoll());
     assert.equal(state.positionStale, true);
 
     respond(JSON.stringify([]));
@@ -233,6 +234,40 @@ test('marks the position snapshot stale after a failed refresh and fresh again a
   } finally {
     subscription.unsubscribe();
   }
+});
+
+test('keeps the new position fresh when a poll from the previous credentials fails', async (t) => {
+  const responses = Stream.create();
+  const idle = Stream.never();
+  const actions = components.trade_intent({
+    socket: { childOrderEvent$: idle, executionBatch$: idle, parentOrderEvent$: idle, reconnect$: idle },
+    HTTP: { select: (category) => category === 'positions' ? responses : idle },
+  });
+  let state;
+  const subscription = components.trade_model(actions).subscribe({
+    next: (reduce) => { state = reduce(state); },
+    error: (error) => { throw error; },
+  });
+  t.after(() => subscription.unsubscribe());
+
+  const oldRequest = { credentialVersion: components.currentCredentialVersion() };
+  const oldResponse = Object.assign(Stream.create(), { request: oldRequest });
+  responses.shamefullySendNext(oldResponse);
+  await components.saveCredentials({ key: 'new-key', secret: 'new-secret' });
+
+  const request = { credentialVersion: components.currentCredentialVersion() };
+  responses.shamefullySendNext(Stream.of({ text: '[{"side":"BUY","price":100,"size":1}]', request }));
+  assert.equal(state.position.size, 1);
+  assert.equal(state.positionStale, false);
+  const freshState = state;
+
+  oldResponse.shamefullySendError(new Error('Position poll failed'));
+  assert.equal(state, freshState);
+
+  // Deliver another old response stream late so its sequence cannot mask the version check.
+  const lateResponse = Object.assign(Stream.throw(new Error('Position poll failed')), { request: oldRequest });
+  responses.shamefullySendNext(lateResponse);
+  assert.equal(state, freshState);
 });
 
 const positionCloseId = Symbol('position close');
