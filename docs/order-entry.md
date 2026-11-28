@@ -55,3 +55,16 @@ Like the execution sound, a triggered alert only plays a sound if **Sound** is
 enabled on **Setting**. If **Desktop notifications** is also enabled there,
 the alert shows an OS notification too, so you can still see it if the window
 isn't focused.
+
+## Executions
+
+The Executions panel on **Trade** lists your own fills (exchange time, side,
+price, size, and order acceptance ID), newest first. **Refresh** (or
+**Load executions** before anything has loaded) replaces the list with the
+latest page, and **Load older** appends the next page before the oldest row
+currently shown.
+
+**Export CSV** is disabled until at least one row is loaded. Clicking it
+downloads `executions.csv` containing exactly the rows currently loaded in
+the panel, with the same columns shown on screen, using the raw (not
+localized) price and size values.

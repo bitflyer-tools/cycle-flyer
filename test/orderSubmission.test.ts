@@ -2,6 +2,7 @@ import {mockDOMSource, VNode} from "@cycle/dom";
 import {RequestInput, RequestOptions, Response, ResponseStream} from "@cycle/http";
 import {MainHTTPSource} from "@cycle/http/lib/cjs/MainHTTPSource";
 import {StateSource} from "@cycle/state";
+import {StorageRequest} from "@cycle/storage";
 import {routerify} from "cyclic-router";
 import {deepEqual, doesNotMatch, equal, match} from "node:assert/strict";
 import {once} from "node:events";
@@ -27,6 +28,33 @@ import {currentCredentialVersion, saveCredentials} from "../src/credentials";
 import {AccountRequest, authorizeRequest, makeHTTPDriver, makeSignedHTTPDriver, unsignedRequests$} from "../src/drivers/httpDriver";
 import {cancelOrders, getParentOrders, limitOrder, parentOrdersPageSize, stopOrder, twapSliceOrder} from "../src/http";
 import {flattenStopOrders} from "../src/models/parentStopOrders";
+
+test("saves only changed order form settings", (t) => {
+    const order = setup(t, "10000");
+    const writes: StorageRequest[] = [];
+    const subscription = order.storage.subscribe({ next: (request) => writes.push(request) });
+    t.after(() => subscription.unsubscribe());
+
+    equal(writes.length, 0);
+    order.enterPrice("101000");
+    equal(writes.length, 0);
+
+    order.enterSize("0.05");
+    order.enterSetting("price-width", "12000");
+    order.enterSetting("ratio", "60");
+    order.enterSetting("twap-slices", "4");
+    order.enterSetting("twap-interval", "2");
+    order.enterSize("0.050");
+    order.enterSetting("twap-interval", "2");
+
+    deepEqual(writes, [
+        { key: "order-size", value: "0.05" },
+        { key: "ifdoco-price-width", value: "12000" },
+        { key: "ifdoco-ratio", value: "60" },
+        { key: "twap-slices", value: "4" },
+        { key: "twap-interval", value: "2" },
+    ]);
+});
 
 test("shows a signing error for a market order without credentials and clears it on retry", async (t) => {
     const order = setup(t);
@@ -72,7 +100,7 @@ for (const type of ["stop", "ifdoco"] as const) {
             order.enterSize("0.0009");
             equal(order.orderDisabled(section, side), true);
             submit();
-            deepEqual(order.requests, []);
+            deepEqual(order.requests, [] as RequestOptions[]);
 
             order.enterSize("0.001");
             equal(order.orderDisabled(section, side), false);
@@ -96,7 +124,7 @@ for (const type of ["stop", "ifdoco"] as const) {
             order.enterSize("10.00000001");
             equal(order.orderDisabled(section, side), true);
             submit();
-            deepEqual(order.requests, []);
+            equal(order.requests.length, 0);
 
             order.enterSize("10");
             equal(order.orderDisabled(section, side), false);
@@ -114,7 +142,7 @@ test("enforces bitFlyer's per-order maximum for market orders", (t) => {
     order.enterSize("41");
     equal(order.orderDisabled("market", "buy"), true);
     order.buy("market");
-    deepEqual(order.requests, []);
+    equal(order.requests.length, 0);
 
     order.enterSize("10");
     equal(order.orderDisabled("market", "buy"), false);
@@ -150,7 +178,7 @@ test("blocks both IFDOCO sides until the first public execution arrives", (t) =>
     const order = setup(t, "10000", { initialPrice: null });
     order.buy("ifdoco");
     order.sellIFDOCO();
-    deepEqual(order.requests, []);
+    deepEqual(order.requests, [] as RequestOptions[]);
     equal(order.state.isOrdering, false);
 
     order.publishExecution(10000000);
@@ -212,7 +240,7 @@ test("requires a fresh price for Stop and Ranged IFDOCO after returning to Trade
     deepEqual(order.disabledSides("stop"), [false, true]);
     deepEqual(order.disabledSides("ranged-ifdoco"), [false, false]);
     order.buy("stop");
-    deepEqual(order.requests, []);
+    deepEqual(order.requests, [] as RequestOptions[]);
 
     order.buy("ifdoco");
     const [, profit, loss] = JSON.parse(order.requests[0].send as string).parameters;
@@ -256,7 +284,7 @@ test("requires a fresh execution after the market feed disconnects", (t) => {
     deepEqual(order.disabledSides("stop"), [false, true]);
     deepEqual(order.disabledSides("ranged-ifdoco"), [false, false]);
     order.buy("stop");
-    deepEqual(order.requests, []);
+    deepEqual(order.requests, [] as RequestOptions[]);
 
     order.buy("ifdoco");
     const [, profit, loss] = JSON.parse(order.requests[0].send as string).parameters;
@@ -611,7 +639,7 @@ test("routes account executions without changing session history or reviving sta
     trade.navigate("/setting");
     trade.navigate("/");
     pending.succeed(page);
-    deepEqual(trade.executions.rows, []);
+    deepEqual(trade.executions.rows, [] as Execution[]);
     equal(trade.executions.loading, false);
 
     trade.refreshExecutions();
@@ -621,12 +649,12 @@ test("routes account executions without changing session history or reviving sta
 
     trade.navigate("/setting");
     await saveCredentials({ key: "account-b", secret: "secret-b" });
-    deepEqual(trade.executions.rows, []);
+    deepEqual(trade.executions.rows, [] as Execution[]);
     trade.navigate("/");
     trade.refreshExecutions();
     const accountB = trade.requests.at(-1)!;
     trade.respondTo(accountA).succeed(page);
-    deepEqual(trade.executions.rows, []);
+    deepEqual(trade.executions.rows, [] as Execution[]);
     equal(trade.executions.loading, true);
     trade.respondTo(accountB).succeed([{ ...page[0], id: 2 }]);
     equal(trade.executions.rows[0].id, 2);
@@ -827,6 +855,44 @@ test("coalesces synchronized market depth scans and immediately refreshes on siz
     deepEqual(order.requests, []);
 });
 
+test("refreshes market fill estimates after execution pruning and snapshot replacement", async (t) => {
+    const order = setup(t);
+    order.enterSize("0.01");
+    await Promise.resolve();
+    order.respondTo(order.boardRequest!).succeed({
+        asks: [{ price: 100, size: 0.01 }, { price: 110, size: 0.01 }],
+        bids: [],
+    });
+    match(order.rendered(), /100 JPY \(0.0000%\)/);
+    t.mock.timers.tick(1);
+
+    order.publishExecution(110);
+    match(order.rendered(), /100 JPY \(0.0000%\)/);
+    t.mock.timers.tick(marketFillRefreshMs);
+    match(order.rendered(), /110 JPY \(0.0000%\)/);
+
+    t.mock.timers.tick(15_000);
+    order.respondTo(order.boardRequest!).succeed({ asks: [{ price: 120, size: 0.01 }], bids: [] });
+    match(order.rendered(), /110 JPY \(0.0000%\)/);
+    t.mock.timers.tick(marketFillRefreshMs);
+    match(order.rendered(), /120 JPY \(0.0000%\)/);
+});
+
+test("updates the trade price without scheduling a fill estimate at the best ask", async (t) => {
+    const order = setup(t);
+    order.enterSize("0.01");
+    await Promise.resolve();
+    order.respondTo(order.boardRequest!).succeed({ asks: [{ price: 100, size: 0.01 }], bids: [] });
+    match(order.rendered(), /100 JPY \(0.0000%\)/);
+    t.mock.timers.tick(1);
+    const schedule = t.mock.method(globalThis, "setTimeout");
+
+    order.publishExecution(100);
+    schedule.mock.restore();
+    equal(order.tradeState.currentPrice, 100);
+    equal(schedule.mock.calls.some(({ arguments: [, delay] }) => delay === marketFillRefreshMs), false);
+});
+
 test("reports a failed bulk cancellation and keeps the child orders visible", (t) => {
     const order = setup(t);
     order.respondTo({ url: "https://api.bitflyer.jp/v1/me/getorders", category: "orders", _namespace: ["trade"] }).succeed([
@@ -972,6 +1038,7 @@ test("stops TWAP on signing failure and ignores old slices after a restart", asy
     t.mock.timers.tick(1000);
 
     equal(await authorizeRequest({ ...order.requests[1], send: {} }), null);
+    unsignedRequests$.shamefullySendNext(order.requests[1]);
     equal(order.state.twap.remaining, 0);
     equal(order.state.twap.error, "TWAP stopped because an order could not be signed.");
     t.mock.timers.tick(3000);
@@ -1079,7 +1146,7 @@ test("a pending IFDOCO from the previous account cannot lock or update the new a
 function rejectUnsigned(request: RequestOptions) {
     return new Promise<void>((resolve, reject) => {
         unsignedRequests$.filter((unsigned) => unsigned === request).take(1).addListener({ next: () => resolve() });
-        makeSignedHTTPDriver()(Stream.of(request)).select().addListener({
+        makeSignedHTTPDriver()(Stream.of<RequestInput | null>(request)).select().addListener({
             next: () => reject(new Error("An unsigned request reached the HTTP driver")),
         });
     });
@@ -1495,7 +1562,7 @@ test("ignores write deadlines from the previous account", async (t) => {
         stopOrder(110000, 0.01, "BUY"),
         twapSliceOrder(0.01, "BUY", Symbol()),
     ]
-        .map((request) => trade.respondTo({ ...request, _namespace: ["trade"] }));
+        .map((request) => trade.respondTo({ ...request as RequestOptions, _namespace: ["trade"] }));
 
     trade.navigate("/setting");
     await saveCredentials({ key: "account-b", secret: "secret-b" });
@@ -1534,6 +1601,12 @@ function setup(t: TestContext, width = "0.01", options: {
         stop: Stream.create<null>(),
     };
     const sizeInput$ = Stream.create<{ target: { value: string } }>();
+    const settingInputs = {
+        "price-width": Stream.create<{ target: { value: string } }>(),
+        ratio: Stream.create<{ target: { value: string } }>(),
+        "twap-slices": Stream.create<{ target: { value: string } }>(),
+        "twap-interval": Stream.create<{ target: { value: string } }>(),
+    };
     const priceInput$ = Stream.createWithMemory<{ target: { value: string } }>();
     priceInput$.shamefullySendNext({ target: { value: "100000" } });
     const triggerInput$ = Stream.createWithMemory<{ target: { value: string } }>();
@@ -1557,6 +1630,7 @@ function setup(t: TestContext, width = "0.01", options: {
     const history$ = Stream.createWithMemory<{ pathname: string }>();
     history$.shamefullySendNext({ pathname: "/" });
     const orderEvents = {
+        ...Object.fromEntries(Object.entries(settingInputs).map(([name, input]) => [`#${name}-input`, { input }])),
         ".refresh-executions": { click: refreshExecutions$ },
         "#price-input": { input: priceInput$ },
         "#size-input": { input: sizeInput$ },
@@ -1667,6 +1741,9 @@ function setup(t: TestContext, width = "0.01", options: {
                 .map(({ data }) => data?.attrs?.disabled),
         get clearOrdersDisabled() { return findNode(vNode, "button.clear-order-button")?.data?.attrs?.disabled; },
         enterSize: (value: string) => sizeInput$.shamefullySendNext({ target: { value } }),
+        enterSetting: (name: keyof typeof settingInputs, value: string) =>
+            settingInputs[name].shamefullySendNext({ target: { value } }),
+        storage: main.storage,
         enterPrice: (value: string) => priceInput$.shamefullySendNext({ target: { value } }),
         rendered: () => JSON.stringify(vNode),
         setConnected: (connected: boolean) => connected$.shamefullySendNext(connected),
@@ -1692,7 +1769,7 @@ function setup(t: TestContext, width = "0.01", options: {
             const response$ = Object.assign(Stream.createWithMemory<Response>(), { request });
             responses$.shamefullySendNext(response$);
             const respondOK = (text: string) => {
-                response$.shamefullySendNext({ request, status: 200, text } as Response);
+                response$.shamefullySendNext({ request, status: 200, text } as unknown as Response);
                 response$.shamefullySendComplete();
             };
             return {
@@ -1701,7 +1778,7 @@ function setup(t: TestContext, width = "0.01", options: {
                 reject: (status = 400) => response$.shamefullySendError({
                     response: { request, status, text: JSON.stringify({ status: -1, error_message: "Order rejected" }) },
                 }),
-                progress: () => response$.shamefullySendNext({ request } as Response),
+                progress: () => response$.shamefullySendNext({ request } as unknown as Response),
                 respondOK,
                 succeed: (body = acceptedOrderBody(request.url)) => respondOK(body === undefined ? "" : JSON.stringify(body)),
             };

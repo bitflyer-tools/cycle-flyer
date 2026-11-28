@@ -1,3 +1,4 @@
+import {MainDOMSource} from "@cycle/dom";
 import {Stream} from "xstream";
 import {loadNumber} from "../../../storage";
 import {Sources} from "../index";
@@ -13,21 +14,22 @@ export interface Actions {
 export const groupSizeStorageKey = "board-group-size";
 
 export const intent = (sources: Sources): Actions => {
-    const onClickAsk$ = sources.DOM.select(".ask")
+    const dom = sources.DOM as MainDOMSource;
+    const onClickAsk$ = dom.select(".ask")
         .events("click")
         .map((event) => event.currentTarget as HTMLElement)
-        .map((target) => +target.dataset.price);
+        .map((target) => Number(target.dataset.price));
 
-    const onClickBid$ = sources.DOM.select(".bid")
+    const onClickBid$ = dom.select(".bid")
         .events("click")
         .map((event) => event.currentTarget as HTMLElement)
-        .map((target) => +target.dataset.price);
+        .map((target) => Number(target.dataset.price));
 
-    const onClickGroupSizePlusButton$ = sources.DOM.select(".board-header").select(".plus")
+    const onClickGroupSizePlusButton$ = dom.select(".board-header").select(".plus")
         .events("click")
         .mapTo(null);
 
-    const onClickGroupSizeMinusButton$ = sources.DOM.select(".board-header").select(".minus")
+    const onClickGroupSizeMinusButton$ = dom.select(".board-header").select(".minus")
         .events("click")
         .mapTo(null);
 

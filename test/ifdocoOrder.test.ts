@@ -3,6 +3,7 @@ import {test} from "node:test";
 import {State} from "../src/components/trade/order/index";
 import {ifdocoOrder} from "../src/http";
 import {IFDOCOrder} from "../src/models/ifdocoOrder";
+import {defaultAccountType} from "../src/models/order";
 import {Position} from "../src/models/position";
 import {defaultTwapOrder} from "../src/models/twapOrder";
 
@@ -13,6 +14,7 @@ Object.defineProperty(globalThis, "localStorage", {
 const currentPrice = 5000000;
 const ifdoco = new IFDOCOrder(10000, 50);
 const state: State = {
+    accountType: defaultAccountType,
     currentPrice,
     histories: [],
     ifdocoOrder: ifdoco,
