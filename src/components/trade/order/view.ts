@@ -1,7 +1,8 @@
-import {button, div, h4, hr, VNode} from "@cycle/dom";
+import {button, div, h4, hr, p, VNode} from "@cycle/dom";
 import Stream from "xstream";
 import dropRepeats from "xstream/extra/dropRepeats";
 import {credentialAvailability} from "../../../credentials";
+import {minimumOrderSize} from "../../../models/order";
 import {sideButtons} from "./buttons";
 import {ifdocoSection} from "./ifdocoView";
 import {State} from "./index";
@@ -73,6 +74,10 @@ const limitSection = (state: State): VNode =>
 const clearSection = (state: State): VNode =>
     div([
         h4(".sub-title", "Clear position"),
+        ...(belowMinimumRemainder(state)
+            ? [p(".clear-position-hint", { attrs: { role: "status" } },
+                `Remainder is below the minimum order size of ${minimumOrderSize} BTC-CFD and cannot be cleared.`)]
+            : []),
         div(".order-buttons", [
             button(
                 ".clear-button",
@@ -82,6 +87,9 @@ const clearSection = (state: State): VNode =>
             button(".clear-order-button", { attrs: { disabled: clearOrderButtonDisabled(state) } }, "Clear Orders"),
         ]),
     ]);
+
+const belowMinimumRemainder = (state: State): boolean =>
+    state.position.size !== 0 && Math.abs(state.position.size) < minimumOrderSize;
 
 const clearOrderButtonDisabled = (state: State): boolean =>
     state.isOrdering || (state.orders.length + Object.keys(state.parentStopOrders).length) === 0;
